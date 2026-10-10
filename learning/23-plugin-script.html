@@ -368,7 +368,7 @@ flowchart TB
             <td>worker 退出后不被回收 → 累积僵尸</td>
             <td>网关在自己的事件循环里 <code>waitpid(-1, WNOHANG)</code> 循环收割；
               被隔离的那一代按 <strong>pid</strong> 从收割名单上摘（按句柄找找不到——那时句柄可能已经属于新一代）</td>
-            <td><code>gateway.py:516-535</code></td>
+            <td><code>Jellyfish-Plugins/jellyfish-plugin-python/src/main/resources/script/gateway.py:516-535</code></td>
           </tr>
           <tr>
             <td>JVM 正常退出 → 网关与 worker 残留</td>
@@ -379,13 +379,13 @@ flowchart TB
             <td>JVM 被 <code>kill -9</code> → 网关也失联，worker 变孤儿</td>
             <td>worker 侧三重保险：Linux 上请内核代发 <code>PR_SET_PDEATHSIG</code>；<code>getppid()==1</code> 检查；
               以及用 <code>setitimer</code> + 信号处理器做的孤儿看门狗（不依赖主循环回到事件循环）</td>
-            <td><code>worker.py:70-83</code>、<code>worker.py:114-132</code></td>
+            <td><code>Jellyfish-Plugins/jellyfish-plugin-python/src/main/resources/script/worker.py:70-83</code>、<code>Jellyfish-Plugins/jellyfish-plugin-python/src/main/resources/script/worker.py:114-132</code></td>
           </tr>
           <tr>
             <td>脚本卡在 <code>time.sleep(600)</code> 里 → 连看门狗都轮不到</td>
             <td><code>_die_now</code>：收到终止信号<strong>立刻 <code>os._exit(0)</code></strong>，不置标志后返回
               ——CPython 会在信号处理器返回后<strong>恢复</strong>被中断的系统调用，只翻标志等于永远轮不到主循环</td>
-            <td><code>worker.py:70-83</code></td>
+            <td><code>Jellyfish-Plugins/jellyfish-plugin-python/src/main/resources/script/worker.py:70-83</code></td>
           </tr>
         </tbody>
       </table>
@@ -974,8 +974,8 @@ sequenceDiagram
 
     <p>
       宿主只下发 <code>type</code> 与 <code>request</code>，因此带路由键的扩展点，名字只能从请求载荷里读。
-      这一小段逻辑在两侧脚本里都写着，且必须一致（<code>worker.py:308-329</code> 与
-      <code>worker.js:128</code> 起的 <code>routeKey</code>）：
+      这一小段逻辑在两侧脚本里都写着，且必须一致（<code>Jellyfish-Plugins/jellyfish-plugin-python/src/main/resources/script/worker.py:308-329</code> 与
+      <code>Jellyfish-Plugins/jellyfish-plugin-node/src/main/resources/script/worker.js:128</code> 起的 <code>routeKey</code>）：
       <code>tool</code> 取 <code>payload["tool"]</code>、<code>command</code> / <code>command_options</code> 取
       <code>payload["command"]</code>、<code>model_catalog</code> 取 provider 名、<code>input_directive</code> 取标记本身
       （<code>!</code> / <code>@</code>）、<code>periodic</code> 取任务名，其余类型级扩展点的路由键就是类型名自身。
@@ -1938,7 +1938,7 @@ sequenceDiagram
           <tr>
             <td>调用拿到「别人的结果」，此后每次错位一格</td>
             <td>脚本往协议流里写了一行合法 JSON（脚本自己猜 fd、或 worker 误写），被当成在途请求的应答</td>
-            <td>网关校验应答的 <code>id</code> 是不是在途请求的 <code>seq</code>，对不上就丢弃并计数告警（<code>gateway.py:821-841</code>）；子进程 fd 1/2 指向日志管道，误打印进不了协议流</td>
+            <td>网关校验应答的 <code>id</code> 是不是在途请求的 <code>seq</code>，对不上就丢弃并计数告警（<code>Jellyfish-Plugins/jellyfish-plugin-python/src/main/resources/script/gateway.py:821-841</code>）；子进程 fd 1/2 指向日志管道，误打印进不了协议流</td>
           </tr>
           <tr>
             <td>熔断打开后所有脚本一起「变慢」，网关恢复后仍要等冷却</td>
@@ -1948,7 +1948,7 @@ sequenceDiagram
           <tr>
             <td>机器上悄悄多出一批解释器进程，没有任何日志指向它</td>
             <td>网关被 <code>kill -9</code>，worker 未收到信号；而 worker 的孤儿检查（<code>getppid()==1</code>）挂在主循环上，脚本卡在用户代码里时永远轮不到</td>
-            <td>三层兜底：Linux 的 <code>PR_SET_PDEATHSIG</code>、定时器 + 信号处理器的孤儿看门狗、以及「即使配成不回收也要周期性醒来」的 <code>_remaining</code>（<code>worker.py:344-357</code>：注释写明它最初就在「不回收」配置下返回了 <code>None</code>）</td>
+            <td>三层兜底：Linux 的 <code>PR_SET_PDEATHSIG</code>、定时器 + 信号处理器的孤儿看门狗、以及「即使配成不回收也要周期性醒来」的 <code>_remaining</code>（<code>Jellyfish-Plugins/jellyfish-plugin-python/src/main/resources/script/worker.py:344-357</code>：注释写明它最初就在「不回收」配置下返回了 <code>None</code>）</td>
           </tr>
           <tr>
             <td>修改网关脚本后不生效</td>
@@ -1958,7 +1958,7 @@ sequenceDiagram
           <tr>
             <td>PID 文件里留着一个已经不存在的进程号</td>
             <td>JVM 被强杀，PID 文件来不及删；或后来者已覆盖该文件</td>
-            <td>PID 文件<strong>只报告、不处置</strong>：网关启动时读出旧内容并给出「PID N（仍存活 / 已不存在）」，宿主只记一条 WARN；退出时<strong>仅当文件仍记着自己的 PID 才删</strong>（<code>gateway.py:797-816</code>），否则删掉的会是「后来者还活着」这份唯一证据</td>
+            <td>PID 文件<strong>只报告、不处置</strong>：网关启动时读出旧内容并给出「PID N（仍存活 / 已不存在）」，宿主只记一条 WARN；退出时<strong>仅当文件仍记着自己的 PID 才删</strong>（<code>Jellyfish-Plugins/jellyfish-plugin-python/src/main/resources/script/gateway.py:797-816</code>），否则删掉的会是「后来者还活着」这份唯一证据</td>
           </tr>
           <tr>
             <td>只提供 <code>request_tuning</code> / <code>aging_strategy</code> 的脚本从来没被拉起</td>

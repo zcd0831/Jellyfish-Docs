@@ -114,7 +114,7 @@
       <table>
         <thead><tr><th>技术栈</th><th>选型</th><th>在代码里的位置</th></tr></thead>
         <tbody>
-          <tr><td>语言 / 运行时</td><td>Java 1.8（源码与 target 均为 1.8，<strong>构建需 JDK 8，运行只需 JRE 8+</strong>）</td><td><code>Jellyfish/pom.xml:54-56</code>、<code>README.md:27</code></td></tr>
+          <tr><td>语言 / 运行时</td><td>Java 1.8（源码与 target 均为 1.8，<strong>构建需 JDK 8，运行只需 JRE 8+</strong>）</td><td><code>Jellyfish/pom.xml:54-56</code>、<code>Jellyfish/README.md:27</code></td></tr>
           <tr><td>构建</td><td>Maven 多模块（聚合 + 父 POM），<code>maven-shade-plugin</code> 产出单个可执行 fat jar</td><td><code>Jellyfish/pom.xml:43-51</code>、<code>jellyfish-cli/pom.xml:100-124</code></td></tr>
           <tr><td>插件框架</td><td>PF4J（运行时加载独立 jar，SPI 走 <code>jellyfish-api</code>）</td><td><code>jellyfish-infra/.../plugin/PF4JPluginManager.java</code></td></tr>
           <tr><td>终端 UI</td><td>TamboUI（备用屏 + raw 模式，外部依赖 <code>dev.tamboui:tamboui-toolkit</code>）</td><td><code>jellyfish-tui/pom.xml:38</code>、<code>tui/TuiApp.java</code></td></tr>
@@ -380,7 +380,7 @@ flowchart LR
 
     <p>
       先分清事实与推断。可核实的事实：<code>Jellyfish/pom.xml:54-56</code> 把 <code>java.version</code> 定为 <code>1.8</code>；
-      <code>README.md:27</code> 写明「JDK 8（源码与目标版本都是 1.8）；<strong>运行只需 JRE 8+</strong>」；
+      <code>Jellyfish/README.md:27</code> 写明「JDK 8（源码与目标版本都是 1.8）；<strong>运行只需 JRE 8+</strong>」；
       <code>AGENTS.md</code> 用加粗写着「<strong>不要使用 Java 9+ 的 API 或语法</strong>」。
     </p>
 

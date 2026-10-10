@@ -98,10 +98,10 @@
       <table>
         <thead><tr><th>项</th><th>要求</th><th>依据</th></tr></thead>
         <tbody>
-          <tr><td>JDK</td><td>8（源码与目标版本都是 1.8）；<strong>运行只需 JRE 8+</strong></td><td><code>README.md:27</code>、<code>pom.xml:54-56</code></td></tr>
-          <tr><td>Maven</td><td>3.2.5 以上（构建用）</td><td><code>README.md:28</code></td></tr>
-          <tr><td>终端</td><td><code>-tui</code> 需要可交互终端；<code>-cli</code> / <code>-server</code> 不需要</td><td><code>README.md:29</code></td></tr>
-          <tr><td>模型</td><td>一个 OpenAI 兼容的 API；<strong>没有也能跑命令</strong>（<code>-cli -p "/help"</code>）</td><td><code>README.md:30, 62-70</code></td></tr>
+          <tr><td>JDK</td><td>8（源码与目标版本都是 1.8）；<strong>运行只需 JRE 8+</strong></td><td><code>Jellyfish/README.md:27</code>、<code>Jellyfish/pom.xml:54-56</code></td></tr>
+          <tr><td>Maven</td><td>3.2.5 以上（构建用）</td><td><code>Jellyfish/README.md:28</code></td></tr>
+          <tr><td>终端</td><td><code>-tui</code> 需要可交互终端；<code>-cli</code> / <code>-server</code> 不需要</td><td><code>Jellyfish/README.md:29</code></td></tr>
+          <tr><td>模型</td><td>一个 OpenAI 兼容的 API；<strong>没有也能跑命令</strong>（<code>-cli -p "/help"</code>）</td><td><code>Jellyfish/README.md:30, 62-70</code></td></tr>
         </tbody>
       </table>
     </div>
@@ -111,7 +111,7 @@
       <p>
         因为命令域（<code>/help</code> <code>/model</code> <code>/session</code> …）走的是
         <code>CommandManager</code>，完全不经过 LLM。这是 <code>Submission</code> 分流的结果：
-        输入以 <code>/</code> 开头走命令，否则才起一个 ReAct 回合（<code>README.md:159</code>）。
+        输入以 <code>/</code> 开头走命令，否则才起一个 ReAct 回合（<code>Jellyfish/README.md:159</code>）。
         这个分流点也是「先订阅再提交」等时序约束的所在地，详见 <a href="04-agent-loop.html">04 页</a>。
       </p>
     </div>
@@ -207,7 +207,7 @@ java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -server 9096</code></pre>
     <h3>输出契约：stdout 与 stderr 分工</h3>
 
     <p>
-      README（<code>README.md:140-158</code>）把它作为机器契约写死了：
+      README（<code>Jellyfish/README.md:140-158</code>）把它作为机器契约写死了：
       <strong>回答与命令结果走 stdout，诊断、工具进度与日志走 stderr</strong>。因此这样是安全的：
     </p>
 
@@ -233,7 +233,7 @@ echo "/help" | java -jar jellyfish-cli-0.1.1.jar -cli</code></pre>
     <div class="callout design">
       <span class="callout-title">设计依据</span>
       <p>
-        <strong>「归类看的是失败发生在哪一步，不是异常属于哪个类」</strong>（<code>README.md:161-162</code>）：
+        <strong>「归类看的是失败发生在哪一步，不是异常属于哪个类」</strong>（<code>Jellyfish/README.md:161-162</code>）：
         <code>bootstrap</code> 期间的任何运行时异常都算启动失败退 3，内核起来之后一律退 4——<strong>哪怕它不是 <code>JellyfishException</code></strong>。
         这条规则的价值在于：脚本里 <code>if [ $? -eq 3 ]</code> 就意味着「环境没配好，别重试」，
         <code>-eq 4</code> 才意味着「这次执行出问题了，可以重试」。如果按异常类型归类，这个判断就没法做。

@@ -1801,7 +1801,7 @@ Jellyfish-Plugins/jellyfish-plugin-mcp/src/main/java/zcd/jellyfish/plugin/mcp/Mc
         &lt;/dependency&gt;</code></pre>
 
     <p>
-      Jackson 则是<strong>自带并 shade 进插件包</strong>的（<code>pom.xml:32-41</code>）：
+      Jackson 则是<strong>自带并 shade 进插件包</strong>的（<code>Jellyfish-Plugins/jellyfish-plugin-mcp/pom.xml:32-41</code>）：
       「插件看不到内核的 <code>ObjectMapperWrapper</code>（那在 <code>jellyfish-infra</code> 里），
       因此自带一份」，护栏只禁止自带内核契约与 PF4J。
       这一条与 <a href="16-plugins.html">16 页</a>的「三层护栏」合起来看才完整：

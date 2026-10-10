@@ -395,7 +395,7 @@ private void rollback(String pluginId, Throwable cause) {
           <tr>
             <td>目录层级</td>
             <td>PF4J 在<strong>目录下一层</strong>找 <code>plugin.properties</code>（所以可以一个插件一个子目录）</td>
-            <td><code>README.md:462-464</code></td>
+            <td><code>Jellyfish/README.md:462-464</code></td>
           </tr>
           <tr>
             <td>启用 / 禁用 / 逐插件配置</td>
@@ -481,7 +481,7 @@ for (String pluginId : before.keySet()) {
           <tr><td>启用 / 禁用名单变化</td><td><strong>能</strong>——按名单先停后启收敛</td><td><code>PF4JPluginManager.java:189-235</code>（<code>applyRoster</code>）</td></tr>
           <tr><td>新增 / 删除插件 jar</td><td><strong>不能</strong>——「不做 jar 热部署」</td><td><code>PF4JPluginManager.java:118-121</code></td></tr>
           <tr><td>插件扫描目录变化</td><td><strong>不能</strong>（<code>plugins.roots</code> 在 <code>config.json</code>）</td><td>同上</td></tr>
-          <tr><td><code>config.json</code> 的任何改动</td><td><strong>不能</strong>——它不参与热更新</td><td><code>README.md:487</code></td></tr>
+          <tr><td><code>config.json</code> 的任何改动</td><td><strong>不能</strong>——它不参与热更新</td><td><code>Jellyfish/README.md:487</code></td></tr>
           <tr><td>描述符 / 内核版本变更</td><td><strong>不能</strong></td><td><code>PF4JPluginManager.java:118-121</code></td></tr>
         </tbody>
       </table>

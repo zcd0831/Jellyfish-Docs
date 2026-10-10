@@ -290,7 +290,7 @@ flowchart LR
       <p>
         如果流式边收边输出，那么当一个回合<strong>中途失败或被插件拦下</strong>时，stdout 里已经有半截回答——
         脚本拿到的是一份「不完整但看起来正常」的输出。而退出码 7 的语义是
-        <strong>「stdout 保持为空，原因在 stderr」</strong>（<code>README.md:157</code>）——
+        <strong>「stdout 保持为空，原因在 stderr」</strong>（<code>Jellyfish/README.md:157</code>）——
         这条语义只有在「缓冲到终态」的前提下才成立。
       </p>
       <p>
@@ -304,7 +304,7 @@ flowchart LR
       <p>
         默认只有两行：<code>→ shell</code> 和 <code>← shell 完成（N 字符）</code>。
         加 <code>--show-tool-args</code> 才补上参数，且是<strong>单行、最多 200 字</strong>
-        （<code>README.md:161-166</code>）。
+        （<code>Jellyfish/README.md:161-166</code>）。
       </p>
       <p>
         关键的一句在 README 里：<strong>「参数不脱敏」</strong>。理由是外壳按参数名猜不出哪个是密钥，
@@ -454,7 +454,7 @@ flowchart LR
     <div class="callout pitfall">
       <span class="callout-title">坑点：<code>-server</code> 缺省不鉴权</span>
       <p>
-        缺省只绑 <code>127.0.0.1</code>（<code>README.md:130</code>），本机之外访问不到，
+        缺省只绑 <code>127.0.0.1</code>（<code>Jellyfish/README.md:130</code>），本机之外访问不到，
         所以「默认没有鉴权」在缺省配置下是安全的。但一旦你用 <code>--host 0.0.0.0</code> 暴露出去，
         <strong>任何能访问端口的人都能读到全部会话正文、执行命令、批准审批</strong>——
         这也是「非回环 + 无密钥 = 拒绝启动」这条硬校验存在的原因。

@@ -159,9 +159,9 @@
       <table>
         <thead><tr><th>项</th><th>版本 / 坐标</th><th>声明位置</th></tr></thead>
         <tbody>
-          <tr><td>JUnit</td><td><code>5.10.2</code>（<code>org.junit:junit-bom</code> import）</td><td><code>pom.xml:104</code>（属性）、<code>:220-222</code>（import）</td></tr>
-          <tr><td>Mockito</td><td><code>4.11.0</code>（<code>org.mockito:mockito-bom</code> import）</td><td><code>pom.xml:105</code>、<code>:227-229</code></td></tr>
-          <tr><td>JaCoCo</td><td><code>0.8.12</code></td><td><code>pom.xml:108</code>、<code>:268-270</code></td></tr>
+          <tr><td>JUnit</td><td><code>5.10.2</code>（<code>org.junit:junit-bom</code> import）</td><td><code>Jellyfish/pom.xml:104</code>（属性）、<code>:220-222</code>（import）</td></tr>
+          <tr><td>Mockito</td><td><code>4.11.0</code>（<code>org.mockito:mockito-bom</code> import）</td><td><code>Jellyfish/pom.xml:105</code>、<code>:227-229</code></td></tr>
+          <tr><td>JaCoCo</td><td><code>0.8.12</code></td><td><code>Jellyfish/pom.xml:108</code>、<code>:268-270</code></td></tr>
           <tr><td>surefire</td><td><strong>未声明版本</strong>，随 Maven 父 POM</td><td>仅 <code>jellyfish-cli/pom.xml:147, 151</code> 覆写 include</td></tr>
         </tbody>
       </table>
@@ -226,7 +226,7 @@
     <h3>事实三：TamboUI 是 SNAPSHOT 依赖</h3>
 
     <p>
-      <code>dev.tamboui:tamboui-bom 0.5.0-SNAPSHOT</code>（<code>pom.xml:142-144</code>，import 方式），
+      <code>dev.tamboui:tamboui-bom 0.5.0-SNAPSHOT</code>（<code>Jellyfish/pom.xml:142-144</code>，import 方式），
       实际构件 <code>tamboui-toolkit</code> / <code>tamboui-jline3-backend</code> 不带版本（<code>jellyfish-tui/pom.xml:38-49</code>）。
     </p>
 
@@ -494,7 +494,7 @@ private void forEachRuntime(Consumer&lt;JellyfishRuntime&gt; assertion) {
       <table>
         <thead><tr><th>坐标</th><th>版本</th><th>声明行</th><th>用途</th></tr></thead>
         <tbody>
-          <tr><td><code>com.google.dagger:dagger</code></td><td>2.16</td><td><code>pom.xml:128-130</code></td><td>编译期 DI，生成 <code>Dagger*</code></td></tr>
+          <tr><td><code>com.google.dagger:dagger</code></td><td>2.16</td><td><code>Jellyfish/pom.xml:128-130</code></td><td>编译期 DI，生成 <code>Dagger*</code></td></tr>
           <tr><td><code>javax.inject:javax.inject</code></td><td>1</td><td><code>:135-137</code></td><td><code>@Inject</code> 注解</td></tr>
           <tr><td><code>dev.tamboui:tamboui-bom</code></td><td><strong>0.5.0-SNAPSHOT</strong></td><td><code>:142-144</code></td><td>TUI 框架（见第 2 节的事实三）</td></tr>
           <tr><td><code>io.undertow:undertow-core</code></td><td>2.2.40.Final</td><td><code>:151-153</code></td><td>HTTP 服务与 SSE</td></tr>
