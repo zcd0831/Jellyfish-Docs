@@ -426,17 +426,28 @@ flowchart LR
         要彻底离线，执行一次 <code>sh assets/vendor/fetch-vendor.sh</code> 放好两个库文件即可。
       </p>
       <p>
-        <strong>引用自检：</strong><code>sh assets/verify-refs.sh</code> 会把本套文档里所有
-        <code>文件:行号</code> 引用抽出来落到源码上，报出「缺文件 / 越界 / 可疑」三类问题，
-        只依赖 <code>find</code> 与 <code>grep</code>。它默认从脚本位置往上找源码根；
-        找不到时用位置参数显式给（<code>sh assets/verify-refs.sh Jellyfish-Docs/learning .</code>）。
+        <strong>引用自检：</strong><code>sh assets/verify-refs.sh . ../..</code> 会把本套文档里所有
+        <code>文件:行号</code> 引用抽出来落到源码上，报出「缺文件 / 越界 / 歧义 / 可疑」四类问题，
+        只依赖 <code>find</code> 与 <code>grep</code>（外加 sh 内建），因此在最小化的环境里也能跑。
+        末尾的 <code>../..</code> 是源码根，<strong>必须给</strong>（工作区根在文档目录的上两级）：
+        本套文档自己是一个 git 仓库，自动探测会停在文档仓库上、看不到源码，于是所有引用都会被报成「缺文件」。
+        （脚本在缺文件偏多时会主动把这一点提示出来，不会让你对着上千条报错猜原因。）
         加 <code>-v</code> 会额外列出「引用注释/注解行」的条目——那类通常是<strong>有意引用 javadoc 原文</strong>，
         默认只汇总数量以免刷屏。
       </p>
       <p>
-        <strong>它的覆盖范围：</strong>能校验<strong>带文件名</strong>的引用（写这个脚本时实测 448 条，全部通过）。
+        <strong>它的覆盖范围：</strong>能校验<strong>带文件名</strong>的引用，覆盖 <strong>43 种扩展名</strong>
+        （含 <code>.py</code> / <code>.js</code>，因此插件页的脚本引用也在校验范围内）。
+        当前实测 <strong>1635 条全部定位</strong>：0 缺文件、0 越界、0 歧义。
         形如 <code>:645</code> 的简写（依赖上文提到的文件名）<strong>无法自动校验</strong>，脚本会报出这类引用的数量
-        （当前 375 处）——这是已知限制，要覆盖它们得先把文档改写成带文件名的形式。
+        （当前 <strong>408 处</strong>）——这是已知限制，要覆盖它们得先把文档改写成带文件名的形式。
+        （以上数字会随文档增删变化，以脚本的输出为准。）
+      </p>
+      <p>
+        <strong>「歧义」是什么：</strong>引用若只写到文件名（如 <code>同名文件.md:27</code>），
+        仓库里同名文件可能有二十几个，脚本无法判断指向哪一个，于是<strong>报歧义而不是随便挑一个</strong>
+        ——挑错会把校验落到别的文件上，报出假的错误或假的通过。
+        本套文档已把这类引用全部补成能唯一确定的路径，歧义因此为 0。
       </p>
     </div>
 
