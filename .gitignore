@@ -1,0 +1,23 @@
+# 本仓库是文档仓库（纯 HTML + 少量资源），没有构建产物，
+# 因此只需忽略「编辑器 / 操作系统生成的、不该进版本库的东西」。
+
+# macOS Finder 元数据（会在仓库里到处生成）
+.DS_Store
+**/.DS_Store
+
+# IDE / 编辑器
+.idea/
+.vscode/
+*.iml
+*.swp
+*~
+.#*
+
+# 本地阅读时的临时文件（例如用浏览器「另存为」整页时产生的伴随目录）
+*_files/
+
+# 第三方前端库的构建产物：由 assets/vendor/fetch-vendor.sh 按需下载（约 3.4 MB），
+# 它们是别人编译好的 minified 文件，不入版本库——克隆后跑一次脚本即可。
+# 缺失时文档仍可读（CDN 兜底 + 缺库降级），详见 assets/vendor/README.md。
+learning/assets/vendor/highlight.min.js
+learning/assets/vendor/mermaid.min.js

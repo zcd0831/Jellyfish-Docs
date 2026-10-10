@@ -22,11 +22,16 @@ sh assets/vendor/fetch-vendor.sh
 
 | 文件名（必须一致） | 来源 | 版本 | 约大小 |
 | --- | --- | --- | --- |
-| `highlight.min.js` | `https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/common.min.js` | highlight.js 11.9.0 | 130 KB |
+| `highlight.min.js` | `https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/highlight.min.js` | highlight.js 11.9.0 | 126 KB |
 | `mermaid.min.js` | `https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js` | mermaid 10.9.1 | 2.9 MB |
 
 版本要与上表一致（也和页面里 CDN 兜底用的版本一致），否则可能出现渲染差异。
 浏览器也可以直接打开上面的 URL 另存为。
+
+> **注意 `highlight.js` 与 `@highlightjs/cdn-assets` 是两个不同的 npm 包**：
+> 前者的 `lib/*.js` 是给打包器用的 **CommonJS** 模块（内部 `require("./core")`），
+> 直接丢进浏览器会报 `require is not defined`；只有后者的 `highlight.min.js`
+> 是预构建的浏览器 bundle。这一点踩过坑，见仓库提交记录。
 
 ## 为什么不是「真正内联」
 

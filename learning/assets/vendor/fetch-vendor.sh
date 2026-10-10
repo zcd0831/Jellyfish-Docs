@@ -8,7 +8,7 @@
 #     chmod +x fetch-vendor.sh && ./fetch-vendor.sh
 #
 # 下载内容（版本与页面里 CDN 兜底用的版本保持一致）：
-#     highlight.min.js   highlight.js 11.9.0  lib/common.min.js   （代码语法高亮）
+#     highlight.min.js   highlight.js 11.9.0  @highlightjs/cdn-assets 的浏览器 bundle（代码语法高亮）
 #     mermaid.min.js     mermaid      10.9.1  dist/mermaid.min.js （架构图 / 时序图渲染）
 #
 # 说明：这两个文件缺失时文档**依然可读**（代码不着色、图表以源码形式展示），
@@ -38,7 +38,7 @@ fetch() {
     fi
 }
 
-fetch "https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/common.min.js" "highlight.min.js"
+fetch "https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/highlight.min.js" "highlight.min.js"
 fetch "https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"   "mermaid.min.js"
 
 printf '\n完成。当前目录内容：\n'

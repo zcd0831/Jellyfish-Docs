@@ -17,7 +17,7 @@
    *    items 的最后一站是 CDN：本地 vendor 缺失时自动回退，保证联网时总能渲染。
    * ------------------------------------------------------------------ */
   var HLJS_LOCAL = 'assets/vendor/highlight.min.js';
-  var HLJS_CDN = 'https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/common.min.js';
+  var HLJS_CDN = 'https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/highlight.min.js';
   var MERMAID_LOCAL = 'assets/vendor/mermaid.min.js';
   var MERMAID_CDN = 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js';
 
