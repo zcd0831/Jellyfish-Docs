@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jellyfish 源码深度解析 · 总览与导航</title>
+<meta name="description" content="Jellyfish（Java 1.8 + PF4J 的 AI Agent 工具）源码级学习文档：27 个页面，覆盖 Agent Loop、多厂商 LLM 抽象、权限审批、插件化架构、会话上下文、三外壳装配、命令系统、工具与 IO、配置体系、子代理与多 Agent 协作，以及 13 个官方插件逐个拆解。">
+<link rel="stylesheet" href="assets/style.css">
+<!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
+</head>
+<body>
+
+<header class="topbar">
+  <button class="nav-toggle" id="navToggle" aria-label="切换导航" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">🐙 Jellyfish 源码深度解析</a>
+  <div class="topbar-tools">
+    <input id="navSearch" type="search" placeholder="搜索页面…" aria-label="搜索页面">
+  </div>
+</header>
+
+<div class="layout">
+
+  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <div class="sidebar-title">文档目录</div>
+    <ul class="nav-list">
+      <li><a href="index.html" aria-current="page">首页 · 总览与导航</a></li>
+    </ul>
+    <div class="nav-group">入门</div>
+    <ul class="nav-list">
+      <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
+      <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
+      <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
+    </ul>
+    <div class="nav-group">内核重点</div>
+    <ul class="nav-list">
+      <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
+      <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
+      <li><a href="06-permissions.html">06 权限与审批系统</a></li>
+      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
+      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+    </ul>
+    <div class="nav-group">外壳与实战</div>
+    <ul class="nav-list">
+      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
+      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
+      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+    </ul>
+    <div class="nav-group">拓展</div>
+    <ul class="nav-list">
+      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
+      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
+      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
+      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
+      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+    </ul>
+    <div class="nav-group">子系统</div>
+    <ul class="nav-list">
+      <li><a href="17-commands.html">17 命令系统</a></li>
+      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
+      <li><a href="19-config.html">19 配置体系</a></li>
+      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
+    </ul>
+    <div class="nav-group">插件详解</div>
+    <ul class="nav-list">
+      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
+      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
+      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
+      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
+      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
+      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
+      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <nav class="breadcrumb" aria-label="面包屑">
+      <span>Jellyfish 源码深度解析</span><span class="sep">/</span><span>首页</span>
+    </nav>
+
+    <h1>Jellyfish 源码深度解析</h1>
+    <p class="page-sub">
+      面向「有一定 Java 基础、想深入理解 AI Agent 内核设计与插件化架构」的开发者。
+      27 个内容页 + 总览，全部结论都能落到 <code>文件:行号</code>。
+    </p>
+
+    <section class="goals">
+      <h2>这套文档回答什么</h2>
+      <ul>
+        <li><strong>怎么设计的</strong>——每个模块的职责边界、接口划分、数据结构选型；</li>
+        <li><strong>怎么实现的</strong>——核心算法与控制流，附可直接跳转的源码位置与代码片段；</li>
+        <li><strong>为什么这么实现</strong>——工程约束、被放弃的替代方案、代价是什么；</li>
+        <li><strong>依据是什么</strong>——ReAct 范式引用、Java 8 兼容性假设、终端交互约束、上下文缓存经济学；</li>
+        <li><strong>有哪些坑</strong>——37 条有源码依据的陷阱，按配置/插件/并发/上下文/TUI/性能/安全分组；</li>
+        <li><strong>和同类比如何</strong>——与 Claude Code、OpenClaw、Codex CLI、Aider、Continue.dev、Cline 的 10 维度对比。</li>
+      </ul>
+    </section>
+
+    <h2>一句话认识 Jellyfish</h2>
+
+    <p>
+      Jellyfish 是一个用 <strong>Java 1.8</strong> 编写的轻量级 AI Agent 工具：内核只负责跑 ReAct 循环、管会话、判权限、派发扩展点；
+      模型能用的<strong>全部能力（读写文件、跑命令、搜代码、连 MCP、压缩上下文、落盘会话）都由独立打包的 PF4J 插件提供</strong>，
+      插件与内核之间没有编译期依赖。同一套内核被 <code>-cli</code>、<code>-tui</code>、<code>-server</code> 三种外壳共享。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>关键数字</th><th>值</th><th>依据</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>主源码规模</td><td>约 <strong>8.5 万行</strong> / 约 <strong>480 个类</strong></td><td>各模块 <code>src/main/java</code> 逐文件统计</td></tr>
+          <tr><td>Maven 模块</td><td>7 个（api / infra / core / tui / server / di / cli）</td><td><code>Jellyfish/pom.xml:43-51</code></td></tr>
+          <tr><td>语言级别</td><td>Java 1.8（源码与 target 均为 1.8，禁用 9+ API 与语法）</td><td><code>Jellyfish/pom.xml:54-56</code>、<code>Jellyfish/AGENTS.md</code></td></tr>
+          <tr><td>单模块最大</td><td><code>jellyfish-infra</code> 约 2.86 万行</td><td>基础设施层全部实现都在这</td></tr>
+          <tr><td>扩展点</td><td>27 个（工具 / 命令 / 提示词 / 权限拦截 / 会话 / UI / 厂商 / 压缩 / 子代理 / 动作）</td><td><code>jellyfish-api/extension</code></td></tr>
+          <tr><td>ReAct 最大轮数</td><td>顶层缺省 16，子代理缺省 8</td><td><code>ReactSettings.java:39</code>、<code>SubAgentSettings.java:56</code></td></tr>
+          <tr><td>react 线程池</td><td>固定 8 条、队列 128、daemon、线程名前缀 <code>react</code></td><td><code>ReActLooper.java:913-925</code></td></tr>
+          <tr><td>审批超时</td><td>缺省 120 秒，<code>0</code> = 永不超时</td><td><code>PermissionApprovalSettings.java:35</code>、<code>AskSettings.java:37</code></td></tr>
+          <tr><td>工具输出落盘阈值</td><td>单次 20000 字符</td><td><code>ReactSettings.java:45</code></td></tr>
+          <tr><td>消息区投影上限</td><td>最近 500 条</td><td><code>TranscriptProjector.java:135</code></td></tr>
+          <tr><td>官方插件</td><td>13 个（compact / tools / shell / project / session-file / plan / skills / workflow / python / resmon / mcp / node / todo）</td><td><code>cpPlugins.sh</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>模块依赖全景</h2>
+
+    <p>依赖方向单向，禁止反向或循环。看懂这张图，就理解了「能力全在插件、内核保持最小」是怎么落到代码上的。</p>
+
+    <div class="mermaid">
+flowchart TD
+  CLI["jellyfish-cli<br/>main · 参数解析 · 模式分发 · shade jar"]
+  TUI["jellyfish-tui<br/>TamboUI 界面 · 视图投影"]
+  SRV["jellyfish-server<br/>Undertow · REST + SSE"]
+  DI["jellyfish-di<br/>装配层（composition root）"]
+  CORE["jellyfish-core<br/>会话提交管线 · ReAct 循环 · 提示词组装 · 压缩机制"]
+  INFRA["jellyfish-infra<br/>会话 / agent / 模型 / 权限 / 插件运行时 / 命令 / UI / 配置"]
+  API["jellyfish-api<br/>SPI · 扩展点 · 事件模型（插件作者唯一的稳定契约）"]
+  PLUG["PF4J 插件 jar<br/>（独立仓库 Jellyfish-Plugins）"]
+
+  CLI --> DI
+  CLI --> TUI
+  CLI --> SRV
+  TUI --> CORE
+  SRV --> CORE
+  DI --> CORE
+  CORE --> INFRA
+  TUI --> INFRA
+  SRV --> INFRA
+  DI --> INFRA
+  INFRA --> API
+  CORE --> API
+  TUI --> API
+  SRV --> API
+  API -. "运行时 SPI 接入<br/>无编译期依赖" .-> PLUG
+    </div>
+    <p class="figure-cap">图 0-1　7 个 Maven 模块的单向依赖，以及插件与内核之间唯一的运行时边界</p>
+
+    <h2>页面地图</h2>
+
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-no">01</div>
+        <h3><a href="01-overview.html">项目概览与设计哲学</a></h3>
+        <p>三条主线：三外壳一内核、工具即插件、默认不信任。为什么选 Java 1.8 而不是更高版本。</p>
+        <div class="card-file">pom.xml · AGENTS.md · docs/constraints.md</div>
+      </div>
+
+      <div class="card">
+        <div class="card-no">02</div>
+        <h3><a href="02-quickstart.html">环境准备与快速上手</a></h3>
+        <p>构建、装插件、跑通三种模式；五份配置文件的路径、优先级、<code>${VAR}</code> 插值与信任闸。</p>
+        <div class="card-file">config.json · SettingsBinder.java · cpPlugins.sh</div>
+      </div>
+
+      <div class="card">
+        <div class="card-no">03</div>
+        <h3><a href="03-architecture.html">整体架构与三外壳装配</a></h3>
+        <p><code>JellyfishRuntime</code> 门面 + Dagger 与手工两套装配；启动时序与环境自检。</p>
+        <div class="card-file">JellyfishRuntime.java · JellyfishAssembler.java · Launcher.java</div>
+      </div>
+
+      <div class="card focus">
+        <div class="card-no">04 重点</div>
+        <h3><a href="04-agent-loop.html">Agent Loop 内核</a></h3>
+        <p>带上限的 for 循环、轮与回合的判据、工具串行嵌入、<code>ask_user</code> 为何阻塞 react 线程、子代理隔离边界。</p>
+        <div class="card-file">ReActLooper.java · AgentHarness.java · AskChannel.java</div>
+      </div>
+
+      <div class="card focus">
+        <div class="card-no">05 重点</div>
+        <h3><a href="05-llm-api.html">多厂商 LLM API 抽象层</a></h3>
+        <p>继承树与 <code>type</code> 路由、<code>vendorBody/vendorHeaders</code> 透传、「没写 vs 写了 0」、cache 断点与流式工具分片。</p>
+        <div class="card-file">LlmClientFactory.java · ClaudeLlmClient.java · AbstractHttpLlmClient.java</div>
+      </div>
+
+      <div class="card focus">
+        <div class="card-no">06 重点</div>
+        <h3><a href="06-permissions.html">权限与审批系统</a></h3>
+        <p>三段权限语义（精确集合、无通配符）、判定落点、插件拦截三态无 <code>ALLOW</code>、TUI/Server 两套审批桥。</p>
+        <div class="card-file">PermissionManager.java · ToolExecutor.java · ApprovalChannel.java</div>
+      </div>
+
+      <div class="card focus">
+        <div class="card-no">07 重点</div>
+        <h3><a href="07-plugins.html">PF4J 插件化架构</a></h3>
+        <p>生命周期与 FAILED 回滚、28 个扩展点全表、类加载隔离、<code>/reload</code> 为什么只能重启配置变了的插件。</p>
+        <div class="card-file">PF4JPluginManager.java · PluginContextFactory.java · ConfigReloader.java</div>
+      </div>
+
+      <div class="card">
+        <div class="card-no">08</div>
+        <h3><a href="08-session-context.html">会话持久化与上下文</a></h3>
+        <p>唯一变更入口与两个落盘例外、工具输出落盘信封、提示词组装顺序、成组裁剪与插件化压缩。</p>
+        <div class="card-file">SessionManager.java · PromptAssembler.java · ConversationCompactor.java</div>
+      </div>
+
+      <div class="card">
+        <div class="card-no">09</div>
+        <h3><a href="09-tui.html">终端界面（TamboUI）</a></h3>
+        <p>六个区域与高度账本、渲染线程独占界面状态、跨线程为什么只能发「失效」信号。</p>
+        <div class="card-file">TuiApp.java · ChatShell.java · TranscriptProjector.java</div>
+      </div>
+
+      <div class="card">
+        <div class="card-no">10</div>
+        <h3><a href="10-cli-server.html">CLI 与 HTTP Server</a></h3>
+        <p>参数解析与 7 个退出码、零参数兜底 <code>-tui</code>、Server 路由清单与 <code>ApiKeyGuard</code>/<code>OriginGuard</code>。</p>
+        <div class="card-file">StartupOptionsParser.java · JellyfishServer.java</div>
+      </div>
+
+      <div class="card">
+        <div class="card-no">11</div>
+        <h3><a href="11-pitfalls.html">坑点与陷阱清单</a></h3>
+        <p>37 条：现象 → 根因（带行号）→ 规避 → 严重度。含「没有通配符」「超时 0 不是立即拒绝」等反直觉项。</p>
+        <div class="card-file">全仓 + constraints.md + CHANGELOG.md</div>
+      </div>
+
+      <div class="card">
+        <div class="card-no">12</div>
+        <h3><a href="12-comparison.html">与主流工具对比</a></h3>
+        <p>对齐 Claude Code / OpenClaw / Codex CLI / Aider / Continue.dev / Cline 的 10 个维度，含来源链接。</p>
+        <div class="card-file">README + 各产品官方文档</div>
+      </div>
+
+      <div class="card">
+        <div class="card-no">15</div>
+        <h3><a href="15-observability.html">可观测性与运行观测</a></h3>
+        <p>33 个指标与两处口径、四个健康指示器与最差优先聚合、<code>GET /health</code> 契约、run 观测及其真实空白。</p>
+        <div class="card-file">MetricNames.java · HealthCheck.java · RunRegistry.java</div>
+      </div>
+
+      <div class="card">
+        <div class="card-no">16</div>
+        <h3><a href="16-testing.html">测试体系与构建</a></h3>
+        <p>294 + 183 个测试、覆盖率实测、四个端到端 profile、双装配等价性测试、shade 打包与依赖清单。</p>
+        <div class="card-file">JellyfishAssemblerTest.java · pom.xml</div>
+      </div>
+
+      <div class="card">
+        <div class="card-no">13</div>
+        <h3><a href="13-learning-path.html">学习路径与阅读顺序</a></h3>
+        <p>三阶段路线：跑起来 → 顺一条工具调用读到底 → 再向外扩。附每阶段的自测问题。</p>
+        <div class="card-file">模块依赖图 + 各页重点</div>
+      </div>
+
+      <div class="card">
+        <div class="card-no">14</div>
+        <h3><a href="14-faq-glossary.html">常见问题与术语表</a></h3>
+        <p>40+ 术语速查（harness / turn / run / spill / 失效信号…），以及高频疑问的短答与指向。</p>
+        <div class="card-file">全仓</div>
+      </div>
+
+    </div>
+
+    <h3>子系统</h3>
+
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-no">17</div>
+        <h3><a href="17-commands.html">命令系统</a></h3>
+        <p>命令系统全解：无状态命令域、别名与命令名的冲突规则、<code>sessionRequired</code> 的两类降级、三态结果与 handoff 接力、11 条内置命令。</p>
+      </div>
+
+      <div class="card">
+        <div class="card-no">18</div>
+        <h3><a href="18-tools-io.html">工具系统与输入输出</a></h3>
+        <p>工具契约与注册、<code>ToolCatalog</code> 清单冻结与工具激活判定、<code>ToolExecutor</code> 七步执行链、参数改写与自我限流，以及输出信封、落盘、头尾预览、结果老化与失败表达。</p>
+      </div>
+
+      <div class="card">
+        <div class="card-no">19</div>
+        <h3><a href="19-config.html">配置体系</a></h3>
+        <p>四类配置与根类、双源路径与合并粒度、Reader→Binder 的读取绑定、环境变量插值、未知字段告警、项目级信任闸、<code>RuntimeConfig</code> 快照与 refresh 时机、<code>/reload</code> 顺序、模型三级解析。</p>
+      </div>
+
+      <div class="card">
+        <div class="card-no">20</div>
+        <h3><a href="20-subagents.html">子代理与多 Agent 协作</a></h3>
+        <p>子代理的委派链路与逐项准入、父子之间唯一的通信机制（结果回灌 + 归档路径）、上下文与状态隔离、并发的两层门控与许可让出，以及多 Agent 协作的三种形态与 run 观测通道。</p>
+      </div>
+
+    </div>
+
+    <h3>插件详解</h3>
+
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-no">21</div>
+        <h3><a href="21-plugin-overview.html">官方插件总览</a></h3>
+        <p>13 个官方插件逐一定位：职责与扩展点、身份识别、依赖分层、扫描与启停名单语义、安装分发，以及 22–27 页的阅读路线。</p>
+      </div>
+
+      <div class="card">
+        <div class="card-no">22</div>
+        <h3><a href="22-plugin-tools-shell.html">tools 与 shell 插件</a></h3>
+        <p>从源码看官方 tools 与 shell 插件：工具清单与参数 Schema、文件工具的匹配与限额、路径闸门，以及命令启动、超时终止与审批边界。</p>
+      </div>
+
+      <div class="card">
+        <div class="card-no">23</div>
+        <h3><a href="23-plugin-session-compact.html">session-file 与 compact 插件</a></h3>
+        <p>session-file 负责一个会话一个 JSON 的原子落盘、git 版本层、恢复与删除链；compact 只提供压缩策略（摘要提示词 + 两个数值参数），没装它压缩整体缺席。</p>
+      </div>
+
+      <div class="card">
+        <div class="card-no">24</div>
+        <h3><a href="24-plugin-workflow.html">workflow 插件</a></h3>
+        <p>声明式 spec 的数据模型、解析期校验与环检测、按依赖分层的调度与 <code>when</code> 语义、经 <code>SubAgentPort</code> 派生与聚合、台账与编排面板，以及它为什么必须住在内核之外。</p>
+      </div>
+
+      <div class="card">
+        <div class="card-no">25</div>
+        <h3><a href="25-plugin-plan-todo-skills.html">plan / todo / skills 插件</a></h3>
+        <p>三个把工作方式教给模型的官方插件：plan 用权限拦截实现「只看不改」、todo 把计划做成共享工作队列、skills 按 <code>SKILL.md</code> 做渐进披露；说清模式放会话扩展条目、待办放自建文件这两处状态的边界与代价。</p>
+      </div>
+
+      <div class="card">
+        <div class="card-no">26</div>
+        <h3><a href="26-plugin-mcp.html">MCP 插件</a></h3>
+        <p>如何把外部 MCP server 接成内核工具：stdio 换行分帧、JSON-RPC 握手与请求配对、<code>mcp__server__tool</code> 命名展开、content 数组映射、审批闸门与退避重连。</p>
+      </div>
+
+      <div class="card">
+        <div class="card-no">27</div>
+        <h3><a href="27-plugin-script.html">跨语言脚本插件</a></h3>
+        <p>用 Python / Node 写 Jellyfish 插件的完整机制：三层架构与进程边界、一行一个 JSON 的线协议、24 个扩展点编解码器、静态清单驱动的注册、事件回传、熔断与孤儿回收，以及为什么选子进程而不是嵌 JS 引擎。</p>
+      </div>
+
+    </div>
+
+    <h2>推荐学习顺序</h2>
+
+    <p>
+      按下面这条路走，每一站都只依赖前面已经建立的认知；带 <span class="tag focus">重点</span> 的四页是内核精华所在，
+      建议逐个对照源码读，不要跳。走完主干道、确认内核认知没偏（15/16 两页），再按需下沉到子系统与插件实现。
+    </p>
+
+    <div class="mermaid">
+flowchart LR
+  A["01 概览<br/>建立心智模型"] --> B["02 快速上手<br/>先跑起来"]
+  B --> C["03 架构与装配<br/>知道谁依赖谁"]
+  C --> D["04 Agent Loop<br/>主干道"]
+  D --> E["05 LLM API<br/>请求怎么发出去"]
+  E --> F["06 权限审批<br/>调用怎么被拦住"]
+  F --> G["07 插件架构<br/>能力从哪来"]
+  G --> H["08 会话上下文<br/>状态怎么留住"]
+  H --> I["09 TUI"]
+  H --> J["10 CLI / Server"]
+  I --> K["11 坑点清单"]
+  J --> K
+  K --> L["12 横向对比"]
+  L --> M["13 学习路径复盘"]
+  M --> N["14 术语表速查"]
+  N --> O["15 可观测性 / 16 测试体系<br/>校验内核认知"]
+  O --> P["17–20 子系统<br/>命令 / 工具与 IO / 配置 / 子代理"]
+  P --> Q["21–27 插件详解<br/>官方插件逐个拆解（按需读）"]
+    </div>
+    <p class="figure-cap">图 0-2　推荐阅读顺序：先跑起来，再顺主干道走到底，补外围与横向视野，最后按需下沉到子系统与插件实现</p>
+
+    <div class="callout tip">
+      <span class="callout-title">怎么用这套文档最高效</span>
+      <p>
+        每页的「学习目标」先扫一眼，然后<strong>把对应的源码文件在编辑器里打开</strong>，照着页里的 <code>文件:行号</code> 跳。
+        页里的代码片段都是从真实源码摘的（含注释原文），但注释往往比代码更值钱——它们记录了当时权衡的理由，
+        这是文档没法凭空补出来的部分。
+      </p>
+      <p>
+        <strong>引用某一行：</strong>每个代码块都带行号，<strong>点击行号</strong>即可复制该行的链接
+        （形如 <code>04-agent-loop.html#cb-3-L45</code>）；也可以手写 <code>#L45</code> 简写，
+        表示「本页第一个代码块的第 45 行」。代码块右上角的 <code>#cb-3</code> 锚标用来引用整块。
+        把链接发给别人，对方打开后会<strong>自动滚到并高亮那一行</strong>。
+        （若某个代码块在 HTML 里显式写了 <code>id</code>，会优先用它作为锚点前缀，长期引用更稳定。）
+      </p>
+      <p>
+        <strong>离线阅读：</strong>样式表与代码高亮主题都已内联，断网也能正常阅读与复制。
+        只有图表渲染依赖 <code>assets/vendor/mermaid.min.js</code>——本地缺文件时会自动回退 CDN；
+        两者都不可用时，图会<strong>以源码文本形式展示</strong>并在页首给出提示，不会变成空白。
+        要彻底离线，执行一次 <code>sh assets/vendor/fetch-vendor.sh</code> 放好两个库文件即可。
+      </p>
+      <p>
+        <strong>引用自检：</strong><code>sh assets/verify-refs.sh</code> 会把本套文档里所有
+        <code>文件:行号</code> 引用抽出来落到源码上，报出「缺文件 / 越界 / 可疑」三类问题，
+        只依赖 <code>find</code> 与 <code>grep</code>。它默认从脚本位置往上找源码根；
+        找不到时用位置参数显式给（<code>sh assets/verify-refs.sh Jellyfish-Docs/learning .</code>）。
+        加 <code>-v</code> 会额外列出「引用注释/注解行」的条目——那类通常是<strong>有意引用 javadoc 原文</strong>，
+        默认只汇总数量以免刷屏。
+      </p>
+      <p>
+        <strong>它的覆盖范围：</strong>能校验<strong>带文件名</strong>的引用（写这个脚本时实测 448 条，全部通过）。
+        形如 <code>:645</code> 的简写（依赖上文提到的文件名）<strong>无法自动校验</strong>，脚本会报出这类引用的数量
+        （当前 375 处）——这是已知限制，要覆盖它们得先把文档改写成带文件名的形式。
+      </p>
+    </div>
+
+    <div class="conclusion">
+      <h2>关键结论</h2>
+      <ol>
+        <li>Jellyfish 的架构可以一句话概括：<strong>内核保持最小 + 能力全在插件 + 三外壳共用一个装配</strong>。</li>
+        <li>所有设计的默认方向都是「更严」：权限 fail-closed、项目配置默认不信任、插件故障即拒绝、插件放行都表达不了。</li>
+        <li>它的代价同样明确：不装插件内核近乎空转、jar 变更必须重启进程、Java 8 锁死写法。</li>
+        <li>读它的正确方式不是「逐文件读完」，而是<strong>顺着一次工具调用走完全程</strong>——那条路径把所有核心模块都串起来了。</li>
+      </ol>
+    </div>
+
+    <nav class="pager" aria-label="翻页">
+      <a class="prev disabled" href="index.html"><span class="pager-dir">上一页</span>已是首页</a>
+      <a class="next" href="01-overview.html"><span class="pager-dir">下一页</span>01 项目概览与设计哲学</a>
+    </nav>
+
+  </main>
+</div>
+
+<footer class="footer">
+  Jellyfish 源码深度解析 · 基于仓库 <code>Jellyfish</code>（坐标 <code>io.github.zcd0831:jellyfish:0.1.1</code>）与 <code>Jellyfish-Plugins</code>。
+  文中所有 <code>文件:行号</code> 均指这两个仓库中的真实位置；示例中出现的密钥、token 一律以 <code>***</code> 脱敏。
+</footer>
+
+<!-- 资源按「本地 vendor 优先、CDN 兜底」引用：文件缺失时 assets/app.js 会自动回退到 CDN -->
+<script src="assets/vendor/highlight.min.js"></script>
+<script src="assets/vendor/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

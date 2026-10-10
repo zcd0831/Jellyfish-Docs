@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>08 会话持久化与上下文管理 · Jellyfish 源码深度解析</title>
+<meta name="description" content="Jellyfish 的会话与上下文：SessionManager 唯一变更入口、原子落盘、工具输出落盘信封、PromptAssembler 组装顺序、成组裁剪、插件化压缩、工具结果老化、500 条投影上限。">
+<link rel="stylesheet" href="assets/style.css">
+<!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
+</head>
+<body>
+
+<header class="topbar">
+  <button class="nav-toggle" id="navToggle" aria-label="切换导航" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">🐙 Jellyfish 源码深度解析</a>
+  <div class="topbar-tools">
+    <input id="navSearch" type="search" placeholder="搜索页面…" aria-label="搜索页面">
+  </div>
+</header>
+
+<div class="layout">
+
+  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <div class="sidebar-title">文档目录</div>
+    <ul class="nav-list">
+      <li><a href="index.html">首页 · 总览与导航</a></li>
+    </ul>
+    <div class="nav-group">入门</div>
+    <ul class="nav-list">
+      <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
+      <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
+      <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
+    </ul>
+    <div class="nav-group">内核重点</div>
+    <ul class="nav-list">
+      <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
+      <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
+      <li><a href="06-permissions.html">06 权限与审批系统</a></li>
+      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
+      <li><a href="08-session-context.html" aria-current="page">08 会话持久化与上下文</a></li>
+    </ul>
+    <div class="nav-group">外壳与实战</div>
+    <ul class="nav-list">
+      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
+      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
+      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+    </ul>
+    <div class="nav-group">拓展</div>
+    <ul class="nav-list">
+      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
+      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
+      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
+      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
+      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+    </ul>
+    <div class="nav-group">子系统</div>
+    <ul class="nav-list">
+      <li><a href="17-commands.html">17 命令系统</a></li>
+      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
+      <li><a href="19-config.html">19 配置体系</a></li>
+      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
+    </ul>
+    <div class="nav-group">插件详解</div>
+    <ul class="nav-list">
+      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
+      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
+      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
+      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
+      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
+      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
+      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <nav class="breadcrumb" aria-label="面包屑">
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>08 会话持久化与上下文管理</span>
+    </nav>
+
+    <h1>08 会话持久化与上下文管理</h1>
+    <p class="page-sub">
+      这一页有两半：前半是「状态怎么留住」（会话），后半是「状态怎么送出去」（上下文工程）。
+      两半通过一条纪律连起来：<strong>会话是唯一真源，送出去的东西只是它的一个投影。</strong>
+    </p>
+
+    <section class="goals">
+      <h2>学习目标</h2>
+      <ul>
+        <li>说清 <code>SessionManager</code> 的「唯一变更入口」与两个落盘例外；</li>
+        <li>描述会话文件的原子写过程，以及它对符号链接做了什么防护；</li>
+        <li>解释工具输出落盘的阈值、信封格式，以及模型如何按路径回读；</li>
+        <li>背下 <code>PromptAssembler</code> 的组装顺序，并说出裁剪「只裁本次请求」的理由；</li>
+        <li>说清压缩的触发条件、算法主流程，以及「压缩是插件能力」的后果；</li>
+        <li>理解消息区 500 条投影为什么只是展示裁剪、不影响发给模型的内容；</li>
+        <li>说清<b>会话分叉</b>的切点为什么要按工具调用组对齐，以及为什么它不复制用量；</li>
+        <li>读懂<b>token 记账</b>的三个 <code>plus</code> 重载差别，与命中率的分母是什么；</li>
+        <li>知道工具输出的 <code>_path</code> 有<b>隐含有效期</b>（落盘会被静默清理）。</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================ -->
+    <h2>1. <code>SessionManager</code>：唯一变更入口</h2>
+
+    <div class="mermaid">
+flowchart LR
+  W["任何会话变更<br/>（追加消息 / 改标题 / 更新用量）"] --> SM["SessionManager<br/>唯一入口"]
+  SM -->|"回合内"| DIRTY["只标脏<br/>beginTurn"]
+  SM -->|"回合外 / flush"| FLUSH["flush(sessionId)"]
+  DIRTY --> FLUSH
+  FLUSH --> PERSIST["doPersist(session)"]
+  PERSIST --> EPH{"isEphemeral()？"}
+  EPH -->|"是（子代理会话）"| DROP["直接返回，不落盘"]
+  EPH -->|"否"| BIND{"有 SessionPersistRequest<br/>处理器吗？"}
+  BIND -->|"没有（未装持久化插件）"| DROP
+  BIND -->|"有"| SNAP["captureSnapshot()<br/>→ api 侧不可变快照"]
+  SNAP --> PLUG["派发给插件<br/>（如 session-file）"]
+  PLUG --> ATOMIC["原子写：临时文件 → 600 权限 → ATOMIC_MOVE"]
+    </div>
+    <p class="figure-cap">图 8-1　会话变更的唯一路径：一个入口、两个落盘例外、一次原子写</p>
+
+    <p>
+      类注释（<code>SessionManager.java:57-60</code>）把这条规则写成了硬约束：
+      <strong>任何对会话状态的改动都必须经过 <code>SessionManager</code>。</strong>
+      因为它是「变更通知」的唯一发起者——变更之后要把 <code>SessionPersistRequest</code> 派发给插件。
+      绕过它改会话，插件就收不到通知，落盘也就不会发生。
+    </p>
+
+    <h3>两个刻意的例外</h3>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>例外</th><th>行为</th><th>为什么</th><th>位置</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>创建不落盘</strong></td>
+            <td><code>create()</code> 只建内存对象，不触发落盘</td>
+            <td>避免「用户打开界面又立刻退出」留下一条空会话文件。TUI / Server 启动期不建会话（<a href="03-architecture.html">03 页</a>）
+                与这条是同一个考虑的两面</td>
+            <td><code>:196-206</code>（注释 <code>:200-204</code>）</td>
+          </tr>
+          <tr>
+            <td><strong>回合内只标脏</strong></td>
+            <td><code>beginTurn</code> 只打脏标记，直到 <code>flush</code> 才真正落盘</td>
+            <td>一个回合里可能追加几十条消息（工具结果），每条都写一次文件既慢又没必要——
+                崩溃时最多丢当前回合，而<strong>当前回合本来就没完成</strong></td>
+            <td><code>beginTurn :996-1009</code>、<code>flush :1011-1036</code>、<code>markDirtyOrPersist :606-611</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      会话落盘本身<strong>是插件能力</strong>（<code>jellyfish-plugin-session-file</code> 提供）。
+      内核这边只有一个派发点：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/session/SessionManager.java:1302-1319</div>
+
+<pre><code class="language-java">private void doPersist(Session session) {
+    if (session.isEphemeral()) {
+        return;
+    }
+    List&lt;HandlerBinding&lt;SessionPersistRequest, Void&gt;&gt; bindings =
+            extensions.bindings(SessionPersistRequest.class, null);
+    if (bindings.isEmpty()) {
+        return;
+    }
+    session.underPersistLock(() -&gt; {
+        SessionPersistRequest request = new SessionPersistRequest(session.captureSnapshot());
+        for (HandlerBinding&lt;SessionPersistRequest, Void&gt; binding : bindings) {
+            extensions.invoke(binding.getHandler(), request);
+        }
+    });
+}</code></pre>
+
+    <p>这段很短但有四个信息点：</p>
+
+    <ul>
+      <li><code>isEphemeral()</code> 提前退出——<strong>子代理会话不落盘</strong>（<code>:1300-1306</code>，
+          也解释了它们为何不进 <code>all()</code>）。</li>
+      <li><code>bindings.isEmpty()</code> 直接返回——<strong>没装持久化插件就什么都不发生</strong>，
+          而且照常清掉脏标记（<code>:1268-1271</code>）。这不会报错，只会「会话退出即消失」。</li>
+      <li><code>captureSnapshot()</code> 生成的是 <strong><code>api</code> 侧的快照值类型</strong>
+          （<code>SessionSnapshot</code>），与 <a href="05-llm-api.html">05 页</a>的传输快照同一个思路：
+          插件只能读，不能改内存里的会话。</li>
+      <li><code>underPersistLock</code> 把「拿快照 + 派发」包在一把锁里，
+          保证落盘时看到的是一个<strong>自洽的瞬间</strong>，而不是「消息写了一半」的中间态。</li>
+    </ul>
+
+    <h3>插件侧怎么真的写文件</h3>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-session-file/src/main/java/zcd/jellyfish/plugin/sessionfile/SessionStore.java:172-192（原子写）</div>
+
+<pre><code class="language-java">private void writeAtomically(Path file, String json) throws IOException {
+    Path temp = file.resolveSibling(file.getFileName() + TEMP_SUFFIX);
+    try {
+        Files.write(temp, json.getBytes(StandardCharsets.UTF_8),
+                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING,
+                LinkOption.NOFOLLOW_LINKS);
+        restrictToOwner(temp, false);
+        try {
+            Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
+        }
+    } catch (IOException | RuntimeException e) {
+        deleteQuietly(temp);
+        throw e;
+    }
+}</code></pre>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>步骤</th><th>作用</th></tr></thead>
+        <tbody>
+          <tr><td>写 <code>&lt;id&gt;.json.tmp</code></td><td>临时文件后缀固定；写出错时原文件不受影响</td></tr>
+          <tr><td><code>NOFOLLOW_LINKS</code></td><td><strong>挡符号链接越权写</strong>——防止 <code>.tmp</code> 被提前做成指向别处的符号链接</td></tr>
+          <tr><td><code>restrictToOwner(temp, false)</code></td><td>rename <strong>之前</strong>收紧到 600——不能让「已经可读」的文件存在哪怕一瞬间</td></tr>
+          <tr><td><code>ATOMIC_MOVE</code>，不支持时退化普通替换</td><td>同一文件系统上是原子的；跨设备时退化为「先删后移」，此时仍不会出现半截文件</td></tr>
+          <tr><td>异常时 <code>deleteQuietly(temp)</code></td><td>不留残渣；下一个会话列举只认 <code>*.json</code>，<code>.tmp</code> 不算会话</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：<code>flush</code>、<code>flushAll</code>、<code>flushQuietly</code> 语义不同</span>
+      <p>
+        <strong>关停时必须 <code>flushAll()</code></strong>，而且它必须排在 <code>pluginManager.close()</code> <em>之前</em>
+        （<code>AgentHarness.java:251-254, 274, 284</code>）——因为落盘要经扩展点派发给插件，插件一停就没人接了。
+        少了这一步，Ctrl+C 会丢掉当前回合。
+      </p>
+      <p>
+        另外 <code>flushQuietly</code> 失败会<strong>保留脏标记并只打 WARN</strong>，
+        而 <code>persist</code> 失败是<strong>上抛</strong>。两条语义不同：前者是「尽力而为」（关停路径），
+        后者是「必须成功」（显式请求）。混用会导致「明明失败了却以为成功了」。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>2. 数据结构：什么是不可变的，什么不是</h2>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>类型</th><th>可变性</th><th>关键字段</th><th>并发</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>Session</code></td>
+            <td><strong>混合</strong>：<code>final</code> 的 <code>sessionId</code> / <code>createdAt</code> /
+                <code>kind</code> / <code>parentSessionId</code> / <code>forkPointMessageId</code>，
+                其余（<code>title</code> / <code>updatedAt</code> / <code>agentId</code> / <code>provider</code> /
+                <code>model</code> / <code>usage</code> / <code>compaction</code> / <code>extensionEntries</code>）可变</td>
+            <td><code>List&lt;SessionMessage&gt; messages</code></td>
+            <td>全部方法 <code>synchronized</code>；读返回<strong>防御性不可变列表</strong>（<code>:323-324</code>）</td>
+          </tr>
+          <tr>
+            <td><code>SessionMessage</code></td>
+            <td><strong>完全不可变</strong>（final 字段 + 无 setter）</td>
+            <td><code>messageId</code> / <code>timestamp</code> / <code>role</code> / <code>content</code> /
+                <code>toolCallId</code> / <code>name</code> / <code>toolCalls</code> / <code>usage</code> /
+                <code>thinking</code> / <code>metadata</code></td>
+            <td>天然线程安全（<code>SessionMessage.java:24-70</code>）</td>
+          </tr>
+          <tr>
+            <td><code>ChatState</code>（TUI）</td>
+            <td><strong>不存消息</strong>，只存<strong>投影结果</strong> <code>projected</code> 与上次投影指纹
+                （<code>lastSessionId</code> / <code>lastMessageCount</code> / <code>lastWidth</code>…）</td>
+            <td>—</td>
+            <td>界面状态只归渲染线程（<code>ChatState.java:27-28</code>）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：<code>ChatState</code> 为什么不存消息？</span>
+      <p>
+        因为<strong>「消息的真源只有一个」比「界面读得快」更重要</strong>。
+        如果 TUI 自己存一份消息列表，那么每次压缩、恢复会话、插件追加消息，都要同步两份数据——
+        而任何一次漏同步都会造成「屏幕上有、历史里没有」这类无法自愈的不一致。
+      </p>
+      <p>
+        现在的做法是：<code>ChatState</code> 只保存<strong>上一帧的投影结果</strong>和一个<strong>指纹</strong>
+        （会话 id + 消息条数 + 终端宽度…）。指纹没变就复用上一帧，变了才重新投影。
+        这是一个纯粹的<strong>缓存</strong>，丢掉它不影响正确性——这正是「可重建的派生状态」该有的样子。
+      </p>
+      <p>
+        而回合进行中的「活跃状态」（流式文本、正在跑的工具）由另一个对象 <code>InflightTurn</code> 承载：
+        <strong>react 线程写、渲染线程经 <code>snapshot()</code> 读</strong>（<code>InflightTurn.java:27-28, 345</code>），
+        有硬上限（正文 256K / 思考 64K / 工具输出末 20 行 × 200 字符，<code>:58-67</code>）——
+        因为流式内容可能在短时间内无界增长，这个上限是防内存失控的闸。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>3. 工具输出落盘与「回灌信封」</h2>
+
+    <p>
+      一个工具可能返回几兆输出（<code>grep</code> 全仓、<code>cat</code> 大文件）。全塞进上下文会瞬间打爆 token 预算，
+      所以内核有一条「超限就落盘 + 回灌一个信封」的机制。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>配置键</th><th>缺省值</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><td><code>react.maxToolOutputChars</code></td><td><strong>20000 字符</strong></td><td>单次工具输出超过它就触发落盘</td></tr>
+          <tr><td><code>react.toolOutput.dir</code></td><td><code>~/.jellyfish/tool-outputs</code></td><td>落盘目录（<strong>注意是主目录，不是项目目录</strong>）</td></tr>
+          <tr><td><code>react.toolOutput.keepFiles</code></td><td>200</td><td>保留文件数</td></tr>
+          <tr><td><code>react.toolOutput.maxBytes</code></td><td>52428800（50 MiB）</td><td>目录总上限</td></tr>
+          <tr><td><code>react.toolOutput.spillMaxBytes</code></td><td>33554432（32 MiB）</td><td>单次溢写上限；实际取 <code>min(spillMaxBytes, maxBytes)</code></td></tr>
+          <tr><td><code>react.toolOutput.keepRecentMessages</code></td><td>20</td><td>与老化策略配合（见第 6 节）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>回灌给模型的是一段<strong>合法 JSON</strong>（<code>ToolOutputEnvelope.java:259-269</code>）：</p>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/tooloutput/ToolOutputEnvelope.java:259-269</div>
+
+<pre><code class="language-java">public String render() {
+    Map&lt;String, Object&gt; payload = new LinkedHashMap&lt;String, Object&gt;();
+    payload.put(FIELD_TRUNCATED, Boolean.TRUE);
+    payload.put(FIELD_TOOL, toolName);
+    payload.put(FIELD_TOTAL_CHARS, totalChars);
+    payload.put(FIELD_TOTAL_LINES, totalLines);
+    payload.put(FIELD_PATH, path);
+    payload.put(FIELD_HINT, hint);
+    payload.put(FIELD_PARTIAL, Boolean.valueOf(partial));
+    payload.put(FIELD_PREVIEW, preview);
+    return ObjectMapperWrapper.writeValueAsString(payload);
+}</code></pre>
+
+    <p>
+      字段清单是 <code>_truncated / _tool / _total_chars / _total_lines / _path / _hint / _partial / preview</code>
+      （<code>:29-57</code>）。三个设计要点：
+    </p>
+
+    <ul>
+      <li><strong>始终是一段合法 JSON</strong>（<code>:12-20</code>）——不是「一行人类可读的提示」。
+          这样模型可以直接解析它，而且不会因为里面的引号/换行把上下文结构搞坏。</li>
+      <li><strong><code>_hint</code> 里明写怎么回读</strong>：用 <code>read_file</code>（支持 <code>offset</code>/<code>limit</code>）
+          或 <code>grep_files</code> 查 <code>_path</code>（<code>:143, 367</code>）。
+          也就是说<strong>回读能力也由插件提供</strong>，内核只负责把路径写清楚。</li>
+      <li><strong><code>_partial = true</code> 表示该文件本身也不完整</strong>（<code>:41-56</code>）——
+          触及溢写上限时停止写入。模型看到这个标志就该知道「连文件里都不是全部」，
+          而不是以为回读能拿到完整输出。</li>
+    </ul>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：<code>_path</code> 是 <code>~</code> 缩写形式，落盘目录在主目录</span>
+      <p>
+        工具输出默认落在 <code>~/.jellyfish/tool-outputs</code>，<strong>不是当前项目目录</strong>。
+        所以「换个项目跑就找不到上次的输出」是正常的。
+        另外 <code>_path</code> 里给的是 <code>~</code> 缩写，交给需要绝对路径的工具时要先展开。
+      </p>
+      <p>
+        与截流有关的两个实现细节：<code>SpillCapturingSink</code> 在<strong>未溢出时全缓冲</strong>，
+        超过 <code>maxChars</code> 才转为溢写（只留头/尾窗口并边写盘，<code>SpillCapturingSink.java:78-135, 196-206</code>）。
+        而对「无界输出」的工具（典型是 <code>yes</code>），<code>spill</code> 仍然会被读取并丢弃——
+        也就是说<strong>落盘上限保护的是磁盘，不是 CPU</strong>。
+      </p>
+      <p>
+        最后一个坑：<strong>不要对可能是 JSON 的输出做 <code>substring</code></strong> 来封顶
+        （<code>docs/constraints.md:734-739</code>）。截断一段 JSON 会得到非法 JSON，
+        而很多工具的输出恰好就是 JSON。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>4. 提示词组装：<code>PromptAssembler</code> 的顺序</h2>
+
+    <div class="src-block">Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/prompt/PromptAssembler.java:306-325</div>
+
+<pre><code class="language-java">int boundary = effectiveBoundary(session);
+String systemPrompt = systemPromptOf(session);
+LlmMessage summary = summaryMessageOf(session, boundary);
+int start = startIndexOf(session, boundary + 1);
+List&lt;LlmMessage&gt; history = toLlmMessages(session, start);
+int budget = budgetOf(resolvedModel);
+List&lt;LlmMessage&gt; aged = toolResultAger.age(session.getSessionId(), boundary,
+        usageOf(systemPrompt, summary, history, budget), history);
+CropResult cropResult = crop(budget, systemPrompt, summary, aged);
+List&lt;LlmMessage&gt; messages = withSummary(summary, cropResult.getMessages());
+int sentHistory = cropResult.getMessages().size();
+int firstSessionIndex = sentHistory == 0 ? -1 : start + (aged.size() - sentHistory);
+List&lt;LlmTool&gt; tools = toolCatalog.tools(session, toolFilter);</code></pre>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>步</th><th>做什么</th><th>要点</th></tr></thead>
+        <tbody>
+          <tr><td>①</td><td>求压缩边界 <code>effectiveBoundary</code></td><td>边界之前的消息已被摘要替代，不再逐条发送</td></tr>
+          <tr><td>②</td><td>算 system prompt</td><td>agent 提示词 + 插件贡献块；<strong>两者皆空则不下发</strong>（<code>systemPromptOf:478-482</code>）</td></tr>
+          <tr><td>③</td><td>取摘要消息</td><td>摘要是<strong>一条合成的 user 消息</strong>（见下面的坑）</td></tr>
+          <tr><td>④</td><td>求历史起点 <code>startIndexOf</code></td><td><strong>跳过开头的孤儿 tool 结果</strong>（<code>:914</code>）——边界正好切在工具配对中间时会出现</td></tr>
+          <tr><td>⑤</td><td>老化 <code>toolResultAger.age</code></td><td>把「已落盘的信封」换成更短的 stub（第 6 节）</td></tr>
+          <tr><td>⑥</td><td>裁剪 <code>crop</code></td><td>成组丢弃，见第 5 节</td></tr>
+          <tr><td>⑦</td><td>与摘要合并 <code>withSummary</code></td><td>必要时<strong>并入第一条 user 消息</strong>（<code>:556</code>）</td></tr>
+          <tr><td>⑧</td><td>工具清单</td><td><code>toolCatalog.tools(session, toolFilter)</code>，受权限与激活扩展点影响</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      注意 <code>firstSessionIndex</code> 那一行的用途：它是「发给模型的第 0 条历史，对应会话里的第几条」——
+      这个反向映射在日志、UI 高亮、错误定位里都要用。裁剪之所以要<strong>记录</strong>这个索引，
+      就是为了「内核知道自己裁了什么」。
+    </p>
+
+    <h3>提示词贡献：三档，且只有「追加」</h3>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th><code>PromptPlacement</code></th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><td><code>STATIC</code></td><td>不随会话/轮次变化的内容</td></tr>
+          <tr><td><code>SESSION</code></td><td>会话级信息（缺省档）</td></tr>
+          <tr><td><code>VOLATILE</code></td><td>每轮都可能变的内容</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      分档的意义是<strong>缓存</strong>：<code>STATIC</code> 放在前面、<code>VOLATILE</code> 放在后面，
+      缓存前缀才不会被每轮变化的内容冲掉（<code>PromptPlacement.java:18-39</code>）。
+      三档<strong>都是追加，没有「替换」语义</strong>（<code>PromptContribution.java:4</code> 的类注释：
+      道内按注册的 <code>order</code> 排序；单个 handler 失败只记 WARN 跳过（<code>:652</code>）。
+    </p>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：system prompt 必须逐字节恒定</span>
+      <p>
+        <code>PromptAssembler.java:44-47</code> 把「把易变状态塞进 system prompt」直接<strong>视为 bug 信号</strong>：
+        因为 system prompt 是缓存前缀的第一段，一旦它每轮变化，
+        <strong>整个历史都会按未命中价重发</strong>。
+      </p>
+      <p>
+        第二条相关的坑：<strong>摘要不能用 <code>system</code> 角色</strong>（<code>:508-520</code>）。
+        一是会被 Claude / Gemini 上提回顶层 system（破坏 system 的唯一性），
+        二是 Anthropic 拒绝连续的 user 消息——所以摘要被强制成 user，并在必要时<strong>并入首条 user</strong>。
+        这些不是风格选择，是协议约束。
+      </p>
+      <p>
+        第三条：<strong>内核不注入环境信息</strong>。除了 agent 提示词原文与插件贡献，没有第三段。
+        想要「当前目录是 X、今天是 Y」这类信息，得由插件通过 <code>PromptContribution</code> 或
+        <code>TurnContextRequest</code> 提供。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>5. 裁剪：<code>ContextWindow</code> 的成组丢弃</h2>
+
+    <div class="src-block">Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/prompt/ContextWindow.java:59-79</div>
+
+<pre><code class="language-java">for (int i = groups.size() - 1; i &gt;= 0; i--) {
+    List&lt;LlmMessage&gt; group = groups.get(i);
+    int cost = TokenEstimator.estimateMessages(group);
+    if (kept.isEmpty()) {
+        if (cost &gt; historyBudgetTokens) {
+            kept.addAll(truncateGroup(group, historyBudgetTokens));
+            used = TokenEstimator.estimateMessages(kept);
+        } else {
+            kept.addAll(group);
+            used = cost;
+        }
+    } else if (used + cost &lt;= historyBudgetTokens) {
+        kept.addAll(0, group);
+        used += cost;
+    } else {
+        truncated = true;
+        break;
+    }
+}</code></pre>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>规则</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>分组</td><td><code>group()</code>：把 tool 结果<strong>挂到它前面那条消息上</strong>（<code>:88</code>），
+              保证 <code>assistant(toolCalls)</code> 与 <code>tool</code> 结果<strong>要么都在、要么都不在</strong></td></tr>
+          <tr><td>方向</td><td><strong>从最新组向最旧组</strong>累加，装不下就整组丢</td></tr>
+          <tr><td>最新一组</td><td><strong>永远保留</strong>；单独就超预算时，组内截断正文、tool 结果换成带落盘路径的 stub（<code>:107-160</code>）</td></tr>
+          <tr><td>预算</td><td><code>contextLength - maxOutputTokens - contextReserveTokens</code>（缺省保留 <strong>1024</strong>）；
+              模型没有配窗口时返回 <code>NO_CONTEXT_WINDOW</code>（<code>PromptAssembler.java:805</code>），
+              <strong>原样下发不裁剪</strong>（<code>:822-823</code>）</td></tr>
+          <tr><td>Token 估算</td><td><strong>不是「字符数 / 4」</strong>：CJK（汉字 / 平假名 / 片假名 / 谚文）按 <strong>1 token</strong>，
+              其余按 <strong>0.25</strong>，按 1/4 单位向上取整；每条消息 <strong>+4</strong>，每个 toolCall <strong>+2</strong>（<code>TokenEstimator.java:14-24, 60-90</code>）</td></tr>
+          <tr><td>超限不重试</td><td>靠「裁剪 + 老化」解决，<strong>不做厂商侧重试</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：为什么「只裁本次请求、历史一条不动」？</span>
+      <p>
+        <code>ContextWindow.java:14-16</code> 给出了答案：<strong>裁剪是可逆的展示优化，会话一条不动。</strong>
+      </p>
+      <p>
+        反过来推演一下如果写回会发生什么：裁剪依据是<strong>这一次的模型配置</strong>（窗口大小、输出上限）。
+        如果你换了模型、或者把 <code>maxOutputTokens</code> 调小了，那么上一次裁剪掉的内容就<strong>永久丢了</strong>——
+        <code>/resume</code> 之后历史里没有，屏幕上也没有，你甚至不知道曾经有过。
+        而「不写回」的代价只是每次组装时多算一遍（有 <code>ToolResultAger</code> 与投影缓存兜着）。
+      </p>
+      <p>
+        <strong>压缩（compaction）也是同一个立场</strong>：<code>/compact</code> <strong>非破坏式</strong>，
+        屏幕、落盘、<code>/resume</code> 之后的历史仍然是全文——它只推进 <code>boundaryMessageId</code>，
+        不删任何消息（配合 <code>SessionCompaction.java:9</code> 与 <code>PromptAssembler</code> 的 <code>toLlmMessages</code> 一起看）。
+        压缩只是「在组装时换一个起点」——<strong>boundary 往前走一格，历史一条不删</strong>。
+      </p>
+    </div>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：孤儿 <code>tool</code> 与悬空 <code>toolCalls</code> 会被 400 拒掉</span>
+      <p>
+        <code>ToolPairing.java:30-40</code> 专门处理这件事。裁剪与取消都可能破坏配对：
+        丢了 <code>assistant(toolCalls)</code> 却留下 <code>tool</code> 结果（孤儿），
+        或者反过来（悬空）。而 OpenAI / Claude 都会<strong>直接 400</strong> 拒绝这种请求。
+      </p>
+      <p>
+        所以组装时有两处补丁：<code>startIndexOf</code> 跳过开头的孤儿 tool 结果（<code>:914</code>），
+        以及 <a href="04-agent-loop.html">04 页</a>里那个「取消/超预算时必须补 <code>appendNotRunResults</code>」。
+        <strong>改裁剪逻辑时，第一件要确认的事就是配对没被破坏。</strong>
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>6. 压缩、老化与缓存保活</h2>
+
+    <h3>自动压缩的触发</h3>
+
+    <div class="src-block">Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/compact/ConversationCompactor.java:290-301</div>
+
+<pre><code class="language-java">public boolean autoCompactIfNeeded(String sessionId, ContextUsage usage) {
+    int percent = reactSettings().getAutoCompactPercent();
+    if (percent &lt;= 0 || (!usage.exceeds(percent) &amp;&amp; !usage.isTruncated())) {
+        return false;
+    }
+    if (!isAvailable()) {
+        warnUnavailable();
+        return false;
+    }
+    // …
+}</code></pre>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>项</th><th>值 / 行为</th></tr></thead>
+        <tbody>
+          <tr><td>阈值</td><td><code>react.autoCompactPercent</code>，缺省 <strong>80</strong>；<code>≤ 0</code> 即关闭</td></tr>
+          <tr><td>第二个触发条件</td><td><strong>本次请求已发生机械裁剪</strong>（<code>usage.isTruncated()</code>）——
+              裁剪都开始了说明真的装不下，该压缩了</td></tr>
+          <tr><td>保留量</td><td><code>keepRecentMessages</code>（策略优先，缺省 <code>react.compactKeepRecentMessages = 20</code>），
+              且 <code>end</code> 会<strong>与工具调用组对齐</strong>（<code>:414</code>）</td></tr>
+          <tr><td>首选路径</td><td><strong>cache-safe fork</strong>：复用父请求的字节前缀 + <code>tool_choice: none</code>
+              （<code>:427</code>、<code>PromptAssembler.buildFork:197</code>），命中缓存前缀；失败才回退全价渲染</td></tr>
+          <tr><td>摘要方式</td><td><strong>滚动摘要</strong>（旧摘要并入新摘要）；超预算时从最旧丢弃，并<strong>如实上报</strong>
+              <code>droppedMessageCount</code></td></tr>
+          <tr><td>摘要长度</td><td><code>compactMaxSummaryChars</code>，缺省 <strong>4000</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：「cache-safe fork」这个优化很值钱</span>
+      <p>
+        压缩本身要发一次 LLM 调用（生成摘要）。如果这次调用的请求内容与正常请求<strong>完全不同</strong>，
+        那它就无法命中 prompt cache，要按<strong>全价</strong>重新读一遍全部历史——而历史通常有几万 token。
+        压缩因此可能<strong>比被压缩的那次对话还贵</strong>。
+      </p>
+      <p>
+        「复用父请求的字节前缀 + <code>tool_choice: none</code>」的做法，让摘要调用与正常调用共享同一个可缓存前缀，
+        于是只按<strong>缓存命中价</strong>读历史。这是一个把「缓存是前缀匹配」这条协议特性用到极致的优化，
+        也是判断一个 agent 实现是否成熟的分界线之一。
+      </p>
+    </div>
+
+    <h3>压缩是插件能力，而且<strong>不回退内置</strong></h3>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>没装压缩插件时</th><th>行为</th></tr></thead>
+        <tbody>
+          <tr><td>自动压缩</td><td><strong>静默让路</strong>，并且只播一次 <code>ConfigWarningEvent</code></td></tr>
+          <tr><td><code>/compact</code></td><td>抛异常，报「没有插件提供压缩策略」（<code>CompactionUnavailableException</code>）</td></tr>
+          <tr><td>健康检查</td><td>降为 <strong>WARN</strong>（<code>CompactionHealthIndicator.java:38-43</code>）</td></tr>
+          <tr><td>有没有内置兜底</td><td><strong>没有</strong>。<code>isAvailable()</code> 为 false 就是功能缺席</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      插件契约是 <code>CompactionStrategy</code>：提供 <code>summaryPrompt</code> 与两个数值参数，
+      <strong>内核只给机制</strong>（<code>CompactionStrategy.java:8-10</code> 的定位、<code>:38</code> 类定义、<code>:49</code> 的 <code>summaryPrompt</code> 字段）。
+      这条设计兑现了「能力全在插件」——代价是「不装插件就没有压缩」。
+    </p>
+
+    <h3>工具结果老化：<code>ToolResultAger</code></h3>
+
+    <ul>
+      <li>它<strong>只把「超限落盘过的信封」换成 stub</strong>，非信封的消息<strong>一个不动</strong>（<code>ToolResultAger.java:30-40</code>）。
+          也就是说：没被截断过的工具输出永远不会被老化。</li>
+      <li>两种口径由 <code>react.cache.agingPercent</code>（缺省 <strong>70</strong>）选：
+          <code>0</code> = 按尾部条数保留最近 <code>keepRecentMessages</code>（缺省 20）；
+          <code>&gt; 0</code> = 按用量水位，且<strong>一个压缩周期内只推进一次</strong>（<code>:123-124</code>）。</li>
+      <li><code>AgingStrategy</code> 扩展点可改 <code>keepRecentMessages</code> / <code>agingPercent</code> /
+          <code>stubText</code> / <code>stubTextsByTool</code> 与占位符
+          （<code>{tool}{chars}{lines}{firstLine}{recovery}</code>），<strong>边界算法不出内核</strong>。</li>
+    </ul>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：<code>agingPercent = 0</code> 不是「关闭老化」</span>
+      <p>
+        <code>0</code> 是<strong>切换口径</strong>——回到「按尾部条数保留最近 N 条」的旧口径。
+        真正的「关闭老化」是 <code>toolOutput.keepRecentMessages = 0</code>（<code>AgingStrategy.java:57, 63, 65</code>）。
+        这两个键名字相近、语义相反，是最容易配错的一对。
+      </p>
+    </div>
+
+    <h3>缓存保活</h3>
+
+    <p>
+      <code>provider.cache.keepAliveSeconds</code>（缺省 <strong>0</strong>，关闭；上限 3600）控制
+      <code>CacheKeepAlive</code>：构造期起<strong>单线程调度</strong>，每 30 秒 <code>tick()</code> 一次，
+      到点发一个「复用父前缀 + 最小输出」的请求把 cache TTL 续上，每空闲期最多 3 次。
+      详细机制与成本分析见 <a href="05-llm-api.html">05 页第 5 节</a>。
+    </p>
+
+    <p>
+      配套的 <code>CacheBreakWatcher</code>（485 行）逐轮比对<strong>三层指纹</strong>：
+      system prompt 散列 / 工具清单散列 / 逐条消息散列（问题清单在 <code>:27</code>，比对实现在 <code>Report.between:351</code>；
+      快照字段 <code>systemPromptHash:168</code> / <code>toolsHash:174</code>）。
+      断裂时只 WARN 一次（持续期降为 DEBUG），并逐轮发 <code>CachePrefixChangedEvent</code>。
+      指纹存 32 位散列、LRU 64 条。
+      <strong>注意：命中率不在这里统计</strong>——由 <code>SessionUsageSnapshot</code> 的累计
+      <code>cacheReadTokens / promptTokens</code> 现算（<code>SessionUsageSnapshot.java:9-12</code>）。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>7. 消息区「只投影最近 500 条」</h2>
+
+    <div class="src-block">Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TranscriptProjector.java:135
+// 常量：DEFAULT_MAX_MESSAGES = 500
+// 注释说明：每帧投影是 O(总行数)，必须有界</div>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>问题</th><th>答案</th></tr></thead>
+        <tbody>
+          <tr><td>为什么是 500</td><td>远大于典型会话的条数，因此<strong>几乎不会真的折叠</strong>；
+              同时给出了一个绝对上界，免去了实现虚拟滚动（可变行高 + 换行计算，复杂度高一个量级）</td></tr>
+          <tr><td>怎么实现</td><td><code>project(...)</code>（<code>:276-291</code>）计算 <code>limit/start</code>；
+              <code>start &gt; 0</code> 时在首行插一条「N 条更早的消息已折叠」</td></tr>
+          <tr><td>会影响发给模型的内容吗</td><td><strong>不会</strong>。它只作用于屏幕投影；
+              发给模型的上下文由 <code>PromptAssembler</code> 从会话原文组装</td></tr>
+          <tr><td>会删消息吗</td><td><strong>不会</strong>。纯展示裁剪；压缩也是非破坏式的</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：屏幕上看不到早期消息 ≠ 上下文里没有</span>
+      <p>
+        这三层「上限」经常被混淆——它们的口径完全不同，排查问题时要分清：
+      </p>
+      <ul>
+        <li><strong>消息区 500 条</strong>：只影响<em>你看得到什么</em>（TUI 投影）。</li>
+        <li><strong>裁剪（<code>ContextWindow</code>）</strong>：影响<em>这一次发给模型什么</em>，不写回会话。</li>
+        <li><strong>老化（<code>ToolResultAger</code>）</strong>：影响<em>这一轮 tool 结果发全文还是 stub</em>，同样不写回。</li>
+        <li><strong>压缩（<code>ConversationCompactor</code>）</strong>：影响<em>后续所有请求从哪条开始</em>，通过推进 boundary 实现，同样不删历史。</li>
+      </ul>
+      <p>
+        所以「我明明看到它在上下文里」和「它其实已经被裁掉了」可以同时为真。判断依据永远是
+        <code>usage</code>（token 使用率）与日志里的裁剪/老化记录，而不是屏幕。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>8. 会话的双源读取与生命周期操作</h2>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>操作</th><th>行为</th><th>位置</th></tr></thead>
+        <tbody>
+          <tr><td><code>restore()</code></td><td>启动期向所有 <code>SessionRestoreRequest</code> 处理器收取快照并导入；
+              已存在的 id 跳过，坏文件只告警</td><td><code>:825-850</code>、<code>importSnapshots:1320-1345</code></td></tr>
+          <tr><td><code>switchTo()</code></td><td>切换当前会话</td><td><code>:665</code></td></tr>
+          <tr><td><code>close()</code></td><td><code>beforeClose</code> 钩子<strong>仅对 <code>USER_REQUEST</code> 可否决</strong>；
+              先 persist 再移出表</td><td><code>:683-720</code></td></tr>
+          <tr><td><code>delete()</code></td><td><strong>插件删除失败则保留内存会话</strong>（不造成「文件在、内存没了」）</td><td><code>:795-812</code></td></tr>
+          <tr><td>CLI 参数</td><td><code>--session &lt;会话&gt;</code>；<strong>Server 模式不支持</strong></td><td><code>StartupOptionsParser.java:57, 101, 271-276</code></td></tr>
+          <tr><td>命令</td><td><code>/new</code>（<code>:180</code>）、<code>/session</code>（别名 <code>/sessions</code>，<code>:182</code>）、
+              <code>/resume</code>（<code>:184</code>）、<code>/delete</code>（<code>:193</code>）；注册入口 <code>register()</code> 在 <code>:171</code></td>
+              <td><code>SystemCommands.java:171-198</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：<code>restore()</code> 必须晚于插件 bootstrap</span>
+      <p>
+        恢复靠的是 <code>SessionRestoreRequest</code> 扩展点——<strong>插件不启动就没人应答</strong>，
+        于是「静默恢复 0 个会话」（<code>:825-830</code>）。这也是 <a href="03-architecture.html">03 页</a>里
+        「插件在 <code>start()</code> 里就会读运行时信息」那条时序约束的同一族的坑：<em>凡是走扩展点的能力，都必须在插件启动之后才可用。</em>
+      </p>
+      <p>
+        另外：<code>ShellIngress</code> <strong>不注入 <code>SessionManager</code></strong>
+        （<code>ShellIngress.java:45, 64</code>），所以插件<strong>无法借投递改会话</strong>——
+        投递通道只是「往外送内容」，不是「往回改状态」。容量 64，满即丢最新（<code>:75</code>）。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>9. 会话分叉（fork）：一个被漏掉的功能</h2>
+
+    <p>
+      「从某条消息分出去，带着之前的历史开一个新会话」——这是 fork，它和压缩一样属于会话语义的一部分，
+      但前面的小节完全没提。签名是 <code>fork(sessionId, messageId, title)</code>（<code>SessionManager.java:339</code>）。
+    </p>
+
+    <div class="mermaid">
+flowchart TD
+  A["fork(source, messageId, title)"] --> B["resolveCutIndex<br/>切点解析 :382"]
+  B --> C{"messageId 为空？"}
+  C -->|"是"| D["取历史末尾"]
+  C -->|"否"| E{"找得到该条？"}
+  E -->|"找不到"| F["抛异常"]
+  E -->|"找到"| G["<strong>按工具调用组向后对齐</strong> :394"]
+  G --> H["beforeFork 钩子 :458<br/>插件可否决"]
+  H --> I["建新 Session：kind=FORKED<br/>parentSessionId / forkPointMessageId :353"]
+  I --> J["copyMessagesWithoutUsage :357<br/><strong>不复制用量</strong>"]
+  J --> K["落盘 + 进会话列表 :329"]
+    </div>
+    <p class="figure-cap">图 8-2　fork 的流程：切点对齐 → 可否决 → 建会话 → 不复制用量 → 落盘</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>要点</th><th>说明</th><th>行号</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>切点按工具组对齐</strong></td>
+            <td><code>while (index + 1 &lt; messages.size() &amp;&amp; isToolResult(messages.get(index + 1)))</code>——
+                若指定的是工具结果，就推到该组末尾</td>
+            <td><code>:394</code>（<code>isToolResult</code> 在 <code>:410</code>）</td>
+          </tr>
+          <tr>
+            <td>切点解析的三种情形</td>
+            <td>空历史 → 抛「没有可复制的历史，无法分支」；<code>messageId == null</code> → 取末尾；找不到 → 抛</td>
+            <td><code>:382-400</code></td>
+          </tr>
+          <tr>
+            <td>新会话的身份</td>
+            <td><code>kind = SessionKind.FORKED</code>、<code>parentSessionId</code> = 源会话、
+                <code>forkPointMessageId</code> = <strong>对齐后</strong>那条消息的 id</td>
+            <td><code>:351-353</code></td>
+          </tr>
+          <tr>
+            <td><strong>不复制用量</strong></td>
+            <td><code>forked.copyMessagesWithoutUsage(copied)</code>——注释理由：
+                「fork 出来的会话要从零开始计费」。测试断言 <code>totalTokens</code> 与 <code>llmCalls</code> 为 0</td>
+            <td><code>:357</code>、<code>Session.java:556-557</code></td>
+          </tr>
+          <tr>
+            <td>压缩边界越界就丢</td>
+            <td>边界不在复制范围内时<strong>丢弃 compaction</strong>（返回 <code>null</code>），否则原样带</td>
+            <td><code>:423-431</code></td>
+          </tr>
+          <tr>
+            <td>插件可否决</td>
+            <td><code>beforeFork</code> 同步逐个 binding 调用；返回 <code>isCancelled()</code> 即抛
+                <code>"会话分支被插件拦下：" + 理由</code>（理由空白补「未提供理由」）</td>
+            <td><code>:346-348</code>、<code>:458-480</code>、<code>:771-773</code></td>
+          </tr>
+          <tr>
+            <td>与普通会话同等</td>
+            <td>类注释：FORKED「<strong>归自己</strong>：它也是用户会话」；落盘、发 <code>SessionCreatedEvent</code>、进 <code>all()</code>
+                （<code>all()</code> 只滤 <code>isEphemeral()</code>）</td>
+            <td><code>:329</code>、<code>:364-366</code>、<code>:858-865</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：切点为什么必须按工具组对齐？</span>
+      <p>
+        因为<strong>孤儿 <code>tool</code> 结果会被厂商 400 拒掉</strong>（第 4 节已讲过 <code>ToolPairing</code>）。
+        如果用户点在某条工具结果上分叉，而切点就落在那条结果上，新会话的历史会以一段「没有对应
+        <code>assistant(toolCalls)</code> 的 tool 结果」开头——<strong>那个会话开出来就是废的</strong>，
+        而且症状会在第一次提问时才出现，看起来像是新会话的 bug。
+      </p>
+      <p>
+        把「用户点哪」翻译成「安全切点」的责任放在 <code>resolveCutIndex</code> 里，
+        意味着<strong>调用方不需要理解工具配对规则</strong>。注释也点明了这个分工：
+        「『往哪边对齐』在 <code>resolveCutIndex</code> 上」（<code>:405</code>）。
+      </p>
+    </div>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：为什么 <code>fork</code> 不复制用量？</span>
+      <p>
+        机械地看，「复制历史」似乎也该「复制成本」。但用量是<strong>计费口径</strong>而不是<strong>内容</strong>：
+        源会话里那些 token 已经花过了，新会话并没有为此再付一次钱。
+        如果复制，<code>/usage</code> 会出现两个会话报同一笔账，而账单只来一次——对账时无法解释。
+      </p>
+      <p>
+        所以方法名直接叫 <code>copyMessagesWithoutUsage</code>：
+        <strong>把「不复制用量」写进方法名</strong>，而不是靠注释提醒。
+        这跟 <a href="05-llm-api.html">05 页</a>「没写 vs 写了 0」用类型状态表达是同一类做法——
+        <strong>让关键约束体现在名字/类型上，而不是文档里</strong>。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>10. token 记账与快照映射</h2>
+
+    <h3>10.1 <code>SessionUsage</code>：六个字段与三个重载</h3>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>字段</th><th>含义</th><th>行号</th></tr></thead>
+        <tbody>
+          <tr><td><code>promptTokens</code></td><td>累计输入（<strong>含缓存命中与建缓存</strong>）</td><td><code>:27</code></td></tr>
+          <tr><td><code>completionTokens</code></td><td>累计输出</td><td><code>:30</code></td></tr>
+          <tr><td><code>totalTokens</code></td><td>累计总量</td><td><code>:33</code></td></tr>
+          <tr><td><code>llmCalls</code></td><td>调用次数（<strong>含未返回用量的调用</strong>）</td><td><code>:36</code></td></tr>
+          <tr><td><code>cacheReadTokens</code></td><td>缓存命中读取</td><td><code>:39</code></td></tr>
+          <tr><td><code>cacheWriteTokens</code></td><td>建缓存写入</td><td><code>:42</code></td></tr>
+          <tr><td><code>EMPTY</code></td><td>全零常量</td><td><code>:24</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>三个 <code>plus</code> 重载的区别是这一块最容易用错的地方：</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>重载</th><th>累加什么</th><th>关键区别</th><th>行号</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>plus(LlmUsage)</code></td>
+            <td>token + <strong>调用次数 +1</strong></td>
+            <td>正常一次模型调用的记法；<code>usage</code> 为 <code>null</code> 时<strong>只把 <code>llmCalls</code> 加一</strong></td>
+            <td><code>:85</code></td>
+          </tr>
+          <tr>
+            <td><code>plusTokens(LlmUsage)</code></td>
+            <td>只累加 token</td>
+            <td><strong>不计调用次数</strong>——用于「花了钱但不是一次用户可见的调用」（如缓存保活）</td>
+            <td><code>:112</code></td>
+          </tr>
+          <tr>
+            <td><code>plus(SessionUsage)</code></td>
+            <td>连 <code>llmCalls</code> 一起累加</td>
+            <td>用于<strong>子代理用量并入父会话</strong></td>
+            <td><code>:135</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      命中率的算法就一句（<code>:209-211</code>），但分母的含义值得记牢：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/session/SessionUsage.java:13, 209-211</div>
+
+<pre><code class="language-java">// 类注释 :13
+//   <b>缓存计数是累计值，命中率由两个累计量现算</b>：getCacheHitRate() 用「累计命中 / 累计输入」
+
+public double getCacheHitRate() {
+    return promptTokens &lt;= 0L ? 0.0d : (double) cacheReadTokens / (double) promptTokens;
+}</code></pre>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：分母是「总输入」而不是「非缓存输入」</span>
+      <p>
+        <code>promptTokens</code> 的注释写明它<strong>含缓存命中与建缓存</strong>（<code>:27</code>）。
+        所以这个指标读作「<strong>输入里有多大比例来自缓存命中</strong>」，而不是
+        「非缓存部分里命中多少」。
+      </p>
+      <p>
+        另外它是<strong>累计值现算</strong>，不是「逐次命中率的平均」。这两种口径在多次调用后差别很大：
+        累计口径会被大请求主导，平均口径会被次数主导。想解释账单看前者，想调 prompt 看后者。
+      </p>
+    </div>
+
+    <h3>10.2 快照映射：为什么必须持锁</h3>
+
+    <p>
+      <code>SessionSnapshots</code>（197 行）负责「内核 <code>Session</code> → api 侧 <code>SessionSnapshot</code>」的映射，
+      反向是 <code>toMessage</code> / <code>toSessionUsage</code> / <code>toCompaction</code>（<code>:88-131</code>）。
+    </p>
+
+    <ul>
+      <li><code>capture(Session)</code> 是<strong>包级可见</strong>（<code>:62</code>），唯一入口是
+          <code>Session.captureSnapshot()</code>，而那个方法是 <code>public synchronized</code>。
+          注释说明了原因（<code>:48-58</code>）：<strong>两次 getter 之间没有绑定</strong>，
+          不在同一把锁里读，就可能读到「消息是旧的、用量是新的」这种现实中不存在的组合。</li>
+      <li><code>Session.betweenSnapshotReads</code>（<code>SessionSnapshots.java:74</code>，定义在 <code>Session.java:387</code>）
+          是<strong>测试接缝</strong>：插在「消息读完、用量未读」之间，专门用来复现上面那个竞态。</li>
+      <li><code>toUsage</code>（<code>:186-193</code>）对五个可空字段用 <code>orZero</code>（<code>:201-203</code>）按 0 计——
+          因为快照类型是给插件用的，让插件去处理 <code>null</code> 没有意义。</li>
+    </ul>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：为什么留一个「测试接缝」在正式代码里？</span>
+      <p>
+        并发 bug 的麻烦在于<strong>无法稳定复现</strong>。留一个可注入的钩子（这里就是那个
+        <code>Runnable</code> 字段），测试就能把线程精确停在危险点上，把「偶尔出错」变成「每次必错」。
+      </p>
+      <p>
+        代价是多了一个生产代码里的字段。判断值不值，看它换来的是什么：
+        <strong>一个可重复的竞态测试</strong>比十次「我本地跑不出来」有价值。
+        这个仓库里还有同类做法（<code>UiCache</code> 的版本号、<code>InflightTurn</code> 的快照），
+        可以当成一种可复用的模式。
+      </p>
+    </div>
+
+    <h3>10.3 压缩在会话里怎么存</h3>
+
+    <p>
+      <code>SessionCompaction</code>（105 行）只有四个字段（<code>:28-37</code>）：
+      <code>summary</code> / <code>boundaryMessageId</code> / <code>createdAt</code> / <code>droppedMessageCount</code>。
+      <code>summary</code> 与 <code>boundaryMessageId</code> 都<strong>不可空白</strong>（<code>:48-58</code>）。
+    </p>
+
+    <p>
+      两条不变量写在类注释里（<code>:9</code>）：<strong>「会话里始终只有一块摘要、边界只能向后移（滚动摘要）」</strong>。
+      这就是第 6 节说的「压缩 = 把 boundary 往前推一格」在数据结构上的体现——
+      <strong>不是往列表里追加摘要，而是替换那一块、并把边界指针往后推</strong>。
+      也因此「边界只能向后」不是约定而是结构事实：只有一个字段存边界，它只会被更大的值覆盖。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>11. 落盘清理：<code>_path</code> 的有效期</h2>
+
+    <p>
+      第 3 节讲了工具输出会落盘，但没讲<strong>什么时候会被删掉</strong>。规则在
+      <code>ToolOutputStore.cleanup</code>（<code>:486, 498</code>）：
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>行为</th><th>细节</th><th>行号</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>排序</td>
+            <td>按 <strong>最后修改时间</strong> 升序（<code>Comparator.comparingLong(ToolOutputStore::lastModified)</code>），
+                <strong>从最旧开始删</strong></td>
+            <td><code>:506</code>、<code>:563</code></td>
+          </tr>
+          <tr>
+            <td>两个上限</td>
+            <td><code>tooMany = keepFiles &gt; 0 &amp;&amp; remaining &gt; keepFiles</code>；
+                <code>tooLarge = maxBytes &gt; 0 &amp;&amp; totalBytes &gt; maxBytes</code>——<strong>任一超限就删</strong></td>
+            <td><code>:516-517</code></td>
+          </tr>
+          <tr>
+            <td><code>0</code> 的语义</td>
+            <td><code>0</code> 表示<strong>不按该项清理</strong>；两项都是 <code>0</code> 则直接返回（<code>keepFiles &lt;= 0 &amp;&amp; maxBytes &lt;= 0</code>）</td>
+            <td><code>:499</code>、<code>:120-121</code>、<code>:495-496</code></td>
+          </tr>
+          <tr>
+            <td>刚写入的那个</td>
+            <td>方法签名里带 <code>Path justWritten</code>——<strong>刚写的文件不会被删掉</strong></td>
+            <td><code>:486</code>、<code>:498</code></td>
+          </tr>
+          <tr>
+            <td>失败处理</td>
+            <td>类注释：「清理是<strong>尽力而为</strong>：……任何一次删除失败都只记 WARN」（<code>:39</code>）；
+                写失败同样只记 WARN、不阻断回合（<code>:32</code>）</td>
+            <td><code>:32, 39</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：<code>_path</code> 只在保留窗口内有效</span>
+      <p>
+        第 3 节那个回灌信封里的 <code>_path</code>，<strong>不是永久地址</strong>。
+        随着会话继续、新的工具输出落盘，旧的会因为 <code>keepFiles = 200</code> 或
+        <code>maxBytes = 50 MiB</code> 被删掉——<strong>而且是静默删除</strong>（失败才 WARN，成功什么都不打）。
+      </p>
+      <p>
+        所以模型对 <code>_path</code> 的回读，实际上有一个<strong>隐含时间窗</strong>。
+        长时间会话里让它「回读十轮之前那份输出」，可能得到「文件不存在」。
+        这也解释了为什么信封里同时带 <code>preview</code>：<strong>在文件还有效时就把关键片段留在上下文里</strong>，
+        不依赖它一直存在。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>12. 本页坑点小结</h2>
+
+    <div class="callout pitfall">
+      <span class="callout-title">会话与上下文的坑</span>
+      <ul>
+        <li><strong>fork 的 <code>messageId</code> 落在工具结果上会被自动向后对齐</strong>——
+            你以为的切点与实际切点不一定是同一条。对齐是必须的（否则新会话开头就是孤儿 tool 结果，直接被 400）。</li>
+        <li><strong>fork 不复制用量</strong>：新会话的 <code>/usage</code> 从零开始，这不是漏记也不是 bug。</li>
+        <li><strong><code>plusTokens</code> 不计调用次数</strong>，而 <code>plus(LlmUsage)</code> 计。
+            用错会让「调用次数」与「实际请求数」不一致（缓存保活就是前者的例子）。</li>
+        <li><strong>命中率的分母是「总输入」（含缓存命中与建缓存）</strong>，不是「非缓存输入」；
+            且它是<strong>累计现算</strong>，不是逐次平均。</li>
+        <li><strong>工具输出的 <code>_path</code> 会被静默清理</strong>：超过 <code>keepFiles = 200</code> 或
+            <code>maxBytes = 50 MiB</code> 就从最旧的开始删，成功删除<strong>不打日志</strong>。
+            长会话里回读旧路径可能扑空——所以信封里同时带 <code>preview</code>。</li>
+        <li><strong>清理的 <code>0</code> 是「不清理」</strong>（<code>ToolOutputStore.java:499, 120-121</code>），
+            不是「删光」。这一条与其他几个「0 语义反转」的坑同类（见 <a href="11-pitfalls.html">11 页</a>速查表）。</li>
+        <li><strong><code>create()</code> 不落盘</strong>：空会话退出即消失，别指望文件存在。</li>
+        <li><strong>回合内只标脏</strong>：<code>Ctrl+C</code> 前必须走 <code>flushAll()</code>，且它要早于 <code>pluginManager.close()</code>。</li>
+        <li><strong><code>flushQuietly</code> 与 <code>persist</code> 失败语义不同</strong>（前者保脏标记只 WARN，后者上抛）。</li>
+        <li><strong>没装持久化插件时 <code>persist</code> 静默返回</strong>并照清脏标记——不报错，只是什么都没存。</li>
+        <li><strong>子代理会话不落盘、不进 <code>all()</code></strong>，但仍在会话表里。</li>
+        <li><strong>工具输出落在主目录</strong>（<code>~/.jellyfish/tool-outputs</code>）而非项目目录；<code>_path</code> 是 <code>~</code> 缩写。</li>
+        <li><strong><code>_partial = true</code></strong> 意味着<strong>文件本身也不完整</strong>，回读拿不到全部。</li>
+        <li><strong>别对可能是 JSON 的输出做 <code>substring</code> 封顶</strong>。</li>
+        <li><strong>system prompt 必须逐字节恒定</strong>，否则整个历史按未命中价重发。</li>
+        <li><strong>摘要必须是 user 角色</strong>并合并连续 user（协议约束，不是风格）。</li>
+        <li><strong><code>agingPercent = 0</code> ≠ 关闭老化</strong>；关闭要写 <code>toolOutput.keepRecentMessages = 0</code>。</li>
+        <li><strong>没有压缩插件时不是「回退内置策略」而是功能缺席</strong>，健康检查只降 WARN。</li>
+        <li><strong>四层上限口径不同</strong>：500 条是屏幕、裁剪/老化是本次请求、压缩是后续边界。都不删历史。</li>
+        <li><strong>孤儿 tool / 悬空 toolCalls 会被厂商 400</strong>；改裁剪逻辑先确认配对。</li>
+      </ul>
+    </div>
+
+    <div class="conclusion">
+      <h2>关键结论</h2>
+      <ol>
+        <li>整页最重要的纪律是：<strong>会话是唯一真源，其他一切都是投影或缓存</strong>。
+            <code>ChatState</code>、裁剪结果、老化 stub、压缩摘要，全部可以从会话重建。</li>
+        <li>「只裁本次请求、不写回」是一个反复出现的设计立场，它同时出现在裁剪、老化、压缩三处。
+            收益是<strong>任何配置变更都不会造成不可逆的信息丢失</strong>。</li>
+        <li>落盘的关键词是「<strong>宁可丢当前回合，不可留半截文件</strong>」：原子写 + 600 权限 + <code>NOFOLLOW_LINKS</code>
+            + 回合内只标脏。</li>
+        <li>工具输出落盘信封是「用一个结构化 JSON 换取上下文空间」的典型做法，而 <code>_hint</code> 里写明回读方式是
+            <strong>让模型自己知道怎么取回细节</strong>——这套文档的 <code>_path</code> 提示与之同源。</li>
+        <li>压缩的「cache-safe fork」说明这一层已经不是「能跑就行」，而是开始按<strong>协议的计费特性</strong>做优化：
+            让摘要调用复用父请求的缓存前缀，否则压缩可能比被压缩的对话还贵。</li>
+      </ol>
+    </div>
+
+    <nav class="pager" aria-label="翻页">
+      <a class="prev" href="07-plugins.html"><span class="pager-dir">上一页</span>07 PF4J 插件化架构</a>
+      <a class="next" href="09-tui.html"><span class="pager-dir">下一页</span>09 终端界面（TamboUI）</a>
+    </nav>
+
+  </main>
+</div>
+
+<footer class="footer">
+  Jellyfish 源码深度解析 · 本页源码依据：<code>SessionManager.java</code>、<code>Session.java</code>、<code>SessionMessage.java</code>、
+  <code>SessionSnapshot.java</code>、<code>ChatState.java</code>、<code>InflightTurn.java</code>、<code>TranscriptProjector.java</code>、
+  <code>ToolOutputEnvelope.java</code>、<code>ToolOutputLimiter.java</code>、<code>SpillCapturingSink.java</code>、
+  <code>PromptAssembler.java</code>、<code>ContextWindow.java</code>、<code>TokenEstimator.java</code>、
+  <code>ConversationCompactor.java</code>、<code>ToolResultAger.java</code>、<code>CacheKeepAlive.java</code>、<code>CacheBreakWatcher.java</code>、
+  <code>SessionUsage.java</code>、<code>SessionSnapshots.java</code>、<code>SessionCompaction.java</code>、<code>ToolOutputStore.java</code>、
+  <code>SessionStore.java</code>（Jellyfish-Plugins）、<code>docs/constraints.md</code>。
+</footer>
+
+<!-- 资源按「本地 vendor 优先、CDN 兜底」引用：文件缺失时 assets/app.js 会自动回退到 CDN -->
+<script src="assets/vendor/highlight.min.js"></script>
+<script src="assets/vendor/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

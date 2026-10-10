@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>02 环境准备与快速上手 · Jellyfish 源码深度解析</title>
+<meta name="description" content="Jellyfish 的构建、插件安装、三种运行模式、五份配置文件与双源合并规则、${VAR} 插值、项目级配置信任闸。">
+<link rel="stylesheet" href="assets/style.css">
+<!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
+</head>
+<body>
+
+<header class="topbar">
+  <button class="nav-toggle" id="navToggle" aria-label="切换导航" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">🐙 Jellyfish 源码深度解析</a>
+  <div class="topbar-tools">
+    <input id="navSearch" type="search" placeholder="搜索页面…" aria-label="搜索页面">
+  </div>
+</header>
+
+<div class="layout">
+
+  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <div class="sidebar-title">文档目录</div>
+    <ul class="nav-list">
+      <li><a href="index.html">首页 · 总览与导航</a></li>
+    </ul>
+    <div class="nav-group">入门</div>
+    <ul class="nav-list">
+      <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
+      <li><a href="02-quickstart.html" aria-current="page">02 环境准备与快速上手</a></li>
+      <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
+    </ul>
+    <div class="nav-group">内核重点</div>
+    <ul class="nav-list">
+      <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
+      <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
+      <li><a href="06-permissions.html">06 权限与审批系统</a></li>
+      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
+      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+    </ul>
+    <div class="nav-group">外壳与实战</div>
+    <ul class="nav-list">
+      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
+      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
+      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+    </ul>
+    <div class="nav-group">拓展</div>
+    <ul class="nav-list">
+      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
+      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
+      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
+      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
+      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+    </ul>
+    <div class="nav-group">子系统</div>
+    <ul class="nav-list">
+      <li><a href="17-commands.html">17 命令系统</a></li>
+      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
+      <li><a href="19-config.html">19 配置体系</a></li>
+      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
+    </ul>
+    <div class="nav-group">插件详解</div>
+    <ul class="nav-list">
+      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
+      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
+      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
+      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
+      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
+      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
+      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <nav class="breadcrumb" aria-label="面包屑">
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>02 环境准备与快速上手</span>
+    </nav>
+
+    <h1>02 环境准备与快速上手</h1>
+    <p class="page-sub">
+      先让它跑起来，再理解它为什么这么跑。这一页同时是「配置体系」的源码导读——因为启动期做的大部分事情，就是把配置文件读成对象图。
+    </p>
+
+    <section class="goals">
+      <h2>学习目标</h2>
+      <ul>
+        <li>能独立完成：构建 → 装插件 → 跑通 <code>-cli</code> / <code>-tui</code> / <code>-server</code> 三种模式；</li>
+        <li>记住五份配置文件各自管什么、放哪里、哪些走双源、哪些不热更新；</li>
+        <li>说清 <code>${VAR}</code> 缺失时为什么是「整份配置加载失败」而不是「局部降级」；</li>
+        <li>理解双源合并里「段声明标记」这个机制，以及它与「段非空」的区别（一个真实修过的 bug）。</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================ -->
+    <h2>1. 环境要求</h2>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>项</th><th>要求</th><th>依据</th></tr></thead>
+        <tbody>
+          <tr><td>JDK</td><td>8（源码与目标版本都是 1.8）；<strong>运行只需 JRE 8+</strong></td><td><code>README.md:27</code>、<code>pom.xml:54-56</code></td></tr>
+          <tr><td>Maven</td><td>3.2.5 以上（构建用）</td><td><code>README.md:28</code></td></tr>
+          <tr><td>终端</td><td><code>-tui</code> 需要可交互终端；<code>-cli</code> / <code>-server</code> 不需要</td><td><code>README.md:29</code></td></tr>
+          <tr><td>模型</td><td>一个 OpenAI 兼容的 API；<strong>没有也能跑命令</strong>（<code>-cli -p "/help"</code>）</td><td><code>README.md:30, 62-70</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">「没有模型也能跑」不是巧合</span>
+      <p>
+        因为命令域（<code>/help</code> <code>/model</code> <code>/session</code> …）走的是
+        <code>CommandManager</code>，完全不经过 LLM。这是 <code>Submission</code> 分流的结果：
+        输入以 <code>/</code> 开头走命令，否则才起一个 ReAct 回合（<code>README.md:159</code>）。
+        这个分流点也是「先订阅再提交」等时序约束的所在地，详见 <a href="04-agent-loop.html">04 页</a>。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>2. 构建</h2>
+
+    <div class="src-block">Jellyfish/README.md:32-57</div>
+
+<pre><code class="language-bash"># 全量构建 + 单测
+mvn -o clean package              # -DskipTests 可跳测
+
+# 开发向的常用命令
+mvn -q compile                     # 只编译
+mvn -q package -DskipTests         # 只打包
+mvn -q test                        # 全量单测（JUnit5 + Mockito + JaCoCo）
+mvn -q -Dtest=ChatStateTest test   # 单类单测
+mvn -q -Pserver-it test            # Server 模式端到端（真 Undertow + 真内核，本机回环）</code></pre>
+
+    <p>
+      产物是<strong>一个可执行 fat jar</strong>，三种模式都用它启动：
+      <code>jellyfish-cli/target/jellyfish-cli-0.1.1.jar</code>。
+      shade 配置在 <code>jellyfish-cli/pom.xml:104-108</code>，主类是
+      <code>zcd.jellyfish.cli.JellyfishApplication</code>。
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-cli/pom.xml:105
+Jellyfish/pom.xml:281-296   ← JaCoCo 挂 prepare-agent + report
+Jellyfish/jellyfish-cli/pom.xml:133-158  ← server-it profile（<code>&lt;id&gt;server-it&lt;/id&gt;</code> 在 :142，surefire 的 include 在 :149）</div>
+
+    <p>嫌路径长就设个别名：</p>
+
+<pre><code class="language-bash">alias jellyfish='java -jar /绝对路径/jellyfish-cli/target/jellyfish-cli-0.1.1.jar'</code></pre>
+
+    <!-- ============================================================ -->
+    <h2>3. 装官方插件</h2>
+
+    <p>
+      官方插件在独立仓库 <code>Jellyfish-Plugins</code>。因为插件是独立打包的 PF4J jar，
+      装插件 = <strong>把 jar 放进扫描目录 + 重启进程</strong>。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins → cpPlugins.sh:1-13（把 13 个插件 jar 拷到 ~/.jellyfish/plugins）</div>
+
+<pre><code class="language-bash">cd Jellyfish-Plugins && mvn -q package -DskipTests
+cd .. && ./cpPlugins.sh
+# 脚本同时把 python 脚本部署到 ~/.jellyfish/scripts/python/
+
+mkdir -p ~/.jellyfish/plugins
+# 手动装：把插件 jar 放进这个目录，然后【重新启动】jellyfish</code></pre>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>插件</th><th>提供什么</th></tr></thead>
+        <tbody>
+          <tr><td><code>jellyfish-plugin-tools</code></td><td>基础文件工具（读、写、grep、列目录等）</td></tr>
+          <tr><td><code>jellyfish-plugin-shell</code></td><td>shell 工具 + <code>!命令</code> 输入指令</td></tr>
+          <tr><td><code>jellyfish-plugin-session-file</code></td><td>会话持久化（<code>SessionStore</code>，落 <code>~/.jellyfish/sessions</code>）</td></tr>
+          <tr><td><code>jellyfish-plugin-compact</code></td><td>压缩策略（<code>/compact</code> 与自动压缩的前提）</td></tr>
+          <tr><td><code>jellyfish-plugin-plan</code></td><td>plan 模式（含按模式收窄的 <code>readOnlyTools</code>）</td></tr>
+          <tr><td><code>jellyfish-plugin-workflow</code></td><td>编排（并行/依赖步骤）</td></tr>
+          <tr><td><code>jellyfish-plugin-mcp</code></td><td>MCP 客户端（工具名形如 <code>mcp__&lt;server&gt;__&lt;tool&gt;</code>）</td></tr>
+          <tr><td><code>jellyfish-plugin-python</code> / <code>-node</code> / <code>-project</code> / <code>-resmon</code> / <code>-skills</code> / <code>-todo</code></td><td>Python / Node 脚本运行时、项目信息、资源监控、skills、待办</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点</span>
+      <p>
+        <strong>新增 / 删除插件 jar 只在启动期确定，<code>/reload</code> 不会加载新 jar。</strong>
+        <code>PF4JPluginManager.java:120</code> 明确写着「不做 jar 热部署」。
+        <code>/reload</code> 只处理「插件已加载、配置段变了」以及启用/禁用名单变化这两件事
+        （详见 <a href="07-plugins.html">07 页</a>）。换了 jar 必须重启进程。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>4. 三种模式跑起来</h2>
+
+<pre><code class="language-bash"># 不带参数 = 交互界面（-tui）
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar
+
+# 单次问答
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli -p "总结一下这个项目"
+
+# 显式交互
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -tui
+
+# HTTP 服务
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -server 9096</code></pre>
+
+    <h3>输出契约：stdout 与 stderr 分工</h3>
+
+    <p>
+      README（<code>README.md:140-158</code>）把它作为机器契约写死了：
+      <strong>回答与命令结果走 stdout，诊断、工具进度与日志走 stderr</strong>。因此这样是安全的：
+    </p>
+
+<pre><code class="language-bash">java -jar jellyfish-cli-0.1.1.jar -cli -p "总结这个项目" &gt; answer.txt 2&gt; diag.txt
+echo "/help" | java -jar jellyfish-cli-0.1.1.jar -cli</code></pre>
+
+    <h3>退出码</h3>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>码</th><th>含义</th><th>归类依据</th></tr></thead>
+        <tbody>
+          <tr><td><code>0</code></td><td>成功（含「未知命令」这类用户输入错误）</td><td>—</td></tr>
+          <tr><td><code>2</code></td><td>用法错误：参数缺失 / 未知 / 冲突，或没有输入</td><td>解析阶段 <code>StartupOptionsParser.build()</code></td></tr>
+          <tr><td><code>3</code></td><td>启动失败：配置、插件或装配出错；TUI 需要可交互终端而没有</td><td><code>bootstrap</code> 期间任何运行时异常</td></tr>
+          <tr><td><code>4</code></td><td>运行失败：回合抛异常，或命令执行失败</td><td>内核起来之后的运行期故障</td></tr>
+          <tr><td><code>6</code></td><td>回合未收敛：达到最大轮次仍未给出最终回复</td><td><code>ReActResult.truncated</code></td></tr>
+          <tr><td><code>7</code></td><td>回合被插件拦下：一句都没发给模型（stdout 保持为空）</td><td><code>ReActResult.blocked</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据</span>
+      <p>
+        <strong>「归类看的是失败发生在哪一步，不是异常属于哪个类」</strong>（<code>README.md:161-162</code>）：
+        <code>bootstrap</code> 期间的任何运行时异常都算启动失败退 3，内核起来之后一律退 4——<strong>哪怕它不是 <code>JellyfishException</code></strong>。
+        这条规则的价值在于：脚本里 <code>if [ $? -eq 3 ]</code> 就意味着「环境没配好，别重试」，
+        <code>-eq 4</code> 才意味着「这次执行出问题了，可以重试」。如果按异常类型归类，这个判断就没法做。
+      </p>
+      <p>
+        常量定义在 <code>jellyfish-cli/src/main/java/zcd/jellyfish/cli/ExitCodes.java:17-41</code>。注意有两个不同的失败都返回 3（启动失败 / TUI 不可用），
+        所以脚本里区分它们要看 stderr 文本。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>5. 配置体系：五份文件</h2>
+
+    <div class="mermaid">
+flowchart TD
+  CJ["config.json<br/>（classpath 根，内核 jar 里）"] -->|"声明文件位置"| P1["~/.jellyfish/models.json<br/>全局级"]
+  CJ -->|"声明文件位置"| P2["./.jellyfish/models.json<br/>项目级"]
+  CJ -->|"声明扫描目录"| ROOTS["plugins.roots<br/>（不参与双源合并）"]
+
+  P2 --> GATE{"ProjectConfigTrust<br/>路径 + SHA-256 指纹<br/>已授予？"}
+  GATE -->|"未授予"| SKIP["跳过该文件<br/>+ 发一条告警"]
+  GATE -->|"已授予"| OK["读入"]
+
+  P1 --> MERGE{"合并器"}
+  OK --> MERGE
+  SKIP --> MERGE
+  MERGE --> OUT["ModelSettings / AgentSettings /<br/>JellyfishSettings"]
+
+  ENV["环境变量"] -. "VAR 插值（只作用于字符串值）" .-> BIND
+  OUT --> BIND["SettingsBinder<br/>绑定 + 校验"]
+  BIND --> GUARD["SettingsGuard<br/>区间校验，非法即回退缺省"]
+  GUARD --> OBJ["配置对象 → 注入内核"]
+    </div>
+    <p class="figure-cap">图 2-1　配置装载：两处间接寻址 + 一道信任闸 + 一次插值 + 一次区间校验</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>文件</th><th>配置类</th><th>内容</th><th>寻找位置（缺省）</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>config.json</code></td><td><code>AppConfig</code></td>
+            <td>进程名 + 各配置文件路径 + 插件扫描目录</td>
+            <td><strong>classpath 根</strong>，<strong>不参与双源、不热更新</strong></td>
+          </tr>
+          <tr>
+            <td><code>models.json</code></td><td><code>ModelSettings</code></td>
+            <td><code>defaultProvider</code> / <code>defaultModel</code> / <code>providers</code></td>
+            <td><code>~/.jellyfish/</code> → <code>./.jellyfish/</code>（项目级优先，<strong>需信任</strong>）</td>
+          </tr>
+          <tr>
+            <td><code>agents.json</code></td><td><code>AgentSettings</code></td>
+            <td>用户自定义 agent（权限、提示词文件名等）</td>
+            <td>同上</td>
+          </tr>
+          <tr>
+            <td><code>jellyfish.json</code></td><td><code>JellyfishSettings</code></td>
+            <td>插件名单与逐插件配置段、<code>react</code> / <code>permission</code> / <code>subAgent</code> / <code>ask</code></td>
+            <td>同上</td>
+          </tr>
+          <tr>
+            <td><code>default-agent.json</code></td><td><code>AgentDefinition</code></td>
+            <td>内置系统默认 agent</td>
+            <td>classpath 根，<strong>不走双源、用户改不了</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>而 <code>config.json</code> 里只有这几个键（<code>jellyfish-cli/src/main/resources/config.json</code>，共 18 行）：</p>
+
+    <div class="src-block">Jellyfish/jellyfish-cli/src/main/resources/config.json</div>
+
+<pre><code class="language-json">{
+  "processName": "Jellyfish",
+  "model": {
+    "globalPath": "~/.jellyfish/models.json",
+    "projectPath": "./.jellyfish/models.json"
+  },
+  "agent": {
+    "globalPath": "~/.jellyfish/agents.json",
+    "projectPath": "./.jellyfish/agents.json"
+  },
+  "jellyfish": {
+    "globalPath": "~/.jellyfish/jellyfish.json",
+    "projectPath": "./.jellyfish/jellyfish.json"
+  },
+  "plugins": {
+    "roots": ["~/.jellyfish/plugins/"]
+  }
+}</code></pre>
+
+    <p>
+      注意这里是<strong>间接寻址</strong>：<code>config.json</code> 不写任何配置内容，只写「别的配置在哪」。
+      所以「改配置」永远是改另外三份文件，而 <code>config.json</code> 只在你想挪位置时才动。
+    </p>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据</span>
+      <p>
+        <strong>为什么 <code>config.json</code> 要放在 classpath 根、不参与双源？</strong>
+        因为它决定了「去哪找项目级配置」。如果它本身也能被项目级覆盖，
+        那么一个 <code>git clone</code> 下来的目录就能通过「改写 <code>projectPath</code> 指向别处」
+        来绕过信任闸——闸门本身的钥匙不能挂在闸门上。同理 <code>plugins.roots</code> 也写在
+        <code>config.json</code> 里，并且<strong>不参与双源合并</strong>（<code>RuntimeConfig.java:686-701</code>），
+        只有行首 <code>~</code> 展开。否则被克隆的仓库就能指向一个恶意插件目录。
+      </p>
+      <p>
+        另一个实际收益：<code>config.json</code> 在内核 jar 里，
+        <code>Jellyfish-Spring-Boot-Starter</code> 这类嵌入形态可以自带一份而无需外部文件系统权限。
+      </p>
+    </div>
+
+    <h3>双源合并规则（细节最多的一块）</h3>
+
+    <ul>
+      <li><strong>同名 provider / agent / 插件配置段：项目级<em>整对象</em>覆盖全局级</strong>，不是逐字段合并。
+          想加一个模型就在项目级把整个 provider 写全。</li>
+      <li><strong><code>react</code> / <code>permission</code> / <code>subAgent</code> / <code>ask</code> 段：「写了才覆盖」</strong>，
+          靠<strong>「段声明标记」</strong>判断，而不是「段非空」（<code>JellyfishSettings.java:46-58</code> 的字段、<code>:84-85</code> 的赋值、
+          <code>:173-217</code> 的 <code>isXxxDeclared()</code>；字段与赋值在 <code>:46-58</code>、<code>:84-85</code>）。</li>
+      <li><strong>名单类字段（如 <code>enabled</code>/<code>disabled</code>）空数组 <code>[]</code> = 显式清空</strong>，
+          不是「未配置」（<code>RuntimeConfig.java:663-683</code>）。</li>
+      <li><strong><code>plugins.roots</code> 不合并</strong>（<code>RuntimeConfig.java:686-700</code>）。</li>
+    </ul>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点</span>
+      <p>
+        <strong>「段声明标记」这条是 0.1.1 修过的真实 bug。</strong>
+        旧实现的合并层写成 <code>project != null ? project : global</code>，语义上看起来对，
+        但因为 <code>project</code> 是「读到的对象」而不是「这一段有没有被声明」，它<strong>永远走左支</strong>——
+        于是你在项目级只改了别的段，全局级配的 <code>ask.timeoutSeconds = 0</code> 会悄悄回退到缺省的 120。
+        现在改成了按段声明标记判断（<code>RuntimeConfig.java:510-524</code>，判据是 <code>isXxxDeclared()</code>）。
+        这就是「用段非空当判据」会踩的坑：一个没有字段的段看起来是空的，但它<em>被声明了</em>。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>6. 环境变量插值 <code>${VAR}</code></h2>
+
+    <p>
+      密钥不写进配置文件，而是用 <code>${VAR}</code> 引用环境变量。支持三种写法
+      （<code>infra/config/SettingsBinder.java:20-36</code> 的类注释里列了三种写法）：
+    </p>
+
+    <ul>
+      <li><code>${VAR}</code> —— <strong>必需</strong>，缺失即抛异常；</li>
+      <li><code>${VAR:-默认值}</code> —— 可选，缺失时用默认值；</li>
+      <li><code>\${VAR}</code> —— 转义，保留字面量。</li>
+    </ul>
+
+    <p>插值<strong>只作用于字符串值，不动 JSON 的 key</strong>。核心实现在 <code>resolve()</code>：</p>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/SettingsBinder.java:160-173</div>
+
+<pre><code class="language-java">private String resolve(String expression, String source) {
+    int separatorIndex = expression.indexOf(DEFAULT_SEPARATOR);
+    boolean optional = separatorIndex &gt;= 0;
+    String name = optional ? expression.substring(0, separatorIndex) : expression;
+    String value = envProvider.apply(name);
+    if (value != null) {
+        return value;
+    }
+    if (optional) {
+        return expression.substring(separatorIndex + DEFAULT_SEPARATOR.length());
+    }
+    throw new JellyfishException("environment variable is not set: " + name
+            + (StringUtils.isBlank(source) ? "" : ", source: " + source));
+}</code></pre>
+
+    <p>逐行解释：</p>
+    <ul>
+      <li>先找 <code>:-</code>，决定这次是「必需」还是「可选」；</li>
+      <li><code>envProvider.apply(name)</code> 是一个函数式接口——这样测试里可以注入假的环境变量，
+          不必真去改进程环境（<code>SettingsBinder</code> 的构造函数注入点）；</li>
+      <li>环境变量<strong>存在但为空串</strong>时走的是「存在」分支（返回空串），<strong>不会</strong>用默认值。
+          这与 shell 的 <code>${VAR:-x}</code> 语义一致；</li>
+      <li>必需变量缺失 → <code>JellyfishException</code>，异常文本里带上 <code>source</code>（哪个文件），
+          因为同一个变量名可能在多份配置里出现。</li>
+    </ul>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点</span>
+      <p>
+        <strong>缺失的 <code>${VAR}</code> 会让<em>整份配置文件</em>加载失败，不是局部降级。</strong>
+        异常从 <code>resolve</code> 经 <code>ConfigLoader.read</code>（<code>ConfigLoader.java:40-51</code>）一路向上抛，
+        最终在启动期失败退 <strong>3</strong>。所以现象是「进程起不来，报 <code>environment variable is not set</code>」，
+        而不是「那一个 provider 不能用了」。
+      </p>
+      <p>
+        这是刻意选的失败模式：配置错误如果降级成「部分生效」，最坏的结果是某个字段悄悄用着缺省值在跑，
+        而你完全不知道。表现为「配了但没生效」的 bug 比「起不来」难查得多。
+        想避免就在写配置时一律用 <code>${VAR:-默认值}</code>。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>7. 未知字段与数值校验</h2>
+
+    <p>
+      这里有两种<strong>方向相反</strong>的宽容策略，别搞混：
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>情形</th><th>行为</th><th>机制与位置</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>JSON 里有内核不认识的<strong>字段</strong></td>
+            <td><strong>静默忽略</strong>，但事后发一条配置告警</td>
+            <td>绑定层关闭 <code>FAIL_ON_UNKNOWN_PROPERTIES</code>（<code>ObjectMapperWrapper.java:43</code>），
+                读取层把「绑不上的字段名」回调出来（<code>ConfigLoader.java:71-84</code>），
+                <code>RuntimeConfig.read</code> 对每个未知字段发 <code>ConfigWarningEvent</code>（<code>RuntimeConfig.java:415-419</code>）</td>
+          </tr>
+          <tr>
+            <td>字段名认识但<strong>数值越界</strong></td>
+            <td>回退缺省值 + 收集告警</td>
+            <td><code>SettingsGuard</code> 只做区间把关：<code>positiveOrDefault</code> / <code>nonNegativeOrDefault</code> / <code>percentOrDefault</code>（&gt;100 按 100）</td>
+          </tr>
+          <tr>
+            <td><code>${VAR}</code> 缺失</td>
+            <td><strong>整份失败</strong></td>
+            <td>见上一节</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      <code>SettingsGuard</code>（<code>SettingsGuard.java:36-112</code>）有个值得注意的细节：
+      <strong><code>null</code> 表示「没配」，不告警也不校验</strong>——只有「配了但非法」才回退并告警。
+      这保持了「没写 ≠ 写了 0」这条贯穿全项目的语义（在采样参数上它更关键，见 <a href="05-llm-api.html">05 页</a>）。
+    </p>
+
+    <p>
+      还有一点容易误解：<strong><code>SettingsGuard</code> 没有「必填字段」校验</strong>。
+      必需性由两处承担——环境变量插值（缺失即抛），以及各个 <code>Settings</code> 构造器自己的 warnings
+      （例如 <code>PermissionApprovalSettings.java:113-124</code>）。
+    </p>
+
+    <p>告警最终怎么让人看到？由 <code>ConfigWarningReporter</code> 订阅事件后打一行 WARN 日志：</p>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ConfigWarningReporter.java:36-46, 96-113
+Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/AgentHarness.java:193-205  ← bootstrap() 里于 refresh() 之前 start</div>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点</span>
+      <p>
+        告警默认走日志，而日志默认级别是 <strong>WARN 且只写 stderr</strong>
+        （<code>log4j2.xml:12-16</code>，级别是 <code>${sys:jellyfish.log.level:-WARN}</code>）。
+        所以「字段名拼错，配了不生效」这种现象是<strong>真的没有任何界面提示</strong>的——
+        它只在 stderr 上有一行。排查这类问题第一件事是 <code>--verbose</code> 或看 stderr。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>8. 关键代码：双源加载的骨架</h2>
+
+    <p>
+      <code>RuntimeConfig.load()</code> 是整个配置体系的中心。它同时处理了「同一份文件只读一次」和「项目级先过信任闸」：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/RuntimeConfig.java:216-233</div>
+
+<pre><code class="language-java">&lt;T&gt; T load(ConfigPaths paths, Class&lt;T&gt; type, BinaryOperator&lt;T&gt; merger) {
+    String globalPath = paths == null ? null : paths.getGlobalPath();
+    String projectPath = paths == null ? null : paths.getProjectPath();
+    T global = read(globalPath, type);
+    T project;
+    if (isSamePath(globalPath, projectPath)) {
+        project = null;              // 同一份文件只读一次
+    } else {
+        project = readTrustedProject(projectPath, type);   // 先过信任闸
+    }
+    T merged = merger.apply(global, project);
+    if (merged == null) {
+        throw new JellyfishException("config merger returned null for type: " + type.getName());
+    }
+    return merged;
+}</code></pre>
+
+    <ul>
+      <li><code>isSamePath</code> 这一步不能省：用户完全可以把 <code>globalPath</code> 和 <code>projectPath</code> 配成同一个文件，
+          那时按「读两次 + 合并」会得到重复的名单项。</li>
+      <li><code>merged == null</code> 时抛异常而不是返回 <code>null</code>：<code>null</code> 会一路传到注入点，
+          变成某个字段的 NPE，而那时的堆栈跟配置毫无关系。在这里炸掉，堆栈直接指向「哪个类型的合并器有问题」。</li>
+      <li>注意 <code>load</code> 是包级可见的（不是 <code>public</code>）——外部只能用具体的 <code>refresh()</code> 等入口，
+          避免有人绕过配置类型直接读文件。</li>
+    </ul>
+
+    <h3>信任闸的两个状态与三条授予途径</h3>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>状态</th><th>行为</th></tr></thead>
+        <tbody>
+          <tr><td><code>UNTRUSTED</code></td><td>跳过该文件 + 发一条告警（提示解锁方式），<strong>但不失败</strong></td></tr>
+          <tr><td><code>ABSENT</code></td><td>文件不存在，不是错误，<strong>不告警</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>授予信任的三条途径（<code>ProjectConfigTrust.java</code>）：</p>
+
+    <ul>
+      <li><code>trustEverythingInThisRun()</code> —— 对应 <code>--trust-project-config</code>，<strong>仅本次进程有效、不落盘</strong>；</li>
+      <li><code>trustForSession()</code> —— 只在当前会话内存里生效；</li>
+      <li><code>grant()</code> —— 写入 <code>~/.jellyfish/trusted-project-configs.json</code>（持久，TUI 确认框会问你要不要记住）。</li>
+    </ul>
+
+    <p>
+      信任的记录键是「<strong>文件绝对路径 + SHA-256 内容指纹</strong>」（<code>ProjectConfigTrust.java:46</code> 的注释、
+      <code>:82</code> 的字段、<code>:171-178</code> 的 <code>grant()</code>），
+      内容一变即失效。<code>classpath:</code> 开头的路径不受此闸管辖（<code>ProjectConfigTrust.java:118-122</code>）。
+      CLI / TUI 的入口在 <code>ProjectConfigTrustConsent.java:113-147</code>。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>9. 本页坑点小结</h2>
+
+    <div class="callout pitfall">
+      <span class="callout-title">启动期最容易踩的六个坑</span>
+      <ul>
+        <li><strong>项目级配置默认不加载</strong>：写了 <code>./.jellyfish/*.json</code> 却发现不生效——先确认是否信任（<a href="01-overview.html">01 页</a>有完整解释）。</li>
+        <li><strong>未知字段静默忽略</strong>：键名拼错没有任何界面提示，只有 stderr 一行 WARN。</li>
+        <li><strong><code>${VAR}</code> 缺失 → 整份配置加载失败退 3</strong>：不是局部降级。</li>
+        <li><strong>插件 jar 变更必须重启</strong>：<code>/reload</code> 不加载新 jar。</li>
+        <li><strong>装了新插件后插件不启动</strong>：插件自带 <code>jellyfish-api</code> 或 <code>pf4j</code> 会导致类加载冲突，
+            而护栏<strong>只记 loadError 不抛异常</strong>（<code>PluginClasspathGuard.java:47-60</code>），
+            表现是「静默不启动」，必须看 WARN。详见 <a href="07-plugins.html">07 页</a>。</li>
+        <li><strong>「配置写对了但仍按缺省值跑」的另一个来源</strong>：某些组件在 <code>RuntimeConfig.refresh()</code> <em>之前</em>就被构造了
+            （<code>RunScheduler</code> 曾有此问题，见 CHANGELOG 的 Unreleased/0.1.1 Fixed）。这类参数改完要重启，不要指望 <code>/reload</code>。</li>
+      </ul>
+    </div>
+
+    <div class="conclusion">
+      <h2>关键结论</h2>
+      <ol>
+        <li>Jellyfish 的配置是<strong>两级间接</strong>：<code>config.json</code> 只说文件在哪，另三份才装内容。因此 <code>config.json</code> 天然属于「用户不该随便改」的一层。</li>
+        <li>双源合并有三种不同的粒度——段级（声明标记）、对象级（整对象覆盖）、列表级（空数组即清空）。混淆它们是最容易配错也最难查的地方。</li>
+        <li>配置错误一律选择<strong>「要么立刻可见、要么不生效」</strong>：<code>${VAR}</code> 缺失直接炸，未知字段发告警，非法数值回退。没有「悄悄用了别的东西」的第三种结果。</li>
+        <li>构建与运行门槛很低（JRE 8+、一个 fat jar），但<strong>能力门槛不低</strong>：不装插件的话，跑起来只能执行系统命令。</li>
+      </ol>
+    </div>
+
+    <nav class="pager" aria-label="翻页">
+      <a class="prev" href="01-overview.html"><span class="pager-dir">上一页</span>01 项目概览与设计哲学</a>
+      <a class="next" href="03-architecture.html"><span class="pager-dir">下一页</span>03 整体架构与三外壳装配</a>
+    </nav>
+
+  </main>
+</div>
+
+<footer class="footer">
+  Jellyfish 源码深度解析 · 本页源码依据：<code>README.md</code>、<code>pom.xml</code>、<code>config.json</code>、
+  <code>SettingsBinder.java</code>、<code>ConfigLoader.java</code>、<code>RuntimeConfig.java</code>、
+  <code>ProjectConfigTrust.java</code>、<code>ConfigWarningReporter.java</code>、<code>cpPlugins.sh</code>。
+</footer>
+
+<!-- 资源按「本地 vendor 优先、CDN 兜底」引用：文件缺失时 assets/app.js 会自动回退到 CDN -->
+<script src="assets/vendor/highlight.min.js"></script>
+<script src="assets/vendor/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

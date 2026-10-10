@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>05 多厂商 LLM API 抽象层 · Jellyfish 源码深度解析</title>
+<meta name="description" content="Jellyfish 如何用一套接口适配 OpenAI / Claude / Gemini / DeepSeek / MiniMax：类层次、type 路由、vendorBody 透传、采样语义、prompt cache 断点、思考文本与流式工具分片。">
+<link rel="stylesheet" href="assets/style.css">
+<!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
+</head>
+<body>
+
+<header class="topbar">
+  <button class="nav-toggle" id="navToggle" aria-label="切换导航" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">🐙 Jellyfish 源码深度解析</a>
+  <div class="topbar-tools">
+    <input id="navSearch" type="search" placeholder="搜索页面…" aria-label="搜索页面">
+  </div>
+</header>
+
+<div class="layout">
+
+  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <div class="sidebar-title">文档目录</div>
+    <ul class="nav-list">
+      <li><a href="index.html">首页 · 总览与导航</a></li>
+    </ul>
+    <div class="nav-group">入门</div>
+    <ul class="nav-list">
+      <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
+      <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
+      <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
+    </ul>
+    <div class="nav-group">内核重点</div>
+    <ul class="nav-list">
+      <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
+      <li><a href="05-llm-api.html" aria-current="page">05 多厂商 LLM API 抽象层</a></li>
+      <li><a href="06-permissions.html">06 权限与审批系统</a></li>
+      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
+      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+    </ul>
+    <div class="nav-group">外壳与实战</div>
+    <ul class="nav-list">
+      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
+      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
+      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+    </ul>
+    <div class="nav-group">拓展</div>
+    <ul class="nav-list">
+      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
+      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
+      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
+      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
+      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+    </ul>
+    <div class="nav-group">子系统</div>
+    <ul class="nav-list">
+      <li><a href="17-commands.html">17 命令系统</a></li>
+      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
+      <li><a href="19-config.html">19 配置体系</a></li>
+      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
+    </ul>
+    <div class="nav-group">插件详解</div>
+    <ul class="nav-list">
+      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
+      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
+      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
+      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
+      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
+      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
+      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <nav class="breadcrumb" aria-label="面包屑">
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>05 多厂商 LLM API 抽象层</span>
+    </nav>
+
+    <h1>05 多厂商 LLM API 抽象层 <span class="tag focus">重点</span></h1>
+    <p class="page-sub">
+      这一层的设计目标可以一句话概括：<strong>让内核只认识一种请求形状，同时让用户能用到厂商的私有能力。</strong>
+      两件事是矛盾的，看它怎么调和。
+    </p>
+
+    <section class="goals">
+      <h2>学习目标</h2>
+      <ul>
+        <li>画出 <code>LlmClient</code> 的继承树，并说出每个子类覆写了什么；</li>
+        <li>理解 <code>type</code> 与传输实现的关系，以及「内置优先、插件兜底」的路由顺序；</li>
+        <li>说清 <code>vendorBody</code> / <code>vendorHeaders</code> 的来源、合并方向与保留键保护；</li>
+        <li>解释「没写 vs 写了 0」在类型系统上是怎么表达的，以及为什么这很重要；</li>
+        <li>说清「这一轮用哪个模型」的三级回落，以及子代理为什么不继承父会话的模型；</li>
+        <li>知道 <code>LlmUsage</code> 只对齐五个口径，<strong>思考 token 不在其中</strong>；</li>
+        <li>知道 prompt cache 的两个断点分别打在哪里、<code>keepAliveSeconds</code> 在做什么；</li>
+        <li>说清流式侧工具调用分片的累积算法。</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================ -->
+    <h2>1. 类层次：三层抽象，各管一件事</h2>
+
+    <div class="mermaid">
+flowchart TD
+  C["LlmClient（接口，60 行）<br/>中性方法的唯一出口"]
+  A["AbstractHttpLlmClient（590 行）<br/>HTTP / SSE 读流 / 超时 / 异常映射"]
+  O["AbstractOpenAiCompatibleLlmClient（461 行）<br/>chat/completions 形状"]
+  N1["OpenAiLlmClient（78 行）"]
+  N2["DeepSeekLlmClient（38 行）"]
+  N3["MiniMaxLlmClient（41 行）"]
+  CL["ClaudeLlmClient（857 行）<br/>/v1/messages 形状 + cache_control"]
+  GE["GeminiLlmClient（593 行）<br/>generateContent / streamGenerateContent"]
+  PA["PluginLlmClientAdapter（538 行）<br/>把插件的 LlmTransport 适配进来"]
+
+  C --> A
+  A --> O
+  A --> CL
+  A --> GE
+  C --> PA
+  O --> N1
+  O --> N2
+  O --> N3
+    </div>
+    <p class="figure-cap">图 5-1　继承树：抽象层级越低，「厂商特有」的东西越多</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>层</th><th>职责</th><th>子类覆写点</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>AbstractHttpLlmClient</code></td>
+            <td>真正通用的部分：拼 URL、加鉴权头、发请求、<strong>逐行读 SSE</strong>、空闲超时、非 2xx → <code>LlmHttpException</code></td>
+            <td>抽象方法：端点 URL、鉴权头、请求体、流式解码器（<code>StreamDecoder</code>）</td>
+          </tr>
+          <tr>
+            <td><code>AbstractOpenAiCompatibleLlmClient</code></td>
+            <td><code>{model, messages[], tools[], temperature…}</code> 这种形状的所有处理；
+                把 <code>assistant(toolCalls)</code> 直译成 <code>tool_calls</code></td>
+            <td><strong>两个</strong>厂商子类（DeepSeek 38 行 / MiniMax 41 行）几乎只覆写 <code>defaultBaseUrl()</code> 与默认地址常量；
+                <strong>但 <code>OpenAiLlmClient</code> 不是</strong>——它额外实现了 <code>embedding()</code>（<code>:56</code>，
+                用 <code>DEFAULT_EMBEDDING_MODEL = "text-embedding-3-large"</code> <code>:25</code>）</td>
+          </tr>
+          <tr>
+            <td><code>ClaudeLlmClient</code></td>
+            <td>Anthropic Messages 形状：顶层 <code>system</code>、<code>assistant→tool_use</code>、<code>tool→user(tool_result)</code>、
+                <strong><code>cache_control</code> 断点</strong>、<code>thinking</code> 块</td>
+            <td>体量最大（857 行），因为角色映射与缓存标注都在这</td>
+          </tr>
+          <tr>
+            <td><code>GeminiLlmClient</code></td>
+            <td><code>contents</code> / <code>systemInstruction</code> / <code>generationConfig</code> / <code>toolConfig</code></td>
+            <td>必须<strong>深合并</strong> <code>vendorBody</code>，否则 <code>generationConfig</code> 会被整体挤掉</td>
+          </tr>
+          <tr>
+            <td><code>PluginLlmClientAdapter</code></td>
+            <td>实现 <code>LlmClient</code>，内部把请求转成 <code>LlmTransportRequest</code> 快照交给插件</td>
+            <td>不继承 HTTP 抽象层——它不需要 HTTP</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="src-block">覆写点速查（相对 Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm/）
+OpenAI   端点 chatCompletionsUrl() :72   鉴权 Authorization: Bearer :91   体 buildRequestBody :141   解码器 :381
+         <b>额外能力</b>：embedding(String) :56（类注释 :15 自述「额外支持 embeddings 接口」）
+Claude   端点 messagesUrl() :96（/v1/messages）  鉴权 x-api-key + anthropic-version=2023-06-01 :111-113   体 :163   解码器 ClaudeStreamDecoder :649
+Gemini   端点 /v1beta/models/{m}:generateContent :173；流式 :streamGenerateContent?alt=sse :86
+         鉴权 x-goog-api-key :176   体 :195   解码器 GeminiStreamDecoder :511
+工具格式 OpenAI tool_calls.function :226 ｜ Claude tool_use.input :500 ｜ Gemini functionCall.args :305</div>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：为什么 Claude / Gemini 不继承 <code>OpenAiCompatible</code>？</span>
+      <p>
+        因为它们<strong>不是「另一种 OpenAI」</strong>。差异不只是 URL 和字段名，而是<strong>消息模型的形状本身</strong>不同：
+      </p>
+      <ul>
+        <li>OpenAI 把 system 当一条普通 message；Claude 把它当<strong>顶层字段</strong>，Gemini 叫 <code>systemInstruction</code>；
+            内核因此在 <code>AbstractHttpLlmClient.java:493</code> 做「消息区 system 上提顶层」。</li>
+        <li>OpenAI 的 tool 结果是 <code>role: tool</code> 的消息；Claude 要求包成 <code>user</code> 里的 <code>tool_result</code> 块，
+            而且<strong>连续 user 必须合并</strong>（<code>ClaudeLlmClient.java:370-408</code>）。</li>
+        <li>缓存标注（<code>cache_control</code>）只有 Claude 需要显式标；OpenAI 系与 Gemini 是隐式缓存。</li>
+      </ul>
+      <p>
+        把这些差异塞进一个 <code>if (isClaude())</code> 里，会让 <code>AbstractOpenAiCompatibleLlmClient</code>
+        变成一个「名字骗人」的类。当前做法是：<strong>只有真正相同的部分（HTTP 与 SSE 读流）才在基类，
+        消息形状各写各的</strong>。代价是三个大客户端类（857 / 593 / 461 行）里有重复的样板——
+        这是刻意接受的重复，因为「错误的抽象比重复更贵」。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>2. <code>type</code> 与传输实现的关系</h2>
+
+    <p>
+      <code>models.json</code> 里每个 provider 写一个 <code>type</code>，它就是<strong>指向具体客户端实现的 key</strong>。
+      取值只有这几个（<code>infra/support/ProviderTypes.java</code>）：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/support/ProviderTypes.java</div>
+
+<pre><code class="language-java">public final class ProviderTypes {
+    public static final String OPENAI = "openai";
+    public static final String DEEPSEEK = "deepseek";
+    public static final String MINIMAX = "minimax";
+    public static final String GEMINI = "gemini";
+    /** gemini 的别名 */
+    public static final String GOOGLE = "google";
+    public static final String CLAUDE = "claude";
+    /** claude 的别名 */
+    public static final String ANTHROPIC = "anthropic";
+
+    private ProviderTypes() {
+    }
+}</code></pre>
+
+    <p>
+      这些常量<strong>同时是注册表 key</strong>——类注释里明说了「必须保持一致」。注册发生在装配层，
+      用 Dagger 的 <code>@IntoMap @StringKey</code>（<code>di/LlmModule.java:102-186</code>），
+      手工装配侧逐条对应（<code>di/JellyfishAssembler.java:419-427</code>）。
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm/LlmClientFactory.java:140-172</div>
+
+<pre><code class="language-java">public LlmClient getClient(Provider provider) {
+    if (provider == null) {
+        throw new JellyfishException("provider must not be null");
+    }
+    String type = normalize(provider.getType());
+    if (type == null) {
+        throw new JellyfishException("provider type must not be blank");
+    }
+    // 内核自带类型先行；只有它不认识该类型时才去问注册表
+    ProviderContribution contribution = null;
+    if (!creators.containsKey(type)) {
+        contribution = findPluginTransport(type);
+        if (contribution == null) {
+            throw unknownType(type, provider);
+        }
+    }
+    String cacheKey = cacheKey(provider, type);
+    // 锁内完成「查缓存 + 创建 + 回填」：既保证 LRU 访问顺序的线程安全，也避免并发重复创建客户端
+    synchronized (clientCache) {
+        LlmClient cached = clientCache.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+        LlmClient created;
+        if (contribution != null) {
+            LOG.info("provider 类型由插件接管: type={} plugin={} provider={}",
+                    type, contribution.getDisplayName(), provider.getName());
+            created = new PluginLlmClientAdapter(provider, contribution, streamExecutor);
+        } else {
+            created = creators.get(type).create(provider);
+            if (created == null) {
+                throw new JellyfishException("failed to create LlmClient for provider: " + provider.getName());
+            }
+        }
+        clientCache.put(cacheKey, created);
+        return created;
+    }
+}</code></pre>
+
+    <p>逐段解释：</p>
+
+    <ul>
+      <li><code>normalize()</code>（<code>:263</code>）做小写归一，这就是 <code>google</code> / <code>anthropic</code> 别名能生效的地方。</li>
+      <li><strong>「内核自带类型先行」</strong>是关键的优先级选择：<code>if (!creators.containsKey(type))</code> 只在<strong>内核不认识</strong>时才问插件。
+          这意味着<strong>插件无法覆盖 <code>openai</code> / <code>claude</code> 这类内置类型</strong>。</li>
+      <li>缓存键是 <code>type|name|apiKey|baseUrl</code>（<code>:269</code>），LRU 上限 <strong>128</strong>（<code>:54</code>），
+          整个「查 → 建 → 回填」在锁内完成，避免并发重复创建客户端（每个客户端都持有 HTTP 连接池）。</li>
+      <li>插件接管时打一条 INFO 日志（<code>provider 类型由插件接管</code>）——这是排查「为什么流量走了别的实现」的第一手线索。</li>
+    </ul>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：为什么内置优先，而不是后注册的赢？</span>
+      <p>
+        如果允许插件覆盖内置类型，那么「同一个 <code>models.json</code> 在两台机器上跑出不同行为」就变得极其容易——
+        只要插件目录里多了一个 jar。而 <code>type: claude</code> 这种写法，用户预期的是<strong>内核实现在干活</strong>。
+        让插件用<strong>新 type 名</strong>接管（例如 <code>type: my-vendor</code>），语义清晰且不会意外改行为。
+      </p>
+      <p>
+        另外一个实际考虑：内置类型是<strong>经过测试的那条路径</strong>。允许覆盖意味着任意插件都能让内核的核心功能（对话）失效，
+        而这个故障会表现为「所有请求都 400」，排查时很难联想到插件。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>3. <code>vendorBody</code> / <code>vendorHeaders</code>：给私有字段留的透传口</h2>
+
+    <p>
+      中性抽象解决不了「厂商出了个新参数」这件事。做法是留一个<strong>透传口</strong>，让用户直接把原始字段塞进请求。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th></th><th>来源</th><th>合并方向</th><th>写入位置</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>vendorBody</code></td>
+            <td>只来自 <code>models.json</code>（<code>Provider</code> 段 + <code>Model</code> 段），<strong>与 agents.json 无关</strong></td>
+            <td><strong>深合并，且 model 覆盖 provider</strong>（<code>VendorBody.merge:141</code>，由 <code>ModelTuning.of:88</code> 组装）</td>
+            <td>请求体构建的最后一步：<code>VendorBody.applyTo</code>（OpenAI <code>:203</code>、Claude <code>:211</code>、Gemini <code>:220</code>）</td>
+          </tr>
+          <tr>
+            <td><code>vendorHeaders</code></td>
+            <td>同上，但<strong>只有 provider 级</strong></td>
+            <td>在鉴权头之后<strong>后应用</strong>，<strong>同名头用户优先</strong>（<code>:91 / :111 / :176</code>）</td>
+            <td>构造请求时（<code>authorizedRequest</code>）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      两条保护措施值得单独记：
+    </p>
+
+    <ul>
+      <li><strong>保留键被挡住</strong>：<code>RESERVED_KEYS</code>（<code>VendorBody.java:74</code>）拦下
+          <code>temperature</code> / <code>max_tokens</code> / <code>cache_control</code> / <code>messages</code>
+          这类内核自己要写的键，<strong>任意嵌套深度都拦</strong>。被拦的字段<strong>静默丢弃</strong>。</li>
+      <li><strong>头部的保护范围小得多</strong>：只有 6 个协议头被挡，其余同名头用户优先。
+          这是刻意的——厂商私有头（如某些网关的租户头）本来就该让用户覆盖。</li>
+    </ul>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：改 <code>vendorBody</code> 不在缓存签名里</span>
+      <p>
+        客户端缓存键是 <code>type|name|apiKey|baseUrl</code>（<code>LlmClientFactory.java:269</code>），
+        <strong>不含 vendor 相关配置</strong>。所以改了 <code>models.json</code> 里的 <code>vendorBody</code> 之后，
+        已经缓存的客户端不会重建——必须 <code>clearCache()</code> 或 <code>/reload</code>。
+        源码注释专门标了这一点。
+      </p>
+      <p>
+        相关的第二个坑：<strong>保留键是静默丢弃的</strong>。你在 <code>vendorBody</code> 里写
+        <code>"temperature": 0.3</code> 想覆盖采样参数，结果什么也没发生、也没有任何提示——
+        因为采样参数应该写在 <code>sampling</code> 段里。
+      </p>
+      <p>
+        第三个坑在 Gemini：它的请求体是嵌套结构（<code>generationConfig</code> / <code>toolConfig</code>），
+        <strong>必须深合并</strong>，浅合并会把整个 <code>generationConfig</code> 挤掉，
+        表现是「配了 <code>vendorBody</code> 之后模型完全不听参数」。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>4. 采样参数：「没写」与「写了 0」</h2>
+
+    <p>
+      这是这一层最容易被忽视、但影响面最大的一条约定。先看结论：
+    </p>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：用包装类型的 <code>null</code> 表达「未表态」</span>
+      <p>
+        <code>LlmRequest</code> 里 <code>temperature</code> / <code>maxTokens</code> / <code>topP</code> / <code>topK</code> / <code>stop</code>
+        <strong>全部用包装类型</strong>（<code>LlmRequest.java:22</code> 起）。判定在各客户端的 <code>if (request.getTemperature() != null)</code>
+        （Claude <code>:171</code>、OpenAI <code>:158</code>、Gemini <code>:352</code>）。
+      </p>
+      <p>
+        <strong>为什么不能统一用 <code>double</code> 加一个「-1 表示没配」的哨兵值？</strong>
+        因为 <code>-1</code> 本身对 <code>topK</code> 非法但语义上可解释，一旦哪天厂商支持了它，
+        这个哨兵就变成歧义。更重要的是：<strong>哨兵值需要每个使用点都记得判断</strong>，
+        而 <code>null</code> 检查是 Java 的默认习惯。用一个「根本不能出现在合法值域里」的类型状态来表达「没表态」，
+        比用一个「碰巧非法」的数值稳健。
+      </p>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>写法</th><th>结果</th><th>依据</th></tr></thead>
+        <tbody>
+          <tr><td>不写 <code>temperature</code></td><td>请求体里<strong>没有这个字段</strong>，厂商用自己缺省</td><td><code>null</code> → 不下发</td></tr>
+          <tr><td>写 <code>"temperature": 0</code></td><td>请求体里<strong>确实是 0</strong>（确定性输出）</td><td><code>0</code> 合法且保留</td></tr>
+          <tr><td>写 <code>"stop": []</code></td><td>不下发（空列表 = 没表态）</td><td><code>SamplingSettings</code> 的空列表处理</td></tr>
+          <tr><td>写 <code>NaN</code> / 负数</td><td>丢弃 + 发告警，回退缺省</td><td><code>SamplingSettings.cleanTemperature</code>（只拒 NaN / Inf / 负数）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：没有任何「思考模式 vs 采样参数」的互斥校验</span>
+      <p>
+        很多厂商在思考 / 推理模式下<strong>会忽略采样参数且不报错</strong>。
+        Jellyfish <strong>不做</strong>这个校验——<code>SamplingSettings</code> 的类注释直接说明了这一点：
+        思考类参数一律走 <code>vendorBody</code> 透传，而思考模式下厂商会忽略采样参数。
+      </p>
+      <p>
+        所以现象是「配了 <code>temperature</code> 没生效」。别去找内核的 bug，先确认这个模型当前是否开着思考模式。
+        同类坑还有：<strong>model 级无法单独关掉 provider 级已经配好的项</strong>（<code>merge</code> 的语义是覆盖不是删除），
+        所以要控制某个模型的采样参数，就<strong>在 model 级配全</strong>。
+      </p>
+      <p>
+        DeepSeek 是典型例子：思考模式下采样参数厂商侧无效；Claude 4.7+ 收到 <code>temperature</code> / <code>top_p</code> / <code>top_k</code>
+        会直接 <strong>400</strong>（<code>ClaudeLlmClient.java:180</code>）；另外 Claude 的
+        <code>thinking.budget_tokens</code> 必须<strong>小于本次 <code>max_tokens</code></strong>，
+        没配 <code>maxOutputTokens</code> 时它取 4096（<code>:62</code>）——这两条一组合，配了大的 thinking 预算但没配 maxOutputTokens 就会 400。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>5. Prompt cache：断点打在哪</h2>
+
+    <p>
+      只有 Claude 需要显式标注缓存断点（OpenAI 系与 Gemini 是隐式缓存）。断点数量由请求自带，缺省 <strong>2 个</strong>：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/RequestTuning.java:26　← DEFAULT_CACHE_BREAKPOINTS = 2</div>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm/ClaudeLlmClient.java:187-203</div>
+
+<pre><code class="language-java">int breakpoints = breakpointsOf(request);
+Map&lt;String, Object&gt; cacheControl = cacheControlOf(request);
+boolean systemMarked = breakpoints &gt;= 1 &amp;&amp; LlmClients.isNotBlank(system);
+if (LlmClients.isNotBlank(system)) {
+    body.put("system", systemMarked ? systemBlocks(system, cacheControl) : system);
+}
+List&lt;Map&lt;String, Object&gt;&gt; messages = buildMessages(request, keptSystem);
+if (breakpoints &gt;= 2) {
+    markLastBlock(messages, cacheControl);
+}
+body.put("messages", messages);
+if (request.hasTools()) {
+    boolean markTools = breakpoints &gt;= 1 &amp;&amp; !systemMarked;
+    body.put("tools", buildTools(request.getTools(), markTools ? cacheControl : null));
+}</code></pre>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>断点</th><th>落点</th><th>回退落点</th><th>位置</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>①（<code>breakpoints &gt;= 1</code>）</td>
+            <td><strong>最后一个 system 块</strong>（<code>systemBlocks:314</code>）</td>
+            <td>没有 system 时落到<strong>最后一个工具定义</strong>（<code>buildTools:534</code>）</td>
+            <td><code>:187-203</code> 里的 <code>systemMarked</code> / <code>markTools</code></td>
+          </tr>
+          <tr>
+            <td>②（<code>breakpoints &gt;= 2</code>）</td>
+            <td><strong>最后一条消息的最后一个块</strong>（<code>markLastBlock:331</code>）</td>
+            <td>—</td>
+            <td><code>:197-199</code></td>
+          </tr>
+          <tr>
+            <td><code>0</code></td>
+            <td colspan="2">关闭缓存标注</td>
+            <td><code>breakpointsOf:282</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      <code>cacheControlOf</code>（<code>:296</code>）生成 <code>{type: ephemeral, ttl?: cacheRetention}</code>。
+      配置字段在 <code>ProviderCacheSettings.java:94</code>：<code>promptCacheKey</code>、<code>keepAliveSeconds</code>。
+    </p>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：Anthropic 不标 cache_control 时命中率恒为 0</span>
+      <p>
+        <code>ClaudeLlmClient.java:28</code> 记录了这一点。而命中率本身<strong>不在客户端统计</strong>——
+        它由 <code>SessionUsageSnapshot</code> 的累计 <code>cacheReadTokens / promptTokens</code> 现算
+        （<code>SessionUsageSnapshot.java:9-12</code>）。
+        <strong>分母是「总输入」</strong>，不是「非缓存输入」，所以看命中率时别把分母算错。
+      </p>
+    </div>
+
+    <h3><code>keepAliveSeconds</code> 在做什么（以及为什么缺省是 0）</h3>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>项</th><th>行为</th><th>位置</th></tr></thead>
+        <tbody>
+          <tr><td>缺省值</td><td><strong>0 = 关闭</strong>；上限 3600</td><td><code>ProviderCacheSettings.java:34-46</code></td></tr>
+          <tr><td>调度</td><td>构造期起<strong>单线程调度</strong>，每 30 秒 <code>tick()</code> 一次</td><td><code>CacheKeepAlive.java:92-151</code></td></tr>
+          <tr><td>动作</td><td>到点发一个 <strong>复用父前缀、最小输出</strong>的请求并 <code>recordUsage</code>，把 cache TTL 续上</td><td><code>:188-208</code>、<code>buildKeepAlive</code></td></tr>
+          <tr><td>次数限制</td><td>每个空闲期最多 <code>MAX_KEEP_ALIVE_ROUNDS = 3</code> 次</td><td><code>CacheKeepAlive.java</code></td></tr>
+          <tr><td>空闲判定</td><td>按<strong>消息条数</strong>（不用 <code>updatedAt</code>）——避免「时钟漂移 / 手动改时间」带来的误判</td><td><code>CacheKeepAlive.java</code></td></tr>
+          <tr><td>范围</td><td>只保活<strong>当前会话</strong>；异常全吞（保活失败不该影响主流程）</td><td><code>CacheKeepAlive.java</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：保活是「花钱买命中率」，不是免费优化</span>
+      <p>
+        每一次保活都是一次<strong>真实的计费调用</strong>。所以它缺省关闭，而且每空闲期只做 3 次。
+        另外它与 <code>thinking.budget_tokens</code> <strong>互斥</strong>，部分模型对输出还有最小值要求——
+        配了之后如果出现奇怪的 400，先关掉它再排查。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>6. 思考文本（thinking）的获取路径</h2>
+
+    <p>
+      厂商侧「开启思考」这件事<strong>不由内核管</strong>——它靠 <code>vendorBody</code> 透传
+      （<code>thinking</code> / <code>reasoning_effort</code> / <code>thinkingConfig</code>）。
+      内核管的是「把拿到的思考文本取出来」：
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>厂商</th><th>解析点</th><th>非流式 / 流式</th><th>位置</th></tr></thead>
+        <tbody>
+          <tr><td>OpenAI / DeepSeek</td><td><code>delta.reasoning_content</code> → <code>reasoning</code></td><td><code>parseResponse:317</code> / 流式 <code>:404</code></td><td><code>AbstractOpenAiCompatibleLlmClient.java</code></td></tr>
+          <tr><td>Claude</td><td>内容块 <code>type=thinking</code> / 事件 <code>thinking_delta</code></td><td><code>:598</code> / <code>:764</code></td><td><code>ClaudeLlmClient.java</code></td></tr>
+          <tr><td>Gemini</td><td><code>part.thought = true</code></td><td><code>:474</code> / 流式 <code>:563</code></td><td><code>GeminiLlmClient.java</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      对外的出口有两个：非流式走 <code>LlmResponse.getThinking()</code>，流式走 <code>LlmStreamListener.onThinking</code>。
+      外壳侧怎么展示（<code>-cli</code> 的 <code>--show-thinking</code>、TUI 的 <code>Ctrl+T</code> / <code>/thinking</code>）
+      是 <a href="09-tui.html">09 页</a>与 <a href="10-cli-server.html">10 页</a>的内容——<strong>两侧通过这个出口解耦</strong>：
+      内核不关心你要不要看思考，它只负责把文本端出来。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>7. 流式：SSE 读流与工具调用分片</h2>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm/AbstractHttpLlmClient.java:427-441</div>
+
+<pre><code class="language-java">private boolean dispatch(String event, StringBuilder data, LlmStreamListener listener, StreamDecoder decoder) {
+    if (data.length() == 0) {
+        return false;
+    }
+    String payload = data.toString();
+    if ("[DONE]".equals(payload.trim())) {
+        return true;
+    }
+    return decoder.onData(event, payload, listener);
+}</code></pre>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>项</th><th>规则</th><th>位置</th></tr></thead>
+        <tbody>
+          <tr><td>读行</td><td>逐行读，<code>data:</code> 拼装，<strong>空行触发 <code>dispatch</code></strong>（SSE 的帧分隔）</td><td><code>readSse:358-396</code></td></tr>
+          <tr><td>单条上限</td><td>拼装 <strong>8 MiB</strong>，单行 <strong>1 MiB</strong></td><td><code>:71</code>、<code>:79</code></td></tr>
+          <tr><td>终止标记</td><td>OpenAI 系 <code>[DONE]</code>（<code>:432</code>）；Claude 靠 <code>message_stop</code>（<code>:716</code>）</td><td>—</td></tr>
+          <tr><td>空闲超时</td><td><strong>300 秒</strong>无数据 → <code>streamFailure</code></td><td><code>:62</code>、<code>:341</code></td></tr>
+          <tr><td>未读到终止标记</td><td>按 <code>asIncomplete</code> 处理（不当作成功）</td><td><code>:310</code></td></tr>
+          <tr><td>非 2xx</td><td>非流式：<strong>抛</strong> <code>LlmHttpException(statusCode)</code>；流式：走 <code>onError(...)</code></td><td><code>:179</code> / <code>:295</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>工具调用分片怎么拼</h3>
+
+    <p>
+      流式协议下，一个工具调用的 <code>id</code> / <code>name</code> / <code>arguments</code> 是<strong>分片到达</strong>的，
+      只能靠 <code>index</code> 关联。累积算法在 <code>StreamToolCallAccumulator.merge:36</code>：
+    </p>
+
+    <ul>
+      <li>按 <code>index</code> 合并 <code>id</code> / <code>name</code> / <code>arguments</code>；</li>
+      <li><strong>没有 <code>index</code> 时用一个伪造的 key（100000+）</strong>（<code>:19</code>）——
+          宁可把这一片单独放，也不要错误地把它拼到第 0 个调用上（那会让 <code>arguments</code> 变成非法 JSON）；</li>
+      <li><code>arguments</code> 是<strong>字符串拼接</strong>，拼完才做 JSON 解析——所以任何一片丢了，最终就是解析失败。</li>
+    </ul>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：流式的错误不是异常，是回调</span>
+      <p>
+        <strong>非 2xx 在流式路径上走 <code>onError(LlmHttpException)</code>，不抛异常</strong>；
+        同步路径才抛。而且 <code>onError</code> 与 <code>onComplete</code> / <code>onCancelled</code> <strong>互斥</strong>，
+        实现监听器时不能重复收尾——否则会出现「重复落库 / 重复计数」这类问题。
+      </p>
+      <p>
+        另一个容易踩的：<code>max_tokens: 0</code> <strong>只有 Claude 合法</strong>，且它与 stream 互斥（内部退回 1）；
+        OpenAI / Gemini 的下限是 1（由 <code>MIN_OUTPUT_TENS</code> 换算）。
+        最后：<code>maxTokensField</code> 只有<strong>模型级</strong>配置且缺省 <code>max_tokens</code>——
+        <strong>字段名猜错就直接 400</strong>，而且报错信息来自厂商，不一定指向配置。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>8. 插件提供厂商：快照式边界</h2>
+
+    <p>
+      插件也能提供模型厂商，走 <code>ProviderContribution</code> 这个扩展点。适配器是 <code>PluginLlmClientAdapter</code>（538 行），
+      它的核心动作是<strong>把内部请求一次性转成不可变快照</strong>：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm/PluginLlmClientAdapter.java:179（toTransportRequest）</div>
+
+    <table>
+      <thead><tr><th>要点</th><th>说明</th><th>位置</th></tr></thead>
+      <tbody>
+        <tr><td>快照</td><td><code>toTransportRequest</code> 一次性构造不可变 <code>LlmTransportRequest</code>（集合做防御拷贝），<strong>插件只读</strong></td><td><code>:179</code></td></tr>
+        <tr><td>执行线程</td><td><code>chat</code> 在<strong>调用方线程内联</strong> <code>send</code>；<code>chatStream</code> 投到 <code>streamExecutor</code></td><td><code>:100</code> / <code>:129</code></td></tr>
+        <tr><td>流式转发</td><td><code>ForwardingListener</code> 逐事件转发</td><td><code>:449</code></td></tr>
+        <tr><td>工具调用快照</td><td>按 <code>index</code> <strong>覆盖式</strong>快照，最终以 <code>onComplete</code> 为准</td><td><code>:325</code></td></tr>
+        <tr><td>异常</td><td>插件的 <code>JellyfishException</code> / <code>LlmHttpException</code> <strong>原样上抛</strong>；插件未投终止事件按失败处理</td><td><code>:106</code> / <code>:143</code></td></tr>
+      </table>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：为什么必须做「快照」而不是直接给内部对象？</span>
+      <p>
+        因为插件是<strong>别人写的代码</strong>，跑在同一个 JVM 里。如果直接把内核的 <code>LlmRequest</code> 交给它，
+        它就拿到了一堆可变对象：能改 <code>messages</code>、能在里面塞字段、能持有引用延迟改。
+        而那份请求之后还要<strong>被缓存前缀比对</strong>（<a href="08-session-context.html">08 页</a>的 <code>CacheBreakWatcher</code>），
+        一旦被改，缓存结论就失真了。
+      </p>
+      <p>
+        更根本的理由在 <code>AGENTS.md</code> 的关键不变量里：<strong>「跨边界载荷必须是 <code>api</code> 侧快照值类型」</strong>，
+        而且这类快照<strong>恰好只能有一个可见构造器</strong>。这是个聪明的约束——如果只有一个构造器，
+        就没人能绕过它构造出一个「内容不同但类型相同」的对象，插件也就无法伪造内核载荷。
+        另外 <code>-parameters</code> 编译参数因此不允许去掉（构造器参数名被用于反射绑定）。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>9. 模型解析链：三级回落，且失败要上抛</h2>
+
+    <p>
+      第 3 节引了 <code>ModelTuning</code>，但没讲「这一轮到底该用哪个模型」是怎么定的。
+      答案集中在 <code>SessionModelResolver</code>（92 行）——它值得单独看，因为类注释里记着一个真实的重构理由。
+    </p>
+
+    <div class="mermaid">
+flowchart TD
+  S["要发一次请求"] --> R["SessionModelResolver.resolve(session) :64"]
+  R --> L1{"① 会话显式选定？<br/>（/model 改过）"}
+  L1 -->|"有"| U["用它"]
+  L1 -->|"无"| L2{"② 该 agent 的偏好模型？<br/>（agents.json 的 model 字段）"}
+  L2 -->|"有"| U
+  L2 -->|"无"| L3{"③ 全局默认？<br/>（models.json 的 defaultProvider / defaultModel）"}
+  L3 -->|"有"| U
+  L3 -->|"无"| F["<strong>上抛</strong>——不返回 null"]
+  U --> RM["ResolvedModel{provider, model}"]
+  RM --> T["ModelTuning.of(provider, model) :74<br/>→ applyTo(requestBuilder) :125"]
+    </div>
+    <p class="figure-cap">图 5-2　模型解析：三级回落，任何一级命中即停；全部落空则抛异常</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>级</th><th>来源</th><th>为什么在这个优先级</th></tr></thead>
+        <tbody>
+          <tr><td>①</td><td>会话显式选定（<code>/model</code> 改过）</td><td>「用户的直接指令优先于一切」</td></tr>
+          <tr><td>②</td><td>该 agent 的偏好模型（<code>agents.json</code> 的 <code>model</code> 字段）</td>
+              <td>「绑定 agent 就应当连它的模型一起生效，<strong>否则那个字段只是装饰</strong>」</td></tr>
+          <tr><td>③</td><td>全局默认（<code>models.json</code> 的 <code>defaultProvider</code> / <code>defaultModel</code>）</td><td>兜底</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>为什么它值得单独一个类</h3>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：从「靠注释镜像」改成「一次调用」</span>
+      <p>
+        类注释（<code>:22-26</code>）把这段历史写得很直白：<em>「这条三级回落<strong>原本被写了两遍</strong>——
+        <code>ReActLooper</code> 一份、<code>ConversationCompactor</code> 一份，<strong>靠注释声明「刻意保持镜像」</strong>。
+        而两者的判据必须相同：压缩要按同一个模型的窗口裁剪、花同一个模型的额度，一旦两边漂移，
+        <strong>摘要就会以另一个模型的上下文长度去衡量对话</strong>。与其靠约定，不如让它变成一次调用。」</em>
+      </p>
+      <p>
+        这是「重复代码 + 注释约定」失效的典型案例：两处逻辑在<strong>各自看起来都对</strong>的情况下缓慢漂移，
+        而症状（摘要按错的窗口裁剪）出现在离改动点很远的地方。
+        <strong>「刻意保持镜像」这个注释本身就是代码坏味道的信号</strong>——
+        写这句话的时候，作者已经知道这里有风险了，只是还没付出重构成本。
+      </p>
+      <p>
+        顺带一提：这个仓库里「靠注释约定」的地方还有一处（<code>AGENTS.md</code> 说「不要照抄 shutdown 顺序清单」），
+        但那条是<strong>刻意的</strong>——因为顺序的理由是依赖关系而非序号，抽不出一个可复用的函数。
+        区分「该抽」与「该用注释说清」的标准，是<strong>这份知识能不能表达成一次调用</strong>。
+      </p>
+    </div>
+
+    <h3>两个容易记错的细节</h3>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>细节</th><th>行为</th><th>行号</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>子代理不继承父的模型</strong></td>
+            <td>子会话创建时 provider / model 都是 <code>null</code>，但它的 <code>agentId</code> 指向被委派的 agent，
+                因此<strong>自然落到第 ② 级</strong>；没配则落到全局默认。
+                <strong>刻意不继承父会话的模型</strong>——「子代理与主会话除了传入的任务之外相互隔离」</td>
+            <td><code>:27-30</code></td>
+          </tr>
+          <tr>
+            <td><strong>解析不到就上抛</strong></td>
+            <td><strong>不返回 <code>null</code></strong>。理由：「三个来源都是『用户明确表达过的意图』，
+                一个都落不到实处时<strong>静默降级只会让问题在更远的地方以更难懂的形式出现</strong>」</td>
+            <td><code>:31-33</code></td>
+          </tr>
+          <tr>
+            <td>另一个入口</td>
+            <td><code>resolveByAgentOrDefault(agentId)</code>——只走 ② ③ 两级，用于「还没有会话」的场合</td>
+            <td><code>:84</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：为什么「解析不到」不能静默用缺省？</span>
+      <p>
+        这个项目的立场在这里又一次体现：<strong>配置错误要么立刻可见，要么别生效</strong>（
+        <a href="02-quickstart.html">02 页</a>的 <code>${VAR}</code> 缺失也是同一个取向）。
+      </p>
+      <p>
+        如果解析不到就「随便用一个默认模型」，现象会是<strong>「我配了模型但对话走的是别家」</strong>——
+        而且你只有在看账单或对比输出质量时才会察觉。上抛异常则把问题钉在第一次请求上。
+      </p>
+      <p>
+        子代理那条「不继承父模型」则相反方向地避免了另一个坑：
+        如果继承，一次 <code>task</code> 委派就会让子代理用父会话的模型跑——
+        而父会话可能是用户为了省钱临时切的便宜模型，子代理的任务却需要更强的推理。
+        <strong>显式绑定（agent 的偏好模型）比隐式继承更容易预测。</strong>
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>10. token 口径：五字段，以及三家都<strong>不记</strong>思考 token</h2>
+
+    <h3>10.1 <code>LlmUsage</code> 只有五个字段</h3>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm/LlmUsage.java:38-50（全部字段）</div>
+
+<pre><code class="language-java">private final int promptTokens;        // :38
+private final int completionTokens;    // :41
+private final int totalTokens;         // :44
+private final int cacheReadTokens;     // :47
+private final int cacheWriteTokens;    // :50
+// 没有 reasoningTokens，也没有 thinkingTokens —— 见下</code></pre>
+
+    <h3>10.2 三家怎么填这五个字段</h3>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>厂商</th><th><code>promptTokens</code> 来源</th><th><code>cacheReadTokens</code></th><th><code>cacheWriteTokens</code></th><th>行号</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>OpenAI 兼容</td>
+            <td><code>prompt_tokens</code>（<strong>已含命中部分，不需归一化</strong>）</td>
+            <td><code>max(prompt_cache_hit_tokens, prompt_tokens_details.cached_tokens)</code>——
+                <strong>两个字段都看一眼、取有值的那个</strong></td>
+            <td><code>prompt_tokens_details.cache_write_tokens</code></td>
+            <td><code>AbstractOpenAiCompatibleLlmClient.java:357-371</code></td>
+          </tr>
+          <tr>
+            <td>Claude</td>
+            <td>输入三项之和（见下注）</td>
+            <td><code>cache_read_input_tokens</code></td>
+            <td><code>cache_creation_input_tokens</code></td>
+            <td><code>ClaudeLlmClient.java:634-635</code>（流式补读 <code>:699-700</code>）</td>
+          </tr>
+          <tr>
+            <td>Gemini</td>
+            <td><code>promptTokenCount</code>（注释：<strong>已是总输入</strong>，
+                <code>cachedContentTokenCount</code> 是它的<strong>子集</strong>）</td>
+            <td><code>cachedContentTokenCount</code></td>
+            <td><strong>恒 0</strong>（<code>usageOf(..., 0)</code>）——Gemini 是隐式缓存，没有「建缓存」这个概念</td>
+            <td><code>GeminiLlmClient.java:488-499</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：为什么「两个字段都看一眼」比「按厂商分支」好？</span>
+      <p>
+        OpenAI 与 DeepSeek 的缓存命中字段名不同（<code>prompt_tokens_details.cached_tokens</code> vs
+        <code>prompt_cache_hit_tokens</code>）。直觉做法是在子类里各写一份解析，
+        但作者选择在基类里「<strong>两个都读、取有值的那个</strong>」，注释给了理由：
+      </p>
+      <p>
+        <em>「比为每家在子类里各写一份解析便宜，也<strong>不会因为某家换字段而静默漏读</strong>」</em>。
+      </p>
+      <p>
+        第二条是关键：如果按厂商分支，某家改了字段名之后，那一支<strong>拿到的永远是 0</strong>——
+        而 0 在业务上没有异常，只会让命中率看起来突然变差。
+        「都读一遍」把这个故障从「静默漏读」变成了「照样读到」，代价是多一次 <code>JsonNode.path()</code>。
+      </p>
+      <p>
+        这是个可复用的模式：<strong>面对同一语义的多个字段名，读全部再取有效值，比按来源分支更抗协议演进。</strong>
+      </p>
+    </div>
+
+    <div class="callout warn">
+      <span class="callout-title">Claude 的输入是三项之和，别直接拿一个字段</span>
+      <p>
+        Anthropic 把输入拆成互斥的三部分：普通输入 / <code>cache_read_input_tokens</code> /
+        <code>cache_creation_input_tokens</code>。<strong>缓存命中率的分母必须是三者之和</strong>，
+        否则算出来的命中率会大于 100%（<code>cacheRead</code> 可以接近甚至超过基础输入）。
+        这也是 <a href="08-session-context.html">08 页</a>那条「分母是总输入」在 Claude 上的具体含义。
+      </p>
+      <p>
+        另外 <code>ClaudeLlmClient.java:46</code> 记了一条实测行为：
+        <strong>短对话下 <code>cache_creation_input_tokens</code> 为 0</strong>，
+        「因此短对话打断点是无害的空操作，不是错误」——看到 0 不用担心配置错了。
+      </p>
+    </div>
+
+    <h3>10.3 三家都不记思考 token——这是一个真实的记账缺口</h3>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：思考 token 花了钱，但不在 <code>/usage</code> 里</span>
+      <p>
+        <code>LlmUsage</code> 里<strong>没有</strong> reasoning / thinking 字段，
+        而三家的解析里也<strong>都没有读</strong>这类字段：
+      </p>
+      <ul>
+        <li><strong>OpenAI / DeepSeek</strong>：只读 <code>prompt_tokens</code> / <code>completion_tokens</code> /
+            <code>total_tokens</code> / 缓存两项（<code>:357-371</code>），<strong>不读
+            <code>completion_tokens_details.reasoning_tokens</code></strong>。</li>
+        <li><strong>Claude</strong>：只读 <code>cache_read_input_tokens</code> 与
+            <code>cache_creation_input_tokens</code>（<code>:634-635</code>），<strong>不单独统计思考</strong>。</li>
+        <li><strong>Gemini</strong>：不读 <code>thoughtsTokenCount</code>（<code>:498-499</code> 的五个参数里没有它）。</li>
+      </ul>
+      <p>
+        所以准确的说法是：<strong>开启思考 / 推理模式后，思考部分产生的 token 不会出现在 Jellyfish 的用量统计里。</strong>
+        它们的费用通常被厂商计入 <code>completion_tokens</code>（或另有单独计费规则），
+        但<strong>你无法从 <code>/usage</code> 分辨「这笔账单里有多少是思考」</strong>。
+      </p>
+      <p>
+        做成本分析时的实际影响：如果开了思考且预算给得很大，<code>/usage</code> 的输出会<strong>明显低于</strong>
+        厂商账单。这不是 bug，而是当前实现只对齐了「输入 / 输出 / 缓存」这五个口径。
+        想精确分摊思考成本，只能去厂商后台看明细。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>11. 本页坑点小结</h2>
+
+    <div class="callout pitfall">
+      <span class="callout-title">LLM 适配层的坑</span>
+      <ul>
+        <li><strong>「0 vs 未写」全靠包装类型的 <code>null</code></strong>：把内部字段改成 <code>int</code> 就会把「未表态」当「配了 0」下发。</li>
+        <li><strong>改 <code>vendorBody</code> 不在客户端缓存签名里</strong> → 必须 <code>/reload</code> 或 <code>clearCache()</code>。</li>
+        <li><strong><code>vendorBody</code> 写保留键会被静默丢弃</strong>：<code>temperature</code> / <code>max_tokens</code> / <code>cache_control</code> / <code>messages</code>，任意嵌套深度都拦。</li>
+        <li><strong>Gemini 必须深合并</strong>，浅合并会把 <code>generationConfig</code> 整体挤掉。</li>
+        <li><strong>用户 <code>vendorHeaders</code> 会覆盖内核同名头</strong>（只有 6 个协议头被挡）。</li>
+        <li><strong>流式非 2xx 走 <code>onError</code> 不抛异常</strong>；<code>onError</code> 与 <code>onComplete</code> / <code>onCancelled</code> 互斥，别重复收尾。</li>
+        <li><strong>没有思考模式与采样参数的互斥校验</strong>，配错只会「配了不生效」。</li>
+        <li><strong>Claude 代际差异</strong>：4.7+ 收到 <code>temperature</code> / <code>top_p</code> / <code>top_k</code> 直接 400；
+            <code>thinking.budget_tokens</code> 必须 &lt; 本次 <code>max_tokens</code>（未配则 4096）。</li>
+        <li><strong><code>maxTokensField</code> 猜错直接 400</strong>，且报错来自厂商不一定指向配置。</li>
+        <li><strong>Anthropic 不标 <code>cache_control</code> 命中率恒为 0</strong>；命中率分子分母都在 <code>SessionUsageSnapshot</code>，别自己算。</li>
+        <li><strong><code>keepAliveSeconds</code> 缺省关闭</strong>：开了就是花钱买命中率，且与 <code>thinking.budget_tokens</code> 互斥。</li>
+        <li><strong>插件不能覆盖内置 <code>type</code></strong>：<code>openai</code> / <code>claude</code> 这类名字永远走内核实现。</li>
+        <li><strong>思考 token 不记账</strong>：<code>LlmUsage</code> 只有五字段，三家都不读 reasoning / thinking 数量。
+            开了思考模式后 <code>/usage</code> 会明显低于厂商账单。</li>
+        <li><strong>Claude 的输入是三项之和</strong>（普通 + <code>cache_read</code> + <code>cache_creation</code>），
+            只取其中一个字段去算命中率会得到大于 100% 的结果。</li>
+        <li><strong>Gemini 的 <code>cacheWriteTokens</code> 恒为 0</strong>（隐式缓存没有「建缓存」），不是漏读。</li>
+        <li><strong>模型解析不到时是抛异常，不是用默认</strong>：第一次请求就会失败，别以为是「配了不生效」。</li>
+        <li><strong>子代理不继承父会话的模型</strong>：它用被委派 agent 的偏好模型（或全局默认）；
+            想让子代理用特定模型，得在那个 agent 上配 <code>model</code>。</li>
+      </ul>
+    </div>
+
+    <div class="conclusion">
+      <h2>关键结论</h2>
+      <ol>
+        <li>这一层用「<strong>薄通用 + 厚专用</strong>」的分层：只有 HTTP 与 SSE 读流是真正共享的，消息形状各写各的。因为消息形状的差异<strong>不是字段名差异，是模型差异</strong>。</li>
+        <li><code>type</code> 不是「协议」的同义词，而是<strong>注册表 key</strong>；路由顺序「内置优先、插件兜底」保证了同一个配置文件在两台机器上行为一致。</li>
+        <li><code>vendorBody</code> 是给「厂商出参数的速度快于内核发版」这个现实留的口子，代价是保留键必须被静默拦掉——所以配错了没有任何提示。</li>
+        <li>「没写 vs 写了 0」用类型状态（<code>null</code>）而不是哨兵值表达，是这一层定义得最干净的一条约定，也是排查采样问题时第一个要确认的假设。</li>
+        <li><code>PluginLlmClientAdapter</code> 的「快照 + 唯一可见构造器」是插件隔离边界在数据层面的实现——插件能读，不能改，也不能伪造。</li>
+        <li>模型解析链的教训值得单拎出来：<strong>「两处逻辑 + 注释声明保持镜像」是坏味道</strong>。
+            压缩与循环器各自实现过一遍三级回落，一旦漂移，症状（摘要按错误的窗口裁剪）会出现在离改动点很远的地方——
+            所以它被抽成了 <code>SessionModelResolver</code> 一次调用。</li>
+        <li>用量统计目前<strong>只对齐五个口径</strong>（输入 / 输出 / 总量 / 缓存读 / 缓存写）。
+            思考模式的 token 不在其中，这是做成本分析时必须知道的边界。</li>
+      </ol>
+    </div>
+
+    <nav class="pager" aria-label="翻页">
+      <a class="prev" href="04-agent-loop.html"><span class="pager-dir">上一页</span>04 Agent Loop 内核</a>
+      <a class="next" href="06-permissions.html"><span class="pager-dir">下一页</span>06 权限与审批系统</a>
+    </nav>
+
+  </main>
+</div>
+
+<footer class="footer">
+  Jellyfish 源码深度解析 · 本页源码依据：<code>LlmClientFactory.java</code>、<code>AbstractHttpLlmClient.java</code>、
+  <code>AbstractOpenAiCompatibleLlmClient.java</code>、<code>ClaudeLlmClient.java</code>、<code>GeminiLlmClient.java</code>、
+  <code>PluginLlmClientAdapter.java</code>、<code>LlmRequest.java</code>、<code>VendorBody.java</code>、<code>VendorHeaders.java</code>、
+  <code>ProviderTypes.java</code>、<code>SamplingSettings.java</code>、<code>ProviderCacheSettings.java</code>、<code>CacheKeepAlive.java</code>、
+  <code>LlmUsage.java</code>、<code>SessionModelResolver.java</code>、<code>ResolvedModel.java</code>、<code>ModelTuning.java</code>。
+</footer>
+
+<!-- 资源按「本地 vendor 优先、CDN 兜底」引用：文件缺失时 assets/app.js 会自动回退到 CDN -->
+<script src="assets/vendor/highlight.min.js"></script>
+<script src="assets/vendor/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

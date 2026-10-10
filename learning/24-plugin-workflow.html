@@ -1,0 +1,1476 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>24 workflow 插件 · Jellyfish 源码深度解析</title>
+<meta name="description" content="逐类拆解 jellyfish-plugin-workflow：声明式 spec 的数据模型、解析期校验与环检测、按依赖分层的调度与 when 语义、经 SubAgentPort 派生与聚合、台账与编排面板，以及它为什么必须住在内核之外。">
+<link rel="stylesheet" href="assets/style.css">
+<!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
+</head>
+<body>
+
+<header class="topbar">
+  <button class="nav-toggle" id="navToggle" aria-label="切换导航" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">🐙 Jellyfish 源码深度解析</a>
+  <div class="topbar-tools">
+    <input id="navSearch" type="search" placeholder="搜索页面…" aria-label="搜索页面">
+  </div>
+</header>
+
+<div class="layout">
+
+  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <div class="sidebar-title">文档目录</div>
+    <ul class="nav-list">
+      <li><a href="index.html">首页 · 总览与导航</a></li>
+    </ul>
+    <div class="nav-group">入门</div>
+    <ul class="nav-list">
+      <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
+      <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
+      <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
+    </ul>
+    <div class="nav-group">内核重点</div>
+    <ul class="nav-list">
+      <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
+      <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
+      <li><a href="06-permissions.html">06 权限与审批系统</a></li>
+      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
+      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+    </ul>
+    <div class="nav-group">外壳与实战</div>
+    <ul class="nav-list">
+      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
+      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
+      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+    </ul>
+    <div class="nav-group">拓展</div>
+    <ul class="nav-list">
+      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
+      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
+      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
+      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
+      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+    </ul>
+    <div class="nav-group">子系统</div>
+    <ul class="nav-list">
+      <li><a href="17-commands.html">17 命令系统</a></li>
+      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
+      <li><a href="19-config.html">19 配置体系</a></li>
+      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
+    </ul>
+    <div class="nav-group">插件详解</div>
+    <ul class="nav-list">
+      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
+      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
+      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
+      <li><a href="24-plugin-workflow.html" aria-current="page">24 workflow 插件</a></li>
+      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
+      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
+      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <nav class="breadcrumb" aria-label="面包屑">
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>24 workflow 插件</span>
+    </nav>
+
+    <h1>24 workflow 插件</h1>
+    <p class="page-sub">
+      内置的 <code>task</code> 只能「一件事一个子代理」；一次调研要并行问三个方向、再拿这三份结论去写方案时，
+      它就无能为力了。<code>jellyfish-plugin-workflow</code> 把这份「几件事、什么顺序、怎么合起来」变成一份
+      声明式 spec，交给模型提交、由插件校验并把一批子代理排成层序执行。本页逐类读它全部的 16 个源文件。
+    </p>
+
+    <section class="goals">
+      <h2>学习目标</h2>
+      <ul>
+        <li>说清 <code>task</code> 的缺口在哪，以及声明式 spec 为什么是补上它的合适形状；</li>
+        <li>列出本插件的 5 个协作者类与 4 个不可变值类型，说清各自的职责边界；</li>
+        <li>拿到 spec 的完整字段模型（<code>steps</code> / <code>needs</code> / <code>when</code> / <code>aggregate</code>）与校验清单，知道环检测在哪一行做；</li>
+        <li>解释「按依赖分层」的调度判据、<code>when</code> 的三个取值，以及一步失败后整条编排的走向；</li>
+        <li>确认编排的「执行者」是谁：它复用内核的委派端口，还是自己起线程（源码依据，不靠推断）；</li>
+        <li>说清上游结论如何被转交给下游、为什么只有直接 <code>needs</code>、为什么截断是刻意的；</li>
+        <li>理解台账与面板的分工、面板用哪个 UI 扩展点，以及「进程重启后这次编排会怎样」。</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================ -->
+    <h2>1. 缺口：单次委派做不了「有依赖的几件事」</h2>
+
+    <p>
+      先给结论：<strong>内核只提供「派生一个子代理」这个原语，不解释任何编排</strong>。
+      <code>task</code> 工具把原语包装成一次调用——一句话进去、一个子代理的结论出来。
+      20 页把这条链路的五跳讲透了（见 <a href="20-subagents.html">20 页</a>）；本页只关心它<em>缺</em>什么。
+    </p>
+
+    <p>
+      它缺三样东西，而且三样都只在「多步骤」时才暴露：
+    </p>
+
+    <ul>
+      <li><strong>并行</strong>：模型要在同一回合里问三个方向，只能发三次 <code>task</code> 调用，每次等到结果才发下一次——
+        三次调用串行地占着同一条工具执行线程；</li>
+      <li><strong>依赖</strong>：第二次调用的任务描述里想写「结合上面三份结论」，只能靠模型自己把结论<strong>抄进</strong>新的 prompt，
+        而抄写会丢、会走样，也不受任何额度约束；</li>
+      <li><strong>聚合</strong>：把三份结论合成一段，要么由模型在正文里手写，要么再发一次 <code>task</code> 让子代理去合——
+        后者等于要求模型自己拼出「汇总子代理该看什么」。</li>
+    </ul>
+
+    <p>
+      于是本插件做的事情是：把这三件事收进<strong>一次调用、一份结构化输入</strong>里。
+      模型写下 <code>{"spec": {...}}</code> 的那一刻，它同时声明了「有几件事、谁等谁、最后怎么合」。
+      插件负责把这份声明变成调度动作——校验它、分层派生它、把上游结论转交给下游、按声明聚合。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th></th><th><code>task</code>（内核内置薄工具）</th><th><code>workflow</code>（本插件）</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>一次调用派几个子代理</td>
+            <td>1 个</td>
+            <td>步骤数（≤ 12），声明 <code>summarize</code> 时再加 1 个汇总</td>
+          </tr>
+          <tr>
+            <td>能不能并行</td>
+            <td>调用方要自己多次调用，每次同步等结果</td>
+            <td>无 <code>needs</code> 的步骤同层：先全部派生、再逐个等待</td>
+          </tr>
+          <tr>
+            <td>下游拿得到上游结论吗</td>
+            <td>要模型自己抄进 prompt</td>
+            <td>插件自动把直接依赖的结论拼进下游任务（有损、带归档路径）</td>
+          </tr>
+          <tr>
+            <td>失败怎么办</td>
+            <td>单次调用的成败</td>
+            <td>由每步的 <code>when</code> 决定谁被跳过；整条编排不中断</td>
+          </tr>
+          <tr>
+            <td>选型判据（写进工具名片的原话）</td>
+            <td>「只派一个子代理做一件事时用 <code>task</code> 即可」</td>
+            <td>「适合「几件事可以同时做、再把结果合起来」的任务」</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      选型判据的原文在工具名片里，见
+      <code>Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowTool.java:118-127</code>。
+      这句话重要：<strong>选错不会出错，只是慢</strong>——用一个 12 步的 spec 去做一件一句话能说完的事，
+      唯一后果是多花了几个子代理的额度。
+    </p>
+
+    <div class="mermaid">
+flowchart LR
+  LLM["模型"] -->|"工具调用 workflow，参数带 spec"| TOOL["WorkflowTool"]
+  TOOL --> PARSE["WorkflowSpecParser<br/>类型 / 唯一 / 引用 / 环 / 上限"]
+  PARSE -->|"校验过的 WorkflowSpec"| ENG["WorkflowEngine<br/>分层调度 + 聚合"]
+  ENG -->|"port.spawn 立即返回，随后 await"| PORT["SubAgentPort<br/>内核给的委派端口"]
+  PORT --> KERNEL["内核委派实现<br/>与 task 同一条代码路径"]
+  ENG --> TRK["WorkflowTracker<br/>内存台账"]
+  TRK -->|"状态变化回调"| EVT["UiInvalidatedEvent"]
+  EVT --> SHELL["外壳 UiContributions<br/>重新收集面板"]
+  SHELL --> PANEL["WorkflowPanel<br/>UiRegion.TOP"]
+  ENG --> TOOL
+  TOOL -->|"首行结论 + 聚合正文 + 失败清单"| LLM
+    </div>
+    <p class="figure-cap">图 24-1　一次 <code>workflow</code> 调用经过的全部站点：插件只占工具、提示词、面板三个扩展点，派生动作用的是端口</p>
+
+    <!-- ============================================================ -->
+    <h2>2. 插件构成：5 个协作者 + 1 个入口</h2>
+
+    <p>
+      <code>start()</code> 就九行，但它把整个装配顺序讲完了：<strong>先拿端口、再造台账与引擎、最后才注册</strong>。
+      注释给的理由是「处理器一旦注册就可能被调用，依赖必须已经就绪」——注册不是配置，是立即可见的暴露。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowPlugin.java:35-51（类声明与 start：装配与三条注册）</div>
+
+<pre><code class="language-java">public final class WorkflowPlugin implements JellyfishPlugin {
+
+    /** 日志。 */
+    private static final Logger LOG = LoggerFactory.getLogger(WorkflowPlugin.class);
+
+    @Override
+    public void start(PluginContext context) {
+        SubAgentPort port = context.delegations();
+        // 先装配台账与引擎再注册：处理器一旦注册就可能被调用，依赖必须已经就绪
+        WorkflowTracker tracker = new WorkflowTracker(invalidator(context));
+        WorkflowEngine engine = new WorkflowEngine(port, tracker);
+        context.handle(ToolCallRequest.class, WorkflowTool.NAME, WorkflowTool.descriptor(),
+                new WorkflowTool(engine));
+        context.contribute(PromptContributionRequest.class, new WorkflowGuidance());
+        context.contribute(PanelContributionRequest.class, new WorkflowPanel(tracker));
+        LOG.info("编排插件已启动: tool={}", WorkflowTool.NAME);
+    }</code></pre>
+
+    <p>
+      注意这三条注册的类型不同，语义也不同：<code>handle</code> 是「按路由键精确匹配，同一请求类型 + 路由键至多一个处理器」，
+      <code>contribute</code> 是「类型级贡献，允许 0..N 个处理器」（
+      <code>Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/plugin/PluginContext.java:33-35</code>）。
+      工具是「内核按名字找它」，提示词与面板是「内核把同类贡献都收一遍」。
+    </p>
+
+    <p>
+      类注释把本插件描述成「只占两个扩展点」（
+      <code>Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowPlugin.java:16-21</code>），
+      而 <code>start()</code> 实际注册了三条——多出来的一条是面板贡献。
+      它不算矛盾：前两条（工具、提示词）属于「模型看得见的能力」，面板属于界面侧的常驻展示，内核收集它们的时机完全不同。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/resources/plugin.properties:1-13（PF4J 描述符，逐字）</div>
+
+<pre><code class="language-text"># Jellyfish 官方编排插件（PF4J 描述符，必须位于插件 jar 根目录）
+#
+# plugin.id 同时是注册表的 owner：插件卸载时按它批量回收工具与提示词贡献。
+plugin.id=jellyfish-plugin-workflow
+plugin.class=zcd.jellyfish.plugin.workflow.WorkflowPlugin
+plugin.version=0.1.1
+plugin.provider=zcd
+plugin.description=编排：一份声明式 spec 派生一批子代理，按依赖并发执行并聚合结果
+
+# 内核未向 PF4J 声明系统版本（缺省 "0.0.0" 会让这条校验直接放行），写 * 是显式声明「不限版本」。
+plugin.requires=*
+
+jellyfish.tags=workflow,orchestration,subagent</code></pre>
+
+    <p>
+      依赖只有两条，且都是 <code>provided</code>：<code>jellyfish-api</code>（内核契约）与 <code>slf4j-api</code>。
+      <code>pom.xml</code> 里那三行注释解释了为什么必须是 <code>provided</code>——
+      PF4J 的插件类加载器是子优先，插件自带 <code>zcd/jellyfish/api</code> 会遮蔽父加载器的同名类、破坏类型同一性，
+      内核的 <code>PluginClasspathGuard</code> 会在加载期直接拒收这种包（
+      <code>Jellyfish-Plugins/jellyfish-plugin-workflow/pom.xml:17-26</code>）。这也是「插件与内核之间只有 api 契约」的落地方式。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>类</th><th>行数</th><th>职责</th><th>线程 / 可变性</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>WorkflowPlugin</code></td><td>75</td>
+            <td>入口：拿端口、造台账与引擎、注册三条贡献、把台账变化变成失效事件</td>
+            <td>只在 <code>start()</code> 里跑一次</td>
+          </tr>
+          <tr>
+            <td><code>WorkflowTool</code></td><td>276</td>
+            <td>工具处理器 + 工具名片（JSON Schema）+ 把 <code>WorkflowRun</code> 渲染成回灌文本与元数据</td>
+            <td>无状态</td>
+          </tr>
+          <tr>
+            <td><code>WorkflowSpecParser</code></td><td>200</td>
+            <td>把不可信参数结构变成校验过的 <code>WorkflowSpec</code>；唯一能构造它的地方</td>
+            <td>无状态、纯函数</td>
+          </tr>
+          <tr>
+            <td><code>WorkflowEngine</code></td><td>507</td>
+            <td>额度预检、分层调度、上游结论注入、聚合与汇总；本页最重的一个类</td>
+            <td>无状态（除端口与台账引用）</td>
+          </tr>
+          <tr>
+            <td><code>WorkflowTracker</code></td><td>240</td>
+            <td>正在跑的编排的台账：引擎写、面板读；状态变化时回调 <code>onChange</code></td>
+            <td>全部状态由自身锁保护，对外只给不可变快照</td>
+          </tr>
+          <tr>
+            <td><code>WorkflowPanel</code></td><td>199</td>
+            <td>面板处理器：读一次台账快照、拼几行文本、落 <code>UiRegion.TOP</code></td>
+            <td>快且只读；不发失效事件</td>
+          </tr>
+          <tr>
+            <td><code>WorkflowGuidance</code></td><td>51</td>
+            <td>提示词贡献：一个可照抄的例句 + 选型规则，落 <code>PromptPlacement.STATIC</code></td>
+            <td>无状态</td>
+          </tr>
+          <tr>
+            <td><code>SpecValues</code></td><td>133</td>
+            <td>字段级取值工具：类型不符抛异常且<strong>回显实际收到的值</strong>；空串按「没写」处理</td>
+            <td>工具类，禁止实例化</td>
+          </tr>
+          <tr>
+            <td><code>StepCondition</code></td><td>69</td>
+            <td>枚举：<code>always</code> / <code>on_success</code> / <code>on_failure</code> 与取值解析</td>
+            <td>不可变</td>
+          </tr>
+          <tr>
+            <td><code>AggregateMode</code></td><td>64</td>
+            <td>枚举：<code>collect</code> / <code>summarize</code> 与取值解析</td>
+            <td>不可变</td>
+          </tr>
+          <tr>
+            <td><code>StepState</code></td><td>49</td>
+            <td>枚举：面板用的 5 个状态与行首 ASCII 标记</td>
+            <td>不可变</td>
+          </tr>
+          <tr>
+            <td><code>WorkflowSpec</code></td><td>95</td>
+            <td>校验过的 spec：步骤列表 + 聚合声明；不做任何校验</td>
+            <td>不可变，可跨线程传递</td>
+          </tr>
+          <tr>
+            <td><code>WorkflowStep</code></td><td>123</td>
+            <td>一个步骤：<code>id</code> / <code>name</code> / <code>agent</code> / <code>prompt</code> / <code>needs</code> / <code>when</code></td>
+            <td>不可变，可跨线程传递</td>
+          </tr>
+          <tr>
+            <td><code>StepOutcome</code></td><td>148</td>
+            <td>一个步骤的结局：跑过（带委派结果）或没跑（带原因），且区分「被取消」与「条件不满足」</td>
+            <td>不可变</td>
+          </tr>
+          <tr>
+            <td><code>WorkflowRun</code></td><td>170</td>
+            <td>一次编排的全部结局：各步结果 + 汇总结果 + 聚合文本 + 轮数/token 累计</td>
+            <td>不可变</td>
+          </tr>
+          <tr>
+            <td><code>WorkflowProgress</code></td><td>172</td>
+            <td>面板读的只读快照（含嵌套的 <code>Step</code> 值类型）；内含「已了结步数」的判据</td>
+            <td>不可变快照</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      主源码共 <strong>16 个文件、2571 行</strong>；测试 7 个类、2189 行。
+      两类文件的分工很干净：能变的只有台账（<code>WorkflowTracker</code> 里那两个 <code>Map</code>），
+      其余全是不可变值类型或纯函数——这也是「引擎跑在工具线程、面板跑在渲染线程」能不出问题的前提。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>3. spec 的数据模型与校验：全部发生在派生任何子代理之前</h2>
+
+    <p>
+      spec 的形状只有三个顶层字段：<code>name</code>（展示名，可省）、<code>steps</code>（必填、非空、≤ 12 项）、
+      <code>aggregate</code>（可省，省略即 <code>collect</code>）。步骤对象里，
+      <strong>只有 <code>id</code> / <code>agent</code> / <code>prompt</code> 三个必填</strong>。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>字段</th><th>必填</th><th>取值</th><th>执行语义上的作用</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>spec.name</code></td><td>否</td><td>字符串</td>
+            <td>仅日志与结果首行、面板标题；缺省时展示 <code>未命名</code>（<code>WorkflowSpec.displayName()</code>）</td>
+          </tr>
+          <tr>
+            <td><code>steps[].id</code></td><td><strong>是</strong></td><td>非空白字符串，spec 内唯一</td>
+            <td>唯一机器可读键：被 <code>needs</code> 引用、材料标头与失败清单都用它</td>
+          </tr>
+          <tr>
+            <td><code>steps[].name</code></td><td>否</td><td>字符串，不设长度限制</td>
+            <td><strong>只用于面板展示</strong>，缺省时面板退回显示 <code>id</code>；不进任何机器可读位置</td>
+          </tr>
+          <tr>
+            <td><code>steps[].agent</code></td><td><strong>是</strong></td><td>非空白字符串（是否可委派由内核判）</td>
+            <td>被委派到的 agent 标识，逐字进 <code>DelegationRequest</code></td>
+          </tr>
+          <tr>
+            <td><code>steps[].prompt</code></td><td><strong>是</strong></td><td>非空白字符串</td>
+            <td>这一步的任务原文；子代理看不到本次对话，只有这段文字（有 <code>needs</code> 时前面会拼上材料）</td>
+          </tr>
+          <tr>
+            <td><code>steps[].needs</code></td><td>否</td><td>字符串数组，元素必须非空白</td>
+            <td>前置步骤 id：它们的<strong>结论</strong>与它们的<strong>成败</strong>都从这里流向本步</td>
+          </tr>
+          <tr>
+            <td><code>steps[].when</code></td><td>否</td><td><code>always</code> / <code>on_success</code> / <code>on_failure</code></td>
+            <td>本步要不要跑：只按<strong>直接依赖</strong>的成败判断，不做布尔组合</td>
+          </tr>
+          <tr>
+            <td><code>aggregate.mode</code></td><td>否</td><td><code>collect</code> / <code>summarize</code></td>
+            <td>各步正文是按顺序拼接，还是再派一个子代理汇成一段</td>
+          </tr>
+          <tr>
+            <td><code>aggregate.agent</code></td><td>仅 <code>summarize</code> 时</td><td>非空白字符串</td>
+            <td>汇总用的子代理；<strong>声明 <code>summarize</code> 却不给 <code>agent</code> 直接拒绝</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      下面这段是校验的主体：唯一性、自依赖、<code>when</code> 的取值、以及「<code>on_failure</code> 必须声明 <code>needs</code>」，
+      逐条都在这一步做完。它跑完之前，插件没有派生过任何子代理。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowSpecParser.java:103-131（parseSteps 的核心：逐字段校验 + 引用存在性检查）</div>
+
+<pre><code class="language-java">            String id = SpecValues.requiredText(step.get("id"), where + ".id");
+            if (!ids.add(id)) {
+                throw new JellyfishException(where + ".id 与前面某一步重复：" + id + "（步骤 id 必须唯一）");
+            }
+            // 名字纯粹用于展示，因此只做「是不是字符串」这一层校验：它不影响任何执行语义，
+            // 为它的长度或内容设限只会让一份本来能跑的 spec 被拒
+            String name = SpecValues.optionalText(step.get("name"), where + ".name");
+            String agent = SpecValues.requiredText(step.get("agent"), where + ".agent");
+            String prompt = SpecValues.requiredText(step.get("prompt"), where + ".prompt");
+            List&lt;String&gt; needs = SpecValues.textList(step.get("needs"), where + ".needs");
+            if (needs.contains(id)) {
+                throw new JellyfishException(where + ".needs 不能依赖自己：" + id);
+            }
+            StepCondition when = StepCondition.fromWire(step.get("when"), where + ".when");
+            if (when == StepCondition.ON_FAILURE &amp;&amp; needs.isEmpty()) {
+                // 真空为假的步骤不会执行，模型只会看到「什么都没发生」而查不出原因——当场说清楚
+                throw new JellyfishException(where + ".when 为 on_failure 时必须声明 needs："
+                        + "没有前置步骤就不会有失败可等");
+            }
+            steps.add(new WorkflowStep(id, name, agent, prompt, needs, when));
+        }
+        for (WorkflowStep step : steps) {
+            for (String need : step.getNeeds()) {
+                if (!ids.contains(need)) {
+                    throw new JellyfishException("步骤 " + step.getId() + " 依赖了不存在的步骤：" + need
+                            + "（已声明的步骤：" + ids + "）");
+                }
+            }
+        }
+        rejectCycles(steps);
+        return steps;
+    }</code></pre>
+
+    <p>
+      三点值得单独看。第一，<strong>报错消息一律回显实际收到的值</strong>——<code>SpecValues</code> 的类注释讲了理由：
+      模型看不到这份实现，只说「类型不对」它改不动（它以为自己传的就是对的），会原样重试。第二，<strong>空字符串按「没写」处理</strong>，
+      因为模型常把可选字段写成 <code>""</code>。第三，<strong><code>name</code> 只做「是不是字符串」这一层校验</strong>，
+      连长度都不限——它不影响任何执行语义，为它设限只会拒掉一份本来能跑的 spec（渲染时才截短，见第 8 节）。
+    </p>
+
+    <p>
+      环检测是单独一段深度优先遍历。环不是「慢」或「错」，而是<strong>整份 spec 永远跑不完</strong>：
+      环里的每一步都在等别人。所以它在解析期被当成拒绝理由，而不是执行期的一个兜底分支。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowSpecParser.java:156-178（visit：深度优先遍历找环）</div>
+
+<pre><code class="language-java">    /**
+     * 深度优先地找出环。
+     *
+     * @param step     当前步骤
+     * @param byId     步骤索引
+     * @param visiting 正在访问的路径
+     * @param done     已访问完的步骤
+     * @throws JellyfishException 遇到环时抛出
+     */
+    private static void visit(WorkflowStep step, Map&lt;String, WorkflowStep&gt; byId, Set&lt;String&gt; visiting,
+                              Set&lt;String&gt; done) {
+        if (!visiting.add(step.getId())) {
+            throw new JellyfishException("依赖成环：" + String.join(" → ", visiting) + " → " + step.getId()
+                    + "。声明式 spec 不做循环——环里的每一步都在等别人，谁也跑不了。");
+        }
+        for (String need : step.getNeeds()) {
+            WorkflowStep next = byId.get(need);
+            if (next != null &amp;&amp; !done.contains(next.getId())) {
+                visit(next, byId, visiting, done);
+            }
+        }
+        visiting.remove(step.getId());
+        done.add(step.getId());
+    }</code></pre>
+
+    <p>
+      报错里把环路径整条打出来（<code>String.join(" → ", visiting)</code>）也是同一个思路：
+      模型拿到的不该是「有环」，而是「哪一步指向哪一步」。<code>visiting</code> 集合同时充当「当前路径」，
+      因此它天然能打印出环路本身，不必再跑一趟。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>校验项</th><th>拒绝条件</th><th>代码位置</th></tr></thead>
+        <tbody>
+          <tr><td><code>spec</code> 存在且是对象</td><td>缺字段或类型不符</td><td><code>WorkflowSpecParser.java:55-60</code></td></tr>
+          <tr><td><code>steps</code> 非空数组</td><td>不是数组，或空数组</td><td><code>WorkflowSpecParser.java:86-89</code></td></tr>
+          <tr><td>步数上限</td><td>超过 <code>MAX_STEPS = 12</code></td><td><code>WorkflowSpecParser.java:39</code>、<code>91-94</code></td></tr>
+          <tr><td>步骤 <code>id</code> 唯一</td><td>与前面某一步重复</td><td><code>WorkflowSpecParser.java:104-106</code></td></tr>
+          <tr><td>必填字段非空白</td><td><code>id</code> / <code>agent</code> / <code>prompt</code> 缺失或空白</td><td><code>SpecValues.java:58-64</code></td></tr>
+          <tr><td>不依赖自己</td><td><code>needs</code> 里出现自己的 <code>id</code></td><td><code>WorkflowSpecParser.java:113-115</code></td></tr>
+          <tr><td><code>when</code> 取值合法</td><td>不在三个取值内</td><td><code>StepCondition.java:57-68</code></td></tr>
+          <tr><td><code>on_failure</code> 必须有 <code>needs</code></td><td>无前置步骤却等失败</td><td><code>WorkflowSpecParser.java:117-121</code></td></tr>
+          <tr><td>依赖引用存在</td><td><code>needs</code> 指向未声明的 id</td><td><code>WorkflowSpecParser.java:124-131</code></td></tr>
+          <tr><td>依赖无环</td><td>存在环</td><td><code>WorkflowSpecParser.java:132</code>、<code>142-178</code></td></tr>
+          <tr><td><code>summarize</code> 附带 <code>agent</code></td><td>声明汇总却不给汇总者</td><td><code>WorkflowSpecParser.java:70-73</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：为什么校验必须全部前置，且只做一次</span>
+      <p>
+        <code>WorkflowSpecParser</code> 的类注释把两条原则写在一起：「校验全部发生在派生任何 run 之前」与
+        「越界即整份拒绝，不做部分执行」。前者是成本考虑——一份写错的 spec 不该在烧掉几个子代理之后才被拒绝；
+        后者是<strong>可判断性</strong>考虑——部分执行会让模型无从判断「哪些做完了」，而那正是它下一步决策所需要的信息。
+        代价是「能跑几步算几步」这种宽容在编排里被明确放弃：宁可拒绝一份本来也跑得下的 spec，
+        也不要让它跑到一半时以一种「看起来像某几个步骤坏了」的方式失败。
+      </p>
+    </div>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：<code>agent</code> 写错不在校验范围里</span>
+      <p>
+        <strong>现象</strong>：spec 里 <code>"agent": "scoutt"</code>（多打一个字母）不会让工具调用失败；
+        工具正常返回，只是那一步在失败清单里显示为「失败：<code>xxx</code>」。
+        <strong>根因</strong>：解析期只校验「<code>agent</code> 是不是非空白字符串」，
+        「这个类型是否可委派」是内核的准入判断——引擎注释写明「子代理类型未知等准入问题由内核以结果形式回报，不会抛到这里」
+        （<code>WorkflowEngine.java:110</code>），准入被拒时句柄直接带着 <code>REJECTED</code> 的结果
+        （<code>SubAgentPort.java:29-31</code>）。
+        <strong>规避</strong>：拿不准就写工具名片里提到的那几个类型；看到某一步「失败」时，
+        先看失败清单里的原因是不是「未开始：类型未知或不可委派」，而不是去查子代理本身。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>4. 执行语义：分层调度、<code>when</code> 与失败传播</h2>
+
+    <p>
+      调度算法一句话说清：<strong>反复挑出「依赖都已决、自己还没决」的步骤作为一层，整层先全部派生、再逐个等待</strong>。
+      没有拓扑排序的显式数据结构，也没有优先队列——每一轮对声明顺序做一次线性扫描即可，因为步数上限是 12。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowEngine.java:184-213（execute 的主循环：一层先全部派生、再逐个 await）</div>
+
+<pre><code class="language-java">            Map&lt;String, DelegationHandle&gt; running = new LinkedHashMap&lt;String, DelegationHandle&gt;();
+            for (WorkflowStep step : layer) {
+                settled.add(step.getId());
+                if (token.isCancelled()) {
+                    StepOutcome stopped = StepOutcome.cancelled(step);
+                    decided.put(step.getId(), stopped);
+                    tracker.stepFinished(workflowId, step.getId(), StepState.SKIPPED);
+                    report(sink, stopped);
+                    continue;
+                }
+                String blocked = blockReason(step, decided);
+                if (blocked != null) {
+                    StepOutcome skipped = StepOutcome.notRun(step, blocked);
+                    decided.put(step.getId(), skipped);
+                    tracker.stepFinished(workflowId, step.getId(), StepState.SKIPPED);
+                    report(sink, skipped);
+                    continue;
+                }
+                progress(sink, "  · " + step.getId() + "（" + step.getAgent() + "）开始\n");
+                tracker.stepStarted(workflowId, step.getId());
+                running.put(step.getId(), port.spawn(new DelegationRequest(parentSessionId, step.getAgent(),
+                        promptFor(step, decided), token)));
+            }
+            for (Map.Entry&lt;String, DelegationHandle&gt; entry : running.entrySet()) {
+                StepOutcome outcome = StepOutcome.run(byId.get(entry.getKey()), entry.getValue().await());
+                decided.put(entry.getKey(), outcome);
+                tracker.stepFinished(workflowId, entry.getKey(),
+                        outcome.succeeded() ? StepState.DONE : StepState.FAILED);
+                report(sink, outcome);
+            }</code></pre>
+
+    <p>
+      四个细节都在这段循环里，值得逐个点名。
+      <strong>①</strong>「先全部派生、再逐个等待」是并发的全部实现——<code>port.spawn</code> 立即返回，
+      所以连发 N 个之后 N 个 run 已经在并发执行，<code>await</code> 只是收结果。
+      <strong>②</strong>步骤一被放进 <code>layer</code> 就立刻 <code>settled.add</code>，
+      因此同一层的步骤相互之间<em>看不到</em>对方的结果：同层步骤不可能用彼此的结论，这是「同层 = 可并行」的必然推论。
+      <strong>③</strong>取消检查在派生之前：用户按了 Esc 就不该再派新的 run，那些没跑的步骤如实记为「取消」。
+      <strong>④</strong>进度既写台账（给面板）也写 <code>sink</code>（给「运行中的工具」区域），两条通道互不依赖。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowEngine.java:239-254（readyLayer：分层判据）</div>
+
+<pre><code class="language-java">    /**
+     * 挑出下一层可以执行的步骤：依赖都已决，且自己还没决。
+     *
+     * @param spec    生效的 spec
+     * @param settled 已决的步骤标识
+     * @return 该层的步骤（声明顺序），可能为空
+     */
+    private static List&lt;WorkflowStep&gt; readyLayer(WorkflowSpec spec, Set&lt;String&gt; settled) {
+        List&lt;WorkflowStep&gt; layer = new ArrayList&lt;WorkflowStep&gt;();
+        for (WorkflowStep step : spec.getSteps()) {
+            if (!settled.contains(step.getId()) &amp;&amp; settled.containsAll(step.getNeeds())) {
+                layer.add(step);
+            }
+        }
+        return layer;
+    }</code></pre>
+
+    <div class="mermaid">
+flowchart TD
+  S["spec：3 步 + 1 步补救"]
+  A["probe-a：scout<br/>无 needs → 立刻派生"]
+  B["probe-b：scout<br/>无 needs → 立刻派生"]
+  C["plan：planner<br/>needs = probe-a 与 probe-b"]
+  D["rescue：scout<br/>needs = plan，when = on_failure"]
+  S --> A
+  S --> B
+  A --> C
+  B --> C
+  C --> D
+    </div>
+    <p class="figure-cap">图 24-2　第一层两个步骤同时派生，第二层等两者都结束才开始；第三层只在第二层失败时才会跑</p>
+
+    <p>
+      <code>when</code> 的判断逻辑集中在一个 <code>switch</code> 里，它只读<strong>直接依赖</strong>的结局：
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowEngine.java:263-282（blockReason：静态条件拦人）</div>
+
+<pre><code class="language-java">    private static String blockReason(WorkflowStep step, Map&lt;String, StepOutcome&gt; decided) {
+        switch (step.getWhen()) {
+            case ON_SUCCESS:
+                // 无依赖时真空为真：它与 always 等价，模型写出来也没有坏处，因此不特别说明
+                for (String need : step.getNeeds()) {
+                    if (!decided.get(need).succeeded()) {
+                        return "前置步骤未成功：" + need;
+                    }
+                }
+                return null;
+            case ON_FAILURE:
+                for (String need : step.getNeeds()) {
+                    if (decided.get(need).failed()) {
+                        return null;
+                    }
+                }
+                return "前置步骤没有失败";
+            default:
+                return null;
+        }
+    }</code></pre>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th><code>when</code></th><th>语义</th><th>直接依赖的什么情况会拦下它</th><th>依据</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>always</code>（缺省）</td>
+            <td>无条件执行</td>
+            <td>不拦；<code>default</code> 分支直接返回 <code>null</code></td>
+            <td><code>StepCondition.java:17</code>、<code>WorkflowEngine.java:280-281</code></td>
+          </tr>
+          <tr>
+            <td><code>on_success</code></td>
+            <td>直接依赖全部成功才执行</td>
+            <td>任一直接依赖 <code>!succeeded()</code>——<strong>包括「被跳过」与「被取消」</strong>（它们没成功）</td>
+            <td><code>StepCondition.java:20</code>、<code>WorkflowEngine.java:266-272</code></td>
+          </tr>
+          <tr>
+            <td><code>on_failure</code></td>
+            <td>直接依赖里有失败才执行</td>
+            <td>所有直接依赖都没失败时返回「前置步骤没有失败」</td>
+            <td><code>StepCondition.java:23</code>、<code>WorkflowEngine.java:273-279</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      <code>on_success</code> 在无依赖时与 <code>always</code> 等价（循环体一次都不进，直接 <code>return null</code>），
+      引擎注释说这是「真空为真」且「模型写出来也没有坏处，因此不特别说明」；
+      而 <code>on_failure</code> 在无依赖时是<strong>真空为假</strong>——它永远不会跑，
+      模型只会看到「什么都没发生」而查不出原因，所以解析期就直接拒绝（见第 3 节）。
+      同一个逻辑空集，一个不管、一个报错，差别在于「哪种更不容易让人误解」。
+    </p>
+
+    <p>
+      「成功」的判据也在这个插件里，且刻意比直觉宽松：
+      <strong>达到轮数上限（<code>TRUNCATED</code>）算成功</strong>。理由是那个子代理确实跑完了，
+      只是没收敛，它的正文对后续步骤仍然有用；把它当失败会让「结论不完整」连带把整条下游都跳过（
+      <code>WorkflowSpecParser.java:190-198</code>）。
+    </p>
+
+    <div class="mermaid">
+stateDiagram-v2
+  [*] --> PENDING
+  PENDING --> RUNNING: 派生成功，stepStarted
+  RUNNING --> DONE: COMPLETED 或 TRUNCATED
+  RUNNING --> FAILED: FAILED / REJECTED / CANCELLED
+  PENDING --> SKIPPED: when 被拦下，或回合已取消
+    </div>
+    <p class="figure-cap">图 24-3　步骤的五个状态：SKIPPED 不是失败，但它<em>也不是成功</em>，因此会继续拦下游的 <code>on_success</code></p>
+
+    <p>
+      <strong>一步失败之后整条编排的走向</strong>，可以拆成三句：失败只影响它自己的下游（由各步 <code>when</code> 决定），
+      与它无依赖关系的步骤照常执行；未执行的原因被逐条记进 <code>StepOutcome</code>（「前置步骤未成功：<code>x</code>」/
+      「回合已取消」/「依赖无法满足，未执行」）；整条编排的汇总状态由 <code>WorkflowRun.hasFailure()</code> 给出，
+      它会一路传到工具的元数据里（见第 10 节）。
+    </p>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：失败为什么不该中断整条编排</span>
+      <p>
+        引擎注释给了直接理由：「让整批在第一步失败时全停，模型就得重新推演一遍剩下的部分」。
+        声明式 spec 的价值是一次说清全貌，因此「哪几步还能跑」应该由 spec 的依赖结构决定，而不是由运行期的一次失败决定。
+        与之配套的是：失败信息必须<strong>非常显眼</strong>地回报——所以工具结果的首行就写「<code>xxx</code> 失败」，
+        而不是把失败藏在正文末尾。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>5. 执行者是谁：内核的 <code>SubAgentPort</code>，不是插件自己的线程</h2>
+
+    <p>
+      这是本页最需要回源码确认的一点，答案在 <code>start()</code> 的第二行：<code>SubAgentPort port = context.delegations();</code>。
+      插件的每一个步骤都走 <code>port.spawn(new DelegationRequest(...))</code>，<strong>插件内部没有任何
+      <code>Thread</code> / <code>Executor</code> / 线程池</strong>——这一点可以直接用「源码里没有这些标识符」来验证，
+      也可以用引擎注释来确认，它把「先全部派生、再逐个等待」写成一条显式设计：
+      并发靠内核的 <code>agent-run</code> 池，本引擎只是在调用方线程上逐个 <code>await</code>。
+    </p>
+
+    <p>
+      为什么是「端口」而不是扩展点，<code>SubAgentPort</code> 的类注释讲了方向问题：
+      <code>handle</code> / <code>contribute</code> 是「内核回头找插件」，插件根本没有 invoke 内核处理器的入口；
+      把委派做成扩展点插件仍然调不动它。委派因此与 <code>emit</code> / <code>submit</code> / <code>present</code> 同类——
+      是插件往外发起的<strong>出向边</strong>（
+      <code>Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/subagent/SubAgentPort.java:6-9</code>，
+      20 页第 6 节也把它列为多 Agent 协作的形态 ②）。
+    </p>
+
+    <p>
+      于是「与 <code>task</code> 同一条代码路径」不是一句类比，而是可验证的事实：
+      开关、深度、单回合扇出、全局并发、墙钟与 token 预算、取消传播，两者逐字段一致
+      （<code>SubAgentPort.java:11-13</code>）。插件唯一的额外动作是<strong>在派生任何子代理之前先问一次额度</strong>：
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowEngine.java:142-156（requireQuota：额度不足时整份拒绝）</div>
+
+<pre><code class="language-java">    private void requireQuota(WorkflowSpec spec) {
+        DelegationQuota quota = port.quota();
+        int needed = spec.getSteps().size() + (spec.getAggregateMode() == AggregateMode.SUMMARIZE ? 1 : 0);
+        if (quota.getRemainingSpawns() &gt;= needed) {
+            return;
+        }
+        String reason = quota.getBlockedReason();
+        if (quota.isBlocked() &amp;&amp; reason != null &amp;&amp; !reason.trim().isEmpty()) {
+            // 一个也派不了：原因本身就是那句话（开关关了 / 没有回合 / 已用尽），不要自己另编一句
+            throw new JellyfishException("无法编排：" + reason.trim());
+        }
+        throw new JellyfishException("这份编排最多要派 " + needed + " 个子代理，而本回合只剩 "
+                + quota.getRemainingSpawns() + " 个名额（subAgent.maxSpawnsPerTurn）。"
+                + "请拆成几次 workflow，或调大该配置。");
+    }</code></pre>
+
+    <p>
+      三个判断都值得记：<strong>用上界而不是精确值</strong>（额度在派生时才被真正占用，而哪些步骤真的会跑取决于
+      <code>when</code>，静态条件下能给出的确定值只有「全跑一遍要几个」）；
+      <strong>一个也派不了时不另编理由</strong>（内核给的那句话本身就是「开关关了 / 没有回合 / 已用尽」）；
+      <strong>整份拒绝而不是能跑几步算几步</strong>。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>约束</th><th>谁定</th><th>默认值 / 依据</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>单次编排的规模</td><td>插件（解析期）</td>
+            <td><code>MAX_STEPS = 12</code>（<code>WorkflowSpecParser.java:39</code>）</td>
+          </tr>
+          <tr>
+            <td>本回合还能派几个（累计口径）</td><td>内核额度，插件只读快照</td>
+            <td><code>subAgent.maxSpawnsPerTurn</code> 缺省 <code>12</code>（<code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/SubAgentSettings.java:53</code>）</td>
+          </tr>
+          <tr>
+            <td>全局同时在跑几个</td><td>内核 governor</td>
+            <td><code>subAgent.maxConcurrentRuns</code> 缺省 <code>3</code>，超出的在内核侧排队（<code>SubAgentSettings.java:59</code>）</td>
+          </tr>
+          <tr>
+            <td>单个 run 烧多少 token</td><td>内核</td>
+            <td><code>subAgent.runTokenBudget</code> 缺省 <code>500_000</code>（<code>SubAgentSettings.java:89</code>）</td>
+          </tr>
+          <tr>
+            <td>单个 run 跑多久</td><td>内核</td>
+            <td><code>subAgent.runTimeoutMillis</code> 缺省 <code>300_000</code>（<code>SubAgentSettings.java:80</code>）</td>
+          </tr>
+          <tr>
+            <td>取消怎么传播</td><td>插件转交父回合令牌</td>
+            <td>每次派生都把 <code>token</code> 放进 <code>DelegationRequest</code>（<code>WorkflowEngine.java:204-205</code>）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      注意「额度」与「并发」是两件事，本插件的代码把它们分得很清楚：<code>requireQuota</code> 看的是<em>累计还能派几个</em>，
+      而<em>同时在跑几个</em>它一行都不管。这也解释了为什么一次 12 步的编排在默认配置下是可行的——
+      12 个 run 不会同时占用 12 条线程，超出的排在核内等许可。
+    </p>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：插件为什么不许有第二套并发控制</span>
+      <p>
+        <code>SubAgentPort</code> 与 <code>PluginContext.delegations()</code> 的注释都写了同一条禁令：
+        「插件不应另建并发控制：并发度由内核的 governor 决定」。理由不是洁癖——
+        两套上限互相不知道对方，就会出现「插件以为在并发、实际全在排队」这种<strong>查不出的现象</strong>：
+        面板上 5 个步骤都显示「进行中」，而其中只有一个真的在调模型。
+      </p>
+    </div>
+
+    <div class="callout warn">
+      <span class="callout-title">注意：一次编排会占住一条工具执行线程直到整批跑完</span>
+      <p>
+        <code>await()</code> 是阻塞在调用方线程上的阻塞等待，<code>DelegationHandle</code> 的注释把这条写成刻意的取舍：
+        「编排工具已经占着一条工具执行线程，它本来就要等结果才能回灌给模型」，反过来让内核回调插件则会把执行资源的生死交给插件。
+        因此等待是「编排方等内核」，不是「内核等插件」；一个跑十分钟的编排，那条工具线程也占十分钟。
+        同口径的还有 <code>task</code>（见 <a href="20-subagents.html">20 页</a>）。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>6. 上游结论怎么转交给下游</h2>
+
+    <p>
+      子代理之间彼此隔离——它们看不到对方，也看不到父会话（这是 <code>SubAgentLauncher</code> 的刻意设计）。
+      所以「<code>plan</code> 这一步能拿到 <code>probe-a</code> 与 <code>probe-b</code> 的结论」这件事，
+      只能由<strong>引擎在下发时替它们拼进 prompt</strong>。这也是为什么 spec 是一次性提交的却仍然可行：
+      模型写下下游 <code>prompt</code> 的那一刻上游还没跑，它没有可填的东西。
+    </p>
+
+    <p>
+      拼装规则很短：没有 <code>needs</code> 就原样下发；有的话在任务原文前面加一段材料
+      （<code>WorkflowEngine.java:304-309</code>）。材料的形态由 <code>blockOf</code> 决定，
+      它的三个特点都能从下面这段读出来：<strong>只给直接 <code>needs</code></strong>、
+      <strong>块首标注「被截了多少字」并附归档路径</strong>、<strong>截断时保留头部</strong>。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowEngine.java:350-372（blockOf：渲染一个依赖块）</div>
+
+<pre><code class="language-java">    private static String blockOf(StepOutcome outcome, int quota) {
+        WorkflowStep step = outcome.getStep();
+        String header = "## " + step.getId() + "（" + step.getAgent() + "）";
+        if (!outcome.hasRun()) {
+            // 未执行不是「没产出」：写清原因，下游才能判断该不该继续
+            return header + "｜未执行：" + outcome.getNotRunReason();
+        }
+        DelegationResult result = outcome.getResult();
+        String text = result.getText() == null ? "" : result.getText().trim();
+        if (text.isEmpty()) {
+            return header + "｜没有给出文本（" + reasonOf(result) + "）";
+        }
+        if (text.length() &lt;= quota) {
+            return header + "\n" + text;
+        }
+        StringBuilder note = new StringBuilder("｜结论 ").append(text.length())
+                .append(" 字，此处只给前 ").append(quota).append(" 字");
+        String path = result.getArchivePath();
+        if (path != null &amp;&amp; !path.trim().isEmpty()) {
+            note.append("；完整记录见 ").append(path.trim()).append("（可用 read_file 读取）");
+        }
+        return header + note + "\n" + head(text, quota) + "\n…（以上已截断）";
+    }</code></pre>
+
+    <p>
+      额度算法在 <code>materialOf</code> 里，只有两行：<code>quota = max(800, 20000 / needs.size())</code>
+      （<code>WorkflowEngine.java:323-331</code>）。
+      <strong>均分而不是按需分配</strong>是刻意的：短结论吃不完的额度不会让给长结论，
+      这样每个块的额度只取决于「有几个依赖」，模型据此就能预期自己拿到多少；
+      而 <code>MIN_MATERIAL_CHARS = 800</code> 的下限（<code>WorkflowEngine.java:71</code>）是为了避免依赖较多时
+      某块被均分成 0 字——「一个字都没有的依赖」在下游看来与「这一步没产出」无法区分。
+    </p>
+
+    <p>
+      两个常量决定了这套机制的量级：<code>MAX_MATERIAL_CHARS = 20_000</code>（<code>WorkflowEngine.java:62</code>）
+      对齐内核 <code>react.maxToolOutputChars</code> 的默认值
+      （<code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ReactSettings.java:45</code>）。
+      但引擎注释把目的说得很清楚：约束总量的目的<strong>不是</strong>怕撑爆上下文窗口（2 万字符离那还远），
+      而是怕下游撞上 <code>subAgent.runTokenBudget</code>（缺省 50 万）而以「预算用尽」收敛——
+      那时它连结论都没有。有损之所以可以接受，是因为材料进了下游的会话历史后，<strong>每一轮输入都要重付一次</strong>。
+    </p>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：链式依赖不会把上游的上游一起转交</span>
+      <p>
+        <strong>现象</strong>：A → B → C 的链上，C 的材料里只有 B 的结论，没有 A 的。
+        <strong>根因</strong>：<code>promptFor</code> 只取「模型声明的数据依赖」，也就是<em>直接</em>的 <code>needs</code>；
+        取全部已决步骤会让链式依赖重复转发（A 的结论跟着 B 进 C，A 又直接进 C），材料体积随深度增长，而 A 的内容一个字没变。
+        <strong>规避</strong>：要让 C 看到 A，就在 C 的 <code>needs</code> 里把 A 也写上（同时 C 会等到 A 结束——
+        这与它的依赖语义一致）。另一种做法是让 B 在自己的结论里带上 A 的关键结论。
+      </p>
+    </div>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：截断发生在「插件转交」这一层，而写 prompt 的模型看不到</span>
+      <p>
+        <strong>现象</strong>：模型写了「请把上游全文逐字核对」，下游却只拿到前 N 字，输出的核对结论缺了一块。
+        <strong>根因</strong>：每个依赖块的额度由「依赖个数」均分，且是硬上限；截断提示只放在材料块的首行给<em>下游子代理</em>看，
+        提交 spec 的那个模型在写 prompt 时并不知道会有截断。
+        <strong>规避</strong>：把「需要全文」写进下游任务的<em>做法</em>里——材料块在截断时会附上归档路径并提示「可用 <code>read_file</code> 读取」，
+        下游子代理可以自己按需自取（内核把每次 run 的完整过程归档落盘，路径经委派结果传出来；
+        归档本身受文件数与字节数上限约束，最旧的会被清理，见 <code>SubAgentSettings.java:111</code>、<code>119</code>）。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>7. 聚合：<code>collect</code> 与 <code>summarize</code></h2>
+
+    <p>
+      <code>aggregate.mode</code> 只有两个取值（<code>AggregateMode.java:17-20</code>）。
+      <code>collect</code>（缺省）按声明顺序把各步正文拼成 <code>## id（agent）</code> 分节的文本
+      （<code>WorkflowEngine.java:416-427</code>）；<code>summarize</code> 则<strong>再派一个子代理</strong>把它们汇成一段结论。
+      「合并」这类更聪明的策略刻意不做——<code>AggregateMode</code> 的类注释说，需要它的时候那本身就是<em>一个步骤</em>，
+      由模型自己声明出来（它可以有一个 agent 与一段 prompt）。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowEngine.java:442-458（summarize：多派一次委派，多花一笔额度）</div>
+
+<pre><code class="language-java">    private DelegationResult summarize(WorkflowSpec spec, String parentSessionId, CancellationToken token,
+                                       ToolOutputSink sink, String digest) {
+        if (digest.trim().isEmpty()) {
+            return null;
+        }
+        String material = digest.length() &gt; MAX_MATERIAL_CHARS
+                ? head(digest, MAX_MATERIAL_CHARS) + "\n\n（材料过长，以上已截断）"
+                : digest;
+        String prompt = "下面是同一次任务里几个子代理各自给出的结论。把它们汇总成一段结论："
+                + "优先保留彼此一致的事实，明确指出相互冲突的地方，不要逐条复述，也不要编造材料里没有的信息。\n\n"
+                + material;
+        progress(sink, "  · 汇总（" + spec.getAggregateAgent() + "）开始\n");
+        DelegationResult result = port.spawn(new DelegationRequest(parentSessionId, spec.getAggregateAgent(),
+                prompt, token)).await();
+        progress(sink, "  · 汇总 " + statusText(result.getStatus()) + "\n");
+        return result;
+    }</code></pre>
+
+    <p>
+      这段有三处克制的设计。第一，<strong>没有任何正文时不做汇总</strong>：全部步骤都失败或未执行时，
+      汇总子代理只能拿到一段空材料，「它要么编、要么反问，两者都比『如实汇报没有结果』更糟」。
+      第二，<strong>取消后跳过汇总</strong>：调用点在汇总前检查 <code>token.isCancelled()</code>，
+      理由是「汇总本身也是一次子代理 run（墙钟按单 run 的上限算）。用户已经按了 Esc，就不该再花一次去做一件他不会看的活」
+      （<code>WorkflowEngine.java:224-231</code>）。第三，<strong>汇总也是额度的一部分</strong>：
+      <code>requireQuota</code> 里的 <code>needed</code> 会为它加一；而 <code>WorkflowRun</code> 的
+      <code>totalRounds()</code> / <code>totalTokens()</code> 显式把它算进累计——漏掉它会让「这次一共花了多少」少算最后也是最贵的一步
+      （<code>WorkflowRun.java:14-15</code>）。
+    </p>
+
+    <div class="callout tip">
+      <span class="callout-title">一个容易忽略的收益：汇总是一次「对齐事实」的机会</span>
+      <p>
+        并行步骤由不同子代理独立完成，彼此可能冲突——材料块的引导语就直说了这件事
+        （<code>WorkflowEngine.java:74-75</code>）。而汇总提示词明确要求「优先保留彼此一致的事实，
+        明确指出相互冲突的地方」。这是把「多路并行的代价」（结论可能矛盾）在流程内消化掉，而不是丢回给模型。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>8. 状态与可观测：台账 + 面板 + 一条失效通知</h2>
+
+    <p>
+      这块的结构值得先说清：面板是<strong>拉取式</strong>的（外壳在有理由相信内容变了时才问一次），
+      而引擎在一个工具调用里同步跑完——两者的生命周期完全错开。
+      <code>WorkflowTracker</code> 是它们之间唯一的交汇点：引擎不关心有没有人看，面板也不需要知道引擎在哪一步。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowTracker.java:45-64（started：先登记再干活）</div>
+
+<pre><code class="language-java">    /**
+     * 登记一次编排。
+     * <p>
+     * 在派生任何子代理之前调用，因此面板从一开始就能显示出「还有哪些步骤没跑」——
+     * 只显示「已跑完的」会让它看起来像在倒退。
+     *
+     * @param sessionId 所属会话，不可为空白
+     * @param spec      生效的 spec，不可为 {@code null}
+     * @return 编排标识，用于后续更新与移除
+     */
+    synchronized String started(String sessionId, WorkflowSpec spec) {
+        String workflowId = UUID.randomUUID().toString();
+        List&lt;Step&gt; steps = new ArrayList&lt;Step&gt;();
+        for (WorkflowStep step : spec.getSteps()) {
+            steps.add(new Step(step.getId(), step.getName(), step.getAgent(), StepState.PENDING));
+        }
+        entries.put(workflowId, new Entry(sessionId, spec.displayName(), steps));
+        notifyChanged();
+        return workflowId;
+    }</code></pre>
+
+    <p>
+      台账对外只有五个写入口和一个读入口：<code>started</code> / <code>stepStarted</code> /
+      <code>stepFinished</code> / <code>summarising</code> / <code>finished</code>，加上给面板的
+      <code>snapshot(sessionId)</code>（<code>WorkflowTracker.java:55-143</code>）。
+      每次状态变化都会在锁内回调一次 <code>onChange</code>（<code>WorkflowTracker.java:164-166</code>），
+      而这个回调只做一件事：发一条 <code>UiInvalidatedEvent</code>。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowPlugin.java:55-73（invalidator：状态变化 → 失效事件，失败只记日志）</div>
+
+<pre><code class="language-java">     * <b>为什么必须发</b>：外壳只在缓存失效时收集面板，而「某一步跑完了」发生在回合内部的工具调用里，
+     * 外壳自己看不到。没有这条通知，面板会在编排结束后才第一次出现——那时它已经空了。
+     * <p>
+     * <b>为什么失败只记日志</b>：插件被停止时上下文已失效，{@code emit} 会当场抛错。
+     * 那时面板停在最后一帧是正确的，而<b>编排本身不该因为一次界面刷新失败而失败</b>——
+     * 这是展示与业务的分界，不是同一条成败线。
+     *
+     * @param context 插件上下文
+     * @return 回调，保证非 {@code null}
+     */
+    private static Runnable invalidator(final PluginContext context) {
+        return () -&gt; {
+            try {
+                context.emit(new UiInvalidatedEvent());
+            } catch (RuntimeException e) {
+                LOG.debug("编排状态失效通知未发出（插件已停止？）：{}", e.getMessage());
+            }
+        };
+    }</code></pre>
+
+    <p>
+      外壳那一侧的接法是：<code>UiContributions.onInvalidated</code> 订阅 <code>UiInvalidatedEvent</code>
+      与内核的 <code>PluginStateChangedEvent</code>，回调线程上<strong>只置一个标记</strong>，不得做收集
+      （<code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/ui/UiContributions.java:216-222</code>）；
+      真正的收集在 <code>panels(sessionId)</code> 里发生，它按 <code>order</code> 升序取全部面板贡献，
+      顺手拒掉「同一插件注册多个面板」的情况
+      （<code>UiContributions.java:275-296</code>）。<code>WorkflowPanel</code> 每次被问到就读一次快照、拼几行文本。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowPanel.java:78-97（handle：没有在跑的编排就返回空贡献）</div>
+
+<pre><code class="language-java">    public PanelContribution handle(PanelContributionRequest request) {
+        List&lt;WorkflowProgress&gt; active = tracker.snapshot(request.getSessionId());
+        if (active.isEmpty()) {
+            return PanelContribution.empty();
+        }
+        // 留一行给「还有 N 步未显示」：先画满再把话说不完，比画到一半被外壳截断更好读
+        int limit = MAX_LINES - 1;
+        List&lt;UiLine&gt; lines = new ArrayList&lt;UiLine&gt;();
+        int skipped = 0;
+        for (WorkflowProgress progress : active) {
+            if (!lines.isEmpty()) {
+                lines.add(UiLine.EMPTY);
+            }
+            skipped += appendWorkflow(lines, progress, limit);
+        }
+        if (skipped &gt; 0) {
+            lines.add(UiLine.of(UiSegment.of("…另有 " + skipped + " 步未显示", UiEmphasis.DIM)));
+        }
+        return PanelContribution.of(TITLE, lines, UiRegion.TOP);
+    }</code></pre>
+
+    <p>
+      面板用了哪些 UI 扩展点，可以说得很具体：贡献类型是
+      <code>PanelContributionRequest → PanelContribution</code>，落位是 <code>UiRegion.TOP</code>
+      （<code>UiRegion</code> 只有 <code>DOCK</code> 与 <code>TOP</code> 两个取值，
+      <code>Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/ui/UiRegion.java:19-28</code>），
+      标题常量是「编排」，行数上限 <code>MAX_LINES = 12</code>
+      （<code>WorkflowPanel.java:46</code>、<code>49</code>）。
+      插件注释给的理由是：停靠区里已经排了内核那块「子代理」面板，而一次编排<em>就是</em>批量派子代理——
+      两块面板恰好在同一时刻都要看，同区域等于永远只能看见一个；上方是全宽，顺带解决了纵向栏 18 列宽导致的折行
+      （<code>WorkflowPanel.java:21-25</code>，注释同时说明这只是<strong>软建议</strong>，外壳可以忽略）。
+    </p>
+
+    <p>
+      面板上的每一行由状态决定标记与强调档位，标记刻意用 ASCII 而不是符号——
+      <code>StepState</code> 的类注释解释了原因：终端字体与 East Asian Width 的差异会让 <code>✓</code> / <code>▶</code>
+      在不同环境里占 1 格或 2 格，而列宽由外壳算，插件给宽字符会让它算错。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>状态</th><th>标记</th><th>面板强调档位</th><th>进度里算不算「已了结」</th></tr></thead>
+        <tbody>
+          <tr><td><code>PENDING</code></td><td><code>[ ] </code></td><td><code>NORMAL</code></td><td>否</td></tr>
+          <tr><td><code>RUNNING</code></td><td><code>[~] </code></td><td><code>ACCENT</code></td><td>否</td></tr>
+          <tr><td><code>DONE</code></td><td><code>[x] </code></td><td><code>DIM</code></td><td>是</td></tr>
+          <tr><td><code>FAILED</code></td><td><code>[!] </code></td><td><code>ERROR</code></td><td>是</td></tr>
+          <tr><td><code>SKIPPED</code></td><td><code>[-] </code></td><td><code>DIM</code></td><td>是</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      「失败与跳过也算已了结」这条常被忽略，<code>WorkflowProgress.settledCount()</code> 的注释专门解释了它：
+      它们不会再跑第二次，因此进度条该往前走——否则「3 步跑了 2 步、其中 1 步失败」会显示成 1/3，看起来像卡住了；
+      失败这件事由标题行的警示档位与步骤标记表达，不靠进度数字（<code>WorkflowProgress.java:69-86</code>、
+      <code>WorkflowPanel.java:108-111</code>）。
+    </p>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：面板处理器里绝不能发失效事件</span>
+      <p>
+        <strong>现象</strong>：界面陷入「失效 → 收集 → 失效」的持续重绘，或日志里出现内核那条 self-loop 告警。
+        <strong>根因</strong>：失效事件的意思是「你缓存的我的那块已经过期了」，而收集面板时再发一条就等于说
+        「我刚给你的东西又过期了」，永远收敛不了。内核把这条写成硬约束（收集期间只 loud 出来，见
+        <code>UiContributions.java:242-246</code>），<code>WorkflowPanel</code> 的注释也复述了它：处理器「只读一次台账快照、拼几行文本，
+        不做 I/O、不发失效事件」——通知由 <code>WorkflowTracker</code> 在状态变化时发。
+        <strong>规避</strong>：需要「内容变了」的通知，就在<em>写状态</em>的地方发，不要在<em>读状态</em>的地方发。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>9. 提示词贡献：只给一个例句与选型规则</h2>
+
+    <p>
+      <code>WorkflowGuidance</code> 是 51 行的类，其中最大的部分是<strong>一段编译期就定下来的文本</strong>。
+      它的取舍很值得学：字段与取值范围已经写在 <code>workflow</code> 的工具名片里，而工具名片每轮都在模型眼前，
+      再复述一遍只会多花 token，还会在两边改动不同步时给出<em>两份互相矛盾的说明</em>。
+      因此贡献的内容恰好是「工具名片表达不了的两件事」：一个完整可照抄的例句，以及「什么时候不该用它」。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowGuidance.java:27-45（贡献给模型的全文）</div>
+
+<pre><code class="language-java">    static final String TEXT = "workflow 工具的 spec 是一份一次性说明。示例（先并行调研两个方向，"
+            + "再结合结论写方案）：\n"
+            + "{\"spec\":{\"steps\":["
+            + "{\"id\":\"probe-a\",\"name\":\"调研 A 方向\",\"agent\":\"scout\","
+            + "\"prompt\":\"调研 A 方向……\"},"
+            + "{\"id\":\"probe-b\",\"name\":\"调研 B 方向\",\"agent\":\"scout\","
+            + "\"prompt\":\"调研 B 方向……\"},"
+            + "{\"id\":\"plan\",\"name\":\"写方案\",\"agent\":\"planner\","
+            + "\"prompt\":\"结合 A 与 B 的结论给出方案\","
+            + "\"needs\":[\"probe-a\",\"probe-b\"]}],"
+            + "\"aggregate\":{\"mode\":\"summarize\",\"agent\":\"scout\"}}}\n"
+            + "要点：没有 needs 的步骤立刻开始，因此它们并行执行；带 needs 的步骤会等到这几步结束，"
+            + "并在自己的任务里收到它们给出的结论（结论过长会截断，并给出完整记录所在的归档路径）。"
+            + "需要「失败以后再补救」时，把补救步骤的 when 写成 on_failure 并声明 needs。"
+            + "spec 里没有循环、变量与表达式，也不做重试——要改主意就重新提交一份 spec。"
+            + "一次编排派出的子代理数受本回合额度限制（subAgent.maxSpawnsPerTurn，缺省 12），"
+            + "装不下会在派生任何子代理之前整份拒绝。"
+            + "step 的 name 可省，只用于界面展示（标识本身够可读时不必写）。"
+            + "只派一个子代理做一件事时用 task，不必写 spec。";</code></pre>
+
+    <p>
+      落位是 <code>PromptPlacement.STATIC</code>（<code>WorkflowGuidance.java:48-49</code>）：
+      这段文字编译期就定下来了，永不变化，放进可缓存的前缀最省——放进 <code>SESSION</code> 会让它跟着会话级内容一起每次重算
+      （<code>Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/PromptContribution.java:41-48</code>）。
+    </p>
+
+    <p>
+      这条边界对读源码很有用：<strong>想改「schema / 取值 / 字段含义」，改工具名片；想改「什么时候用、怎么写」，改这里。</strong>
+      两者都在插件里，但它们被模型看到的时机不同——名片每轮都在，这段静态文本只进可缓存前缀。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>10. 工具、命令与配置</h2>
+
+    <h3>10.1 工具：一个 <code>workflow</code>，参数只有一个 <code>spec</code></h3>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowTool.java:118-138（名片尾部与 handle：先查会话，再解析，再跑）</div>
+
+<pre><code class="language-java">        return new ToolDescriptor(NAME,
+                "按一份声明式 spec 编排多个子代理：没有依赖关系的步骤会并行执行，"
+                        + "有 needs 的步骤可以拿到它直接依赖的那几步给出的结论"
+                        + "（结论过长时会截断，材料里会给出完整记录所在的归档路径），"
+                        + "最后按声明的方式聚合。"
+                        + "适合「几件事可以同时做、再把结果合起来」的任务（并行调研几个方向、"
+                        + "多角度审查同一份改动）；只派一个子代理做一件事时用 task 即可。"
+                        + "spec 里不能写循环、条件表达式或运行期才决定的步骤——需要那样就重新提交一份 spec。",
+                properties, Collections.singletonList(WorkflowSpecParser.ARG_SPEC));
+    }
+
+    @Override
+    public ToolCallResult handle(ToolCallRequest request) {
+        String sessionId = request.getSessionId();
+        if (sessionId == null || sessionId.trim().isEmpty()) {
+            throw new JellyfishException("workflow 需要会话上下文，当前没有会话");
+        }
+        WorkflowSpec spec = WorkflowSpecParser.parse(request.getArguments());
+        WorkflowRun run = engine.run(spec, sessionId, request.getCancellationToken(), request.getOutputSink());
+        return render(run);
+    }</code></pre>
+
+    <p>
+      工具名是路由键（<code>WorkflowTool.NAME = "workflow"</code>，<code>WorkflowTool.java:33</code>），
+      注册时用 <code>handle</code> 精确匹配（同一「请求类型 + 路由键」至多一个处理器），
+      参数只有一个必填的 <code>spec</code>（<code>WorkflowSpecParser.ARG_SPEC = "spec"</code>，
+      <code>WorkflowSpecParser.java:30</code>）。
+      三行 <code>handle</code> 把依赖都从请求里取出来：会话（没有会话直接拒绝）、取消令牌、工具输出旁路——
+      后两者就是引擎用来做取消传播与写进度的输入（
+      <code>Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/ToolCallRequest.java:160</code>、<code>169</code>）。
+    </p>
+
+    <h3>10.2 没有命令，也没有配置项</h3>
+
+    <p>
+      这一点值得写明确，因为它与「编排」这个名字给人的预期相反：<strong>本插件不注册任何命令</strong>。
+      <code>start()</code> 的三条注册里没有 <code>CommandContributionRequest</code>
+      （<code>Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowPlugin.java:46-49</code>），
+      <code>src/main/resources/</code> 下也只有 <code>plugin.properties</code> 一个文件——
+      <strong><code>/workflow</code> 这样的命令不存在</strong>。编排的入口只有模型主动调用工具，
+      而工具调用的准入、审批、回灌走的是内核既有的那条路（见 <a href="18-tools-io.html">18 页</a>、
+      <a href="17-commands.html">17 页</a>）。
+    </p>
+
+    <p>
+      配置项同样没有，而且是有意为之：类注释写着「本插件没有配置项：spec 的形状是模型与插件之间的契约，不是部署参数」
+      （<code>WorkflowPlugin.java:31</code>）。<code>start()</code> 里也从不读 <code>context.configuration()</code>，
+      而是把「一次编排能多大」写成源码常量 <code>MAX_STEPS = 12</code>。
+      需要调整规模时，改的是<strong>内核侧</strong>的 <code>subAgent.maxSpawnsPerTurn</code>（额度），
+      而不是插件配置——因为「本回合还能派几个」这件事只有内核知道。
+    </p>
+
+    <h3>10.3 回灌给模型的东西：首行结论 + 聚合正文 + 失败清单</h3>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowTool.java:168-185（headerOf：把失败写进首行）</div>
+
+<pre><code class="language-java">    private static String headerOf(WorkflowRun run) {
+        StringBuilder header = new StringBuilder("[workflow ").append(run.getSpec().displayName());
+        if (!run.hasFailure() &amp;&amp; !run.hasCancellation()) {
+            header.append(" 完成");
+        }
+        header.append(" · ").append(run.getSteps().size()).append(" 步")
+                .append(" · ").append(run.totalRounds()).append(" 轮")
+                .append(" · ").append(run.totalTokens()).append(" tok");
+        StepOutcome failure = run.firstFailure();
+        if (failure != null) {
+            header.append(" · ").append(failure.getStep().getId()).append(" 失败");
+        } else if (run.hasCancellation()) {
+            header.append(" · 已取消");
+        }
+        return header.append(']').toString();
+    }</code></pre>
+
+    <p>
+      首行只写「归谁」的一个结论——要么 <code>完成</code>、要么只有第一个失败的步骤、要么 <code>已取消</code>；
+      后面跟一个 <code>——</code> 分隔的清单，逐条列「失败：<code>id</code>（<code>agent</code>）：原因」与
+      「未执行：<code>id</code>（原因）」（<code>WorkflowTool.java:191-204</code>）。
+      顺序是刻意的：模型从上往下读，先读到的是它下一步决策最需要的信息。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>元数据键</th><th>取值</th><th>谁消费</th></tr></thead>
+        <tbody>
+          <tr><td><code>workflowSteps</code></td><td>步骤数</td><td>工具轨迹行 / 观测</td></tr>
+          <tr><td><code>workflowRounds</code></td><td>累计轮数（含汇总）</td><td>同上</td></tr>
+          <tr><td><code>workflowTokens</code></td><td>累计 token（含汇总）</td><td>同上</td></tr>
+          <tr>
+            <td><code>summary</code>（<code>ToolMetadata.KEY_SUMMARY</code>）</td>
+            <td>「workflow 名字 · N 步 · R 轮 · T tok」</td>
+            <td>轨迹行的单行摘要</td>
+          </tr>
+          <tr>
+            <td><code>terminal</code>（<code>ToolMetadata.KEY_TERMINAL</code>）</td>
+            <td>有失败或被取消时写 <code>WORKFLOW_INCOMPLETE</code>；正常跑完<strong>不写这个键</strong></td>
+            <td>内核按「缺省 = 正常跑完」判断（<code>ToolMetadata.java:56</code>、<code>131</code>）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      最后一行是个容易读漏的细节：<code>INCOMPLETE</code> 这个字符串是<strong>插件自己的取值</strong>，
+      内核只做「有没有这个键、是不是 <code>COMPLETED</code>」这层判断（<code>WorkflowTool.java:44-50</code>）。
+      也就是说，插件不必与内核共享一份枚举就能表达「这次没正常跑完」。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>11. 设计难点与取舍</h2>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>难点</th><th>本插件的选择</th><th>代价 / 边界</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>编排状态放内存还是落盘</td>
+            <td>只放内存：<code>WorkflowTracker</code> 里那张 <code>Map</code>（<code>WorkflowTracker.java:30-31</code>）</td>
+            <td>进程重启即消失，且一次编排<strong>没有「续跑」这种状态</strong>——它整个活在一次工具调用里；
+                面板展示的是「此刻在跑什么」而不是历史，因此跑完即移除（<code>WorkflowTracker.java:21-22</code>）。
+                完整过程另有落点：每次子代理 run 的 transcript 由内核归档，路径经 <code>DelegationResult.getArchivePath()</code> 传出来</td>
+          </tr>
+          <tr>
+            <td>归档也不是无限的</td>
+            <td>依赖内核的归档上限</td>
+            <td>归档受文件数与字节数上限约束，最旧的会被清理（<code>SubAgentSettings.java:111</code>、<code>119</code>），
+                因此材料块里那条路径<strong>可能读不到</strong>——引用它的下游要容忍这一点</td>
+          </tr>
+          <tr>
+            <td>并发上限</td>
+            <td>交给内核 governor；插件只在开始前查一次额度快照</td>
+            <td>额度是快照、随时可能过时（同一回合里 <code>task</code> 或另一个编排也会占用它）——
+                它足够支撑「该不该开始」的判断，不适合拿来做精确分配（<code>DelegationQuota.java:16-17</code>）</td>
+          </tr>
+          <tr>
+            <td>失败重试</td>
+            <td>没有重试</td>
+            <td>补救由模型显式写成一步（<code>when = on_failure</code> + <code>needs</code>），
+                或重新提交一份 spec；<code>REJECTED</code>（根本没开始）与 <code>FAILED</code>（开始过但失败）
+                在编排语义上刻意不同：前者重试同一请求没有意义，后者可能是环境问题（<code>DelegationStatus.java:9-11</code>）</td>
+          </tr>
+          <tr>
+            <td>表达力上限</td>
+            <td>三个 <code>when</code> 取值、无循环、无变量、无表达式</td>
+            <td>需要更复杂的判断时，让模型重新发一份 spec，或把判断拆成更多步骤——
+                <code>StepCondition</code> 的注释把理由写得很直白：「声明式 spec 一旦允许条件 + 循环 + 变量，
+                就会在无人察觉时变成一门语言，而维护一门语言（语法、版本兼容、错误语义）的成本远高于它带来的编排收益」</td>
+          </tr>
+          <tr>
+            <td>与内核的分工</td>
+            <td>内核只出原语（委派端口 + 工具/提示词/面板扩展点），spec 的形状与聚合方式全在插件里</td>
+            <td>插件缺席时 <code>task</code> 薄工具照旧可用，这正是「卸载即回退」；
+                而编排的表达形式演化时不必动内核的发布节奏（<code>WorkflowPlugin.java:27-29</code>）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      「状态只在内存」这一条值得再强调一次，因为它决定了排障方式：如果一次编排跑到一半进程被杀，
+      你不会在磁盘上找到「跑到第 3 步」这样的记录——<strong>编排本身没有持久化，也没有恢复</strong>。
+      能查到的是每个已结束 run 的归档 transcript，以及会话历史里那次失败的 <code>workflow</code> 工具调用。
+    </p>
+
+    <p>
+      另一处取舍在「一次编排占一条工具执行线程」：<code>await</code> 是阻塞等待，
+      因此 12 步并不等于 12 条线程被占，而是「1 条工具线程 + 内核 agent-run 池里的若干个 run」。
+      这也意味着<strong>编排的墙钟时间约等于各层里最慢那一步之和</strong>，而不是各步之和——这正是分层的收益。
+    </p>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：为什么编排不进内核</span>
+      <p>
+        类注释给的理由是「编排的表达形式（spec 长什么样、怎么聚合）会随着用法演化，
+        把它放进内核意味着每次调整都要动内核的发布节奏；而内核只需要提供稳定的原语」。
+        这句话有一个可检验的推论：本插件只需要 <code>jellyfish-api</code> 一个编译期依赖，
+        而内核侧「接到真端口之后行为如何」由内核自己的测试覆盖——
+        插件侧的端到端测试用的是一个脚本化假端口，它照样能跑完整份 spec
+        （<code>Jellyfish-Plugins/jellyfish-plugin-workflow/src/test/java/zcd/jellyfish/plugin/workflow/WorkflowEndToEndTest.java:55-58</code>，测试类注释）。
+        这既是解耦的证明，也是它的代价：两边各测一半，合起来才是完整的一条链。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>12. 坑点小结与测试</h2>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：面板的「失效通知」漏了，面板会晚到且已经空了</span>
+      <p>
+        <strong>现象</strong>：编排期间界面上什么都没有，跑完之后才闪出一个空面板（甚至不出现）。
+        <strong>根因</strong>：外壳只在缓存失效时收集面板，而「某一步跑完了」发生在回合内部的工具调用里，外壳自己看不到。
+        <strong>规避</strong>：任何改变面板内容的写操作都要回调一次失效通知——本项目里
+        <code>WorkflowTracker</code> 的每个写方法都在锁内调 <code>notifyChanged()</code>，
+        由插件把它变成 <code>UiInvalidatedEvent</code>。漏一个写点，那一类状态变化就永远看不出来。
+      </p>
+    </div>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：把「同层」当成「能互传结论」</span>
+      <p>
+        <strong>现象</strong>：两个步骤互相写了对方的 <code>id</code> 想交换结论 → 依赖成环，spec 被整份拒绝；
+        或者把 B 的结论写进 A 的任务里 → 什么都没注入，因为同层步骤在 <code>blockReason</code> 与
+        <code>promptFor</code> 执行时对方还没跑。
+        <strong>根因</strong>：材料只从<em>直接 <code>needs</code></em> 流向本步，而同层意味着「依赖都相同或已决」。
+        <strong>规避</strong>：要传递结论就写成前后两层（这也是并行调研 + 汇总的标准形状，见图 24-2）。
+      </p>
+    </div>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：把 <code>TRUNCATED</code> 当失败排查</span>
+      <p>
+        <strong>现象</strong>：某个子代理明明给了正文，编排却把它算作成功，下游拿到的是「不完整的结论」。
+        <strong>根因</strong>：<code>isSuccess</code> 把 <code>COMPLETED</code> 与 <code>TRUNCATED</code> 都算成功
+        （<code>WorkflowSpecParser.java:190-198</code>），面板上这一步显示 <code>[x]</code>，但它可能没收敛。
+        <strong>规避</strong>：判断「结论可不可信」要看材料块本身，以及轨迹行上的状态文本——
+        <code>statusText</code> 把 <code>TRUNCATED</code> 翻成「达到轮数上限」而不是「完成」
+        （<code>WorkflowEngine.java:493-505</code>）。
+      </p>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>测试类</th><th>行数</th><th>覆盖什么</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>WorkflowEngineTest</code></td><td>707</td>
+            <td>调度语义的主力：先扇出再等待、依赖顺序、<code>on_success</code> / <code>on_failure</code> 的四种组合、
+                失败后独立步骤照跑、聚合顺序、汇总与否、取消的三种情况、额度预检、材料注入与截断、归档路径的有无</td>
+          </tr>
+          <tr>
+            <td><code>WorkflowSpecParserTest</code></td><td>385</td>
+            <td>解析与校验：缺字段、类型不符、id 重复、自依赖、引用不存在、成环、步数上限、取值非法</td>
+          </tr>
+          <tr>
+            <td><code>WorkflowEndToEndTest</code></td><td>340</td>
+            <td>真插件 + 真 PF4J 加载 + 真扩展点注册表：走内核 <code>ToolExecutor</code> 的同一条路把整份 spec 跑完，成环的 spec 在派生之前被拒</td>
+          </tr>
+          <tr>
+            <td><code>WorkflowPanelTest</code></td><td>245</td>
+            <td>面板渲染：标记与强调档位、行数上限与「另有 N 步」、名字截断不切开代理对</td>
+          </tr>
+          <tr>
+            <td><code>WorkflowTrackerTest</code></td><td>182</td>
+            <td>台账：登记即通知、快照隔离、跑完即移除、会话过滤</td>
+          </tr>
+          <tr>
+            <td><code>WorkflowToolTest</code></td><td>169</td>
+            <td>工具层：名片字段完备性、缺会话时拒绝、元数据与首行结论的组装</td>
+          </tr>
+          <tr>
+            <td><code>WorkflowPluginLoadingTest</code></td><td>161</td>
+            <td>加载与卸载：描述符可启动、工具 / 提示词 / 面板三个面都可路由、卸载后按 owner 全部回收</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      「引擎测试」与「端到端测试」的分工值得注意：前者用手搓的 spec 测调度逻辑，后者验证「插件被内核加载之后，
+      <code>workflow</code> 工具真的能被调起来」。而端到端测试里的端口是<strong>脚本化假端口</strong>，
+      因为插件仓库与内核之间只有 <code>jellyfish-api</code> 的编译期契约——
+      「端口接到真内核之后行为如何」由内核仓库的测试覆盖，两半合起来才是完整的一条链。
+    </p>
+
+    <div class="conclusion">
+      <h2>关键结论</h2>
+      <ol>
+        <li>
+          <strong>本插件补的是「并行 + 依赖 + 聚合」这三个只在多步骤时才暴露的缺口</strong>，
+          输入是一份一次性提交的声明式 spec（<code>steps</code> / <code>needs</code> / <code>when</code> / <code>aggregate</code>），
+          而不是一段可执行的编排语言。
+        </li>
+        <li>
+          <strong>所有校验都发生在派生任何子代理之前</strong>（类型、必填、唯一、自依赖、引用存在、无环、步数上限、
+          <code>on_failure</code> 必须有 <code>needs</code>），越界即整份拒绝——包括额度不足也是整份拒绝，
+          不做「能跑几步算几步」。
+        </li>
+        <li>
+          <strong>调度的全部实现是「反复取就绪层 → 整层先全部 <code>spawn</code>、再逐个 <code>await</code>」</strong>；
+          <code>when</code> 只有 <code>always</code> / <code>on_success</code> / <code>on_failure</code> 三个取值，
+          只按直接依赖的成败判断，且「达到轮数上限」算成功。失败不中断整条编排，只由各步的 <code>when</code> 决定谁被跳过。
+        </li>
+        <li>
+          <strong>执行者不是插件自己起的线程，而是内核给的 <code>SubAgentPort</code></strong>
+          （<code>context.delegations()</code> → <code>port.spawn(...).await()</code>），
+          与 <code>task</code> 工具走同一条代码路径；插件不持有任何线程池，并发度由内核 governor 决定，
+          它只在本回合额度不够时提前整份拒绝。
+        </li>
+        <li>
+          <strong>状态只在内存里</strong>：<code>WorkflowTracker</code> 是一张锁保护的 <code>Map</code>，跑完即移除；
+          一次编排的存活期就是那一次工具调用，进程重启后没有续跑，能查的只有各 run 的归档 transcript。
+        </li>
+        <li>
+          <strong>可观测靠三个站点凑齐</strong>：<code>WorkflowTool</code> 的首行结论与元数据（模型可见）、
+          <code>ToolOutputSink</code> 的单行进度（工具行可见）、<code>WorkflowPanel</code> 落 <code>UiRegion.TOP</code> 的常驻面板
+          （人可见，且靠 <code>UiInvalidatedEvent</code> 才能及时刷新）。
+        </li>
+      </ol>
+    </div>
+
+    <nav class="pager" aria-label="翻页">
+      <a class="prev" href="23-plugin-session-compact.html"><span class="pager-dir">上一页</span>23 session-file 与 compact 插件</a>
+      <a class="next" href="25-plugin-plan-todo-skills.html"><span class="pager-dir">下一页</span>25 plan / todo / skills 插件</a>
+    </nav>
+
+  </main>
+</div>
+
+<footer class="footer">
+  Jellyfish 源码深度解析 · 本页源码依据：<code>WorkflowPlugin.java</code>、<code>WorkflowTool.java</code>、
+  <code>WorkflowSpecParser.java</code>、<code>WorkflowEngine.java</code>、<code>WorkflowTracker.java</code>、
+  <code>WorkflowPanel.java</code>、<code>WorkflowGuidance.java</code>、<code>SpecValues.java</code>、
+  <code>StepCondition.java</code>、<code>AggregateMode.java</code>、<code>StepState.java</code>、
+  <code>WorkflowSpec.java</code>、<code>WorkflowStep.java</code>、<code>StepOutcome.java</code>、
+  <code>WorkflowRun.java</code>、<code>WorkflowProgress.java</code>、<code>plugin.properties</code>、
+  <code>pom.xml</code>（jellyfish-plugin-workflow）、
+  <code>SubAgentPort.java</code>、<code>DelegationRequest.java</code>、<code>DelegationResult.java</code>、
+  <code>DelegationQuota.java</code>、<code>DelegationHandle.java</code>、<code>DelegationStatus.java</code>、
+  <code>PluginContext.java</code>、<code>ToolCallRequest.java</code>、<code>ToolMetadata.java</code>、
+  <code>PromptContribution.java</code>、<code>UiRegion.java</code>、<code>UiInvalidatedEvent.java</code>、
+  <code>SubAgentSettings.java</code>、<code>ReactSettings.java</code>、<code>UiContributions.java</code>、
+  <code>WorkflowEngineTest.java</code>、<code>WorkflowSpecParserTest.java</code>、<code>WorkflowEndToEndTest.java</code>、
+  <code>WorkflowPanelTest.java</code>、<code>WorkflowTrackerTest.java</code>、<code>WorkflowToolTest.java</code>、
+  <code>WorkflowPluginLoadingTest.java</code>（Jellyfish-Plugins）。
+</footer>
+
+<!-- 资源按「本地 vendor 优先、CDN 兜底」引用：文件缺失时 assets/app.js 会自动回退到 CDN -->
+<script src="assets/vendor/highlight.min.js"></script>
+<script src="assets/vendor/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

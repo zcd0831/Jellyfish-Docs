@@ -1,0 +1,1583 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>22 tools 与 shell 插件 · Jellyfish 源码深度解析</title>
+<meta name="description" content="从源码看官方 tools 与 shell 插件：工具清单与参数 Schema、文件工具的匹配与限额、路径闸门，以及命令启动、超时终止与审批边界。">
+<link rel="stylesheet" href="assets/style.css">
+<!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
+</head>
+<body>
+
+<header class="topbar">
+  <button class="nav-toggle" id="navToggle" aria-label="切换导航" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">🐙 Jellyfish 源码深度解析</a>
+  <div class="topbar-tools">
+    <input id="navSearch" type="search" placeholder="搜索页面…" aria-label="搜索页面">
+  </div>
+</header>
+
+<div class="layout">
+
+  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <div class="sidebar-title">文档目录</div>
+    <ul class="nav-list">
+      <li><a href="index.html">首页 · 总览与导航</a></li>
+    </ul>
+    <div class="nav-group">入门</div>
+    <ul class="nav-list">
+      <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
+      <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
+      <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
+    </ul>
+    <div class="nav-group">内核重点</div>
+    <ul class="nav-list">
+      <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
+      <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
+      <li><a href="06-permissions.html">06 权限与审批系统</a></li>
+      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
+      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+    </ul>
+    <div class="nav-group">外壳与实战</div>
+    <ul class="nav-list">
+      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
+      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
+      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+    </ul>
+    <div class="nav-group">拓展</div>
+    <ul class="nav-list">
+      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
+      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
+      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
+      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
+      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+    </ul>
+    <div class="nav-group">子系统</div>
+    <ul class="nav-list">
+      <li><a href="17-commands.html">17 命令系统</a></li>
+      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
+      <li><a href="19-config.html">19 配置体系</a></li>
+      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
+    </ul>
+    <div class="nav-group">插件详解</div>
+    <ul class="nav-list">
+      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
+      <li><a href="22-plugin-tools-shell.html" aria-current="page">22 tools 与 shell 插件</a></li>
+      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
+      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
+      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
+      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
+      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <nav class="breadcrumb" aria-label="面包屑">
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>22 tools 与 shell 插件</span>
+    </nav>
+
+    <h1>22 tools 与 shell 插件</h1>
+    <p class="page-sub">
+      工具系统在内核里只有一条执行链（见 <a href="18-tools-io.html">18 页</a>），那官方的工具是从哪来的？
+      这一页打开 <code>jellyfish-plugin-tools</code> 与 <code>jellyfish-plugin-shell</code> 两个插件包，
+      看它们各自注册了什么、工具实现里的取舍是什么，以及「执行一条 shell 命令」为什么必须经过审批。
+    </p>
+
+    <section class="goals">
+      <h2>学习目标</h2>
+      <ul>
+        <li>拿到两个插件<strong>注册面的完整清单</strong>：6 个工具、1 个 <code>shell</code> 工具、1 条 <code>!</code> 输入指令、2 个权限处理器，各自在源码哪一处注册；</li>
+        <li>说清工具参数 Schema 只用普通 <code>Map</code> 表达的原因，以及 <code>ToolSchema.properties</code> 为什么按「参数名 / Schema 交替」传参；</li>
+        <li>理解 <code>read_file</code> 为什么<strong>分片而不截断</strong>，单行超 <code>max_bytes</code> 为什么报错而不是切短；</li>
+        <li>说清 <code>edit_file</code> 的字符串替换语义，以及「找不到」「匹配多处」「读之后被改过」三种情况的处置；</li>
+        <li>知道 <code>list_dir</code> / <code>grep_files</code> 各有几道上限、分别管「结果有多大」还是「要花多久」；</li>
+        <li>说清相对路径的解析基准、路径闸门为什么按「工具名 + 参数里的 <code>path</code>」判，而不是只在工具里拦一道；</li>
+        <li>解释 shell 插件的三条计时/中断来源、非零退出码为什么不算异常，以及它与权限链、审批通道怎么配合。</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================ -->
+    <h2>1. 两个插件：把「文件动作」与「进程」变成工具</h2>
+
+    <p>
+      两个插件做的事情同构——<strong>在自己的 <code>start()</code> 里把「名片 + 处理器」交给插件上下文</strong>，
+      差别只在它们把什么东西变成了能力：<code>tools</code> 把文件系统的读、写、改、列、搜五个动作变成工具，
+      <code>shell</code> 把「在本机起一个进程」变成工具。注册窗口与回收规则由框架负责（见
+      <a href="07-plugins.html">07 页</a>），两个插件类都没有额外逻辑。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>插件</th><th>入口类</th><th>注册面</th><th>依赖与打包</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>jellyfish-plugin-tools</code></td>
+            <td><code>ToolsPlugin</code>（<code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/resources/plugin.properties:5</code>）</td>
+            <td>6 个工具 + 1 个权限处理器 + 1 个 <code>@</code> 引用处理器 + 1 条提示词贡献</td>
+            <td>只依赖 <code>jellyfish-api</code>、<code>slf4j-api</code>，都是 <code>provided</code>；无 shade</td>
+          </tr>
+          <tr>
+            <td><code>jellyfish-plugin-shell</code></td>
+            <td><code>ShellPlugin</code>（<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/resources/plugin.properties:5</code>）</td>
+            <td>1 个工具 + 1 个权限处理器 + 1 条 <code>!</code> 输入指令</td>
+            <td>多一个 <code>commons-exec</code>（compile），经 shade 打进插件包</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      依赖这一列不是细节。内核契约与日志库都必须写成 <code>provided</code>，理由写在
+      <code>pom.xml</code> 的注释里：PF4J 的插件类加载器是<strong>子优先</strong>的，插件包里若自带一份
+      <code>zcd.jellyfish.api</code>，它会遮蔽父加载器上的同名类、破坏类型同一性，内核的
+      <code>PluginClasspathGuard</code> 会在加载期直接拒绝这种插件包
+      （<code>Jellyfish-Plugins/jellyfish-plugin-tools/pom.xml:19-27</code>、
+      <code>Jellyfish-Plugins/jellyfish-plugin-shell/pom.xml:36-41</code>）。
+      <code>commons-exec</code> 不在父加载器上、插件也看不到 Maven 依赖树，因此必须 shade，
+      而 shade 只 <code>include</code> 了 <code>org.apache.commons:commons-exec</code>
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/pom.xml:85-87</code>）。
+    </p>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：依赖放哪一层，只看「父加载器上有没有一份」</span>
+      <p>
+        内核已经有 <code>slf4j-api</code>，插件再打一份就是两份日志门面，所以写 <code>provided</code>；
+        内核没有 <code>commons-exec</code>，所以必须 shade。<code>tools</code> 的实现只用到 JDK 与内核契约，
+        没有需要带的第三方库，因此它的 <code>pom.xml</code> 里连 shade 插件都不需要——
+        这是「插件只依赖 API」这条约定最干净的一个样本。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>2. tools 插件：注册面与工具清单</h2>
+
+    <p>
+      整个插件类只有 71 行，核心是两段：<strong>一份静态工具清单</strong>，以及<strong>把它们连同策略一起注册进上下文</strong>。
+      清单里只有五个文件工具：
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ToolsPlugin.java:39-45（五个文件工具，顺序即注册顺序）</div>
+
+<pre><code class="language-java">    /** 本插件提供的文件工具，顺序即注册顺序，无副作用。 */
+    private static final List&lt;PluginTool&gt; TOOLS = Collections.unmodifiableList(Arrays.&lt;PluginTool&gt;asList(
+            new ReadFileTool(),
+            new WriteFileTool(),
+            new EditFileTool(),
+            new ListDirTool(),
+            new GrepFilesTool()));
+</code></pre>
+
+    <p>
+      第六个工具 <code>ask_user</code> 进不了这份清单：它需要一条「把问题摆到用户面前并把答复带回来」的出向边，
+      而那条边只能从上下文取得。这就是注册分两段的原因，也是本页要数的第一个数字——
+      <strong><code>tools</code> 插件一共注册了 6 个工具</strong>。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ToolsPlugin.java:47-70（start()：五个工具、一个提问工具、一道路径闸门、一条 @ 引用与它的提示词约定）</div>
+
+<pre><code class="language-java">    @Override
+    public void start(PluginContext context) {
+        for (PluginTool tool : TOOLS) {
+            // 名字即路由键，工具名全局唯一这一点由 handle 的同键唯一语义保证
+            tool.register(context);
+        }
+        // 提问工具进不了上面那份静态清单：它需要一条出向边（把问题摆到用户面前并把答复带回来），
+        // 而那条边只能从上下文取得。它是本插件里唯一持有外部依赖的工具
+        new AskUserTool(context.askUser()).register(context);
+        // 路径闸门：读/写文件的工具在允许目录之外时要审批或拒绝。
+        // 映射从工具实例上现取（工具自己声明访问性质），因此这里没有第二份需要同步维护的清单
+        Map&lt;String, PathAccess&gt; accessByTool = new LinkedHashMap&lt;String, PathAccess&gt;();
+        for (PluginTool tool : TOOLS) {
+            accessByTool.put(tool.name(), tool.pathAccess());
+        }
+        context.contribute(PermissionCheckRequest.class,
+                new PathGuardContribution(PathPolicy.from(context), accessByTool));
+        // 输入框的行内引用：@ 只做补全，真正的读取仍由模型走 read_file，因此没有绕过权限面
+        context.handle(InputReferenceRequest.class, FileReferenceCompletion.MARKER,
+                new InputReferenceDescriptor("引用工作目录下的文件（补全路径）"),
+                new FileReferenceCompletion());
+        // 约定必须让模型知道，否则 @a.txt 在它眼里只是一段普通文字
+        context.contribute(PromptContributionRequest.class, new FileReferencePromptContribution());
+    }
+</code></pre>
+
+    <p>
+      三处值得停一下：<strong>① 注册顺序没有语义</strong>——工具靠名字路由，不靠位置；
+      <strong>② 闸门的映射是从工具实例上现取的</strong>（<code>tool.name()</code> → <code>tool.pathAccess()</code>），
+      而不是另写一张「哪些工具碰路径」的表，少一张表就少一处会跟实现漂移的地方；
+      <strong>③ <code>@</code> 只做补全</strong>——它注册在输入框行内引用上，返回候选路径，真正的读取仍由模型调用
+      <code>read_file</code>，因此既不绕过权限面，也不会把文件内容直接塞进上下文。相关约定（含「路径里的空白以反斜杠转义」）
+      由 <code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/FileReferencePromptContribution.java:37</code>
+      起的这段文本交给模型，并以 <code>PromptPlacement.STATIC</code> 贡献——它是常量，连会话之间都不变，最适合被反复复用。
+    </p>
+
+    <h3>工具清单（逐个核对）</h3>
+
+    <p>
+      下表按注册处逐一列出，工具名取自各自的 <code>ToolDescriptor</code>（即注册与调用的路由键）；
+      「路径访问」一列取自工具类覆写的 <code>pathAccess()</code>，它决定这个工具受哪一道路径闸门管（见第 7 节）。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>工具名</th><th>作用</th><th>路径访问</th><th>源码位置（名片与访问性质，同一文件）</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>read_file</code></td>
+            <td>读取文本文件内容，大文件用 <code>offset</code> / <code>limit</code> 分片</td>
+            <td><code>READ</code></td>
+            <td><code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ReadFileTool.java:58-74</code></td>
+          </tr>
+          <tr>
+            <td><code>write_file</code></td>
+            <td>把内容整体写入文件（UTF-8，覆盖原内容），父目录不存在时自动创建</td>
+            <td><code>WRITE</code></td>
+            <td><code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/WriteFileTool.java:30-44</code></td>
+          </tr>
+          <tr>
+            <td><code>edit_file</code></td>
+            <td>在文件中精确替换一段原文（字面量匹配）</td>
+            <td><code>WRITE</code></td>
+            <td><code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/EditFileTool.java:33-49</code></td>
+          </tr>
+          <tr>
+            <td><code>list_dir</code></td>
+            <td>列举目录的直接子项（不递归），目录名带 <code>/</code> 后缀、文件带字节数</td>
+            <td><code>READ</code></td>
+            <td><code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ListDirTool.java:58-92</code></td>
+          </tr>
+          <tr>
+            <td><code>grep_files</code></td>
+            <td>在文件或目录树里按正则逐行搜索，返回「文件:行号:该行内容」</td>
+            <td><code>READ</code></td>
+            <td><code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/GrepFilesTool.java:102-142</code></td>
+          </tr>
+          <tr>
+            <td><code>ask_user</code></td>
+            <td>向用户提问并列候选答案，等一条答复回到上下文</td>
+            <td>不参与闸门</td>
+            <td><code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/AskUserTool.java:40-63</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      <code>ask_user</code> 那一格的「不参与闸门」不是特例，而是缺省值：闸门映射只遍历 <code>TOOLS</code>
+      （<code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ToolsPlugin.java:58-61</code>），
+      它不在其中；而 <code>PluginTool</code> 对访问性质的缺省声明就是 <code>NONE</code>：
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/PluginTool.java:50-52（缺省不碰路径）</div>
+
+<pre><code class="language-java">    default PathAccess pathAccess() {
+        return PathAccess.NONE;
+    }
+</code></pre>
+
+    <p>
+      「名片里的名字即路由键」这条约定被收进了一个默认方法，因此每个工具只需要实现 <code>descriptor()</code>
+      与 <code>handle()</code>：
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/PluginTool.java:60-62（注册动作本身）</div>
+
+<pre><code class="language-java">    default Subscription register(PluginContext context) {
+        return context.handle(ToolCallRequest.class, name(), descriptor(), this);
+    }
+</code></pre>
+
+    <p>
+      这一句同时做了两件事：把名片与处理器一起落表，并用 <code>name()</code> 当路由键。
+      收进一个方法的意义在于——<strong>不存在「改了名片忘了改路由键」这种状态</strong>。
+    </p>
+
+    <div class="mermaid">
+flowchart TD
+  A["ToolsPlugin.start"] --> B["遍历 TOOLS：tool.register"]
+  B --> C["PluginContext.handle：名片与处理器按工具名落表"]
+  A --> D["AskUserTool：需要 askUser 端口，单独注册"]
+  A --> E["PathGuardContribution 注册到 PermissionCheckRequest"]
+  A --> F["FileReferenceCompletion 注册到 InputReferenceRequest"]
+  A --> G["FileReferencePromptContribution 注册到 PromptContributionRequest"]
+  E --> H["PermissionVerdict：无异议 / 要审批 / 拒绝"]
+</div>
+    <p class="figure-cap">图 22-1　tools 插件一次 <code>start()</code> 的五个注册动作，只有前两个是工具</p>
+
+    <!-- ============================================================ -->
+    <h2>3. 工具参数 Schema 怎么描述</h2>
+
+    <p>
+      内核只要求 <code>ToolDescriptor.parameters</code> 是 JSON Schema 的 <code>properties</code> 部分，
+      <code>type: object</code> 与 <code>required</code> 由内核在转成厂商请求时自己包上（见 <a href="18-tools-io.html">18 页</a>）。
+      既然只是一张「参数名 → 一段带类型的描述」的映射，<code>tools</code> 插件就<strong>刻意不引入任何 JSON 库</strong>，
+      用一百多行的 <code>ToolSchema</code> 把话说完。每个参数的描述只有两个键：
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ToolSchema.java:123-128（type + description，没有别的关键词）</div>
+
+<pre><code class="language-java">    private static Map&lt;String, Object&gt; typed(String type, String description) {
+        Map&lt;String, Object&gt; schema = new LinkedHashMap&lt;String, Object&gt;();
+        schema.put(TYPE, type);
+        schema.put("description", description);
+        return schema;
+    }
+</code></pre>
+
+    <p>
+      组装 <code>properties</code> 的方式值得单独讲：它<strong>不用 <code>Map</code>，而是用「参数名 / Schema 交替」的可变参数</strong>。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ToolSchema.java:101-114（交替参数：调用点读起来就是声明顺序）</div>
+
+<pre><code class="language-java">    static Map&lt;String, Object&gt; properties(Object... namesAndSchemas) {
+        if (namesAndSchemas.length % 2 != 0) {
+            throw new JellyfishException("工具参数 Schema 必须成对给出：参数名 + 描述");
+        }
+        Map&lt;String, Object&gt; properties = new LinkedHashMap&lt;String, Object&gt;();
+        for (int i = 0; i &lt; namesAndSchemas.length; i += 2) {
+            Object name = namesAndSchemas[i];
+            if (!(name instanceof String)) {
+                throw new JellyfishException("工具参数名必须是字符串: " + name);
+            }
+            properties.put((String) name, namesAndSchemas[i + 1]);
+        }
+        return properties;
+    }
+</code></pre>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：把「参数名与描述成对」交给一道运行期检查</span>
+      <p>
+        用 <code>Map</code> 传参时参数是具名的，但调用点会变成「先建 Map、再一行一个 <code>put</code>」，
+        读的人要来回跳。交替参数让调用点本身就是一份声明清单
+        （<code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ReadFileTool.java:61-65</code>
+        就是范例），代价是丢掉编译器对这层的检查，于是补上一条「个数必须为偶数」的运行期检查。
+        两个失败模式各有各的文案：<strong>奇数个参数</strong>是编码错误、<strong>参数名不是字符串</strong>是调用错误，
+        分开报比合并成一句更好查。
+      </p>
+    </div>
+
+    <p>
+      各工具的 Schema 就完全交给这套构造器了。<code>read_file</code> 的名片能一眼读完，也顺带回答
+      「必填参数怎么声明」——<code>required</code> 只列 <code>path</code>，其余三个都有回退值。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ReadFileTool.java:58-66（四个参数、只有 path 必填）</div>
+
+<pre><code class="language-java">    private static final ToolDescriptor DESCRIPTOR = new ToolDescriptor(
+            "read_file",
+            "读取文本文件内容。大文件可用 offset 与 limit 分片读取，避免一次读入过多内容。",
+            ToolSchema.properties(
+                    "path", ToolSchema.string("文件路径，相对路径按进程工作目录解析"),
+                    "offset", ToolSchema.integer("起始行号，从 1 开始；缺省从第一行开始"),
+                    "limit", ToolSchema.integer("最多读取多少行；缺省读到文件末尾"),
+                    "max_bytes", ToolSchema.integer("最多读取多少字节，缺省 " + DEFAULT_MAX_BYTES)),
+            Arrays.asList("path"));
+</code></pre>
+
+    <p>
+      注意 <code>DEFAULT_MAX_BYTES</code> 被拼进了描述文本
+      （<code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ReadFileTool.java:47</code>，
+      值是 <code>64 * 1024</code>），所以模型看到的缺省值不会与代码里的常量分叉。
+      <code>ToolSchema</code> 一个都不生成 <code>minimum</code>、<code>enum</code>、<code>pattern</code> 这类关键词——
+      参数合法性的判断在工具里（<code>ToolArguments</code>），多写一份就多一处会不一致的约束。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>4. read_file：分片而不是截断</h2>
+
+    <p>
+      真正的纪律在「读到多少就交多少」。<code>read_file</code> 有两个上限：行数（<code>limit</code>）与字节数
+      （<code>max_bytes</code>），而它们触发时的处置完全不同——行数到顶就停下并给续读提示，
+      <strong>单行本身就超过字节预算则直接报错</strong>。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ReadFileTool.java:157-172（两层上限：行数到顶停下，单行超预算报错）</div>
+
+<pre><code class="language-java">                if (limit &gt; 0 &amp;&amp; taken &gt;= limit) {
+                    // 这一行已经读出来了，说明后面确实还有内容
+                    moreContent = true;
+                    break;
+                }
+                long lineBytes = utf8Length(line) + (taken &gt; 0 ? 1 : 0);
+                if (usedBytes + lineBytes &gt; maxBytes) {
+                    if (taken == 0) {
+                        // 首行本身就超过预算：这不是「分页装不下」，而是这一行根本放不进来。
+                        // 切短会输出一行看似完整、实际残缺的内容，因此报错并给出三条出路
+                        throw new JellyfishException("单行超过 max_bytes（" + utf8Length(line) + " 字节 &gt; "
+                                + maxBytes + "）：请缩小 limit、调大 max_bytes，或改用 grep_files 定位该行");
+                    }
+                    moreContent = true;
+                    break;
+                }
+</code></pre>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：截断与分页是两件事</span>
+      <p>
+        「超预算」有两种成因，处置也必须不同。<strong>多行超预算</strong>时内容仍在文件里，
+        可以按 <code>offset</code> 续读——所以停下、如实说「后面还有」，并给出下一条 <code>offset</code>
+        （<code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ReadFileTool.java:274</code>
+        是那条续读提示）；<strong>单行超预算</strong>时那一行根本放不进来，切短会输出一行「看起来完整、
+        实际残缺」的内容，而模型无从判断自己拿到的是不是全文——所以报错，并把三条出路（缩小 <code>limit</code>、
+        调大 <code>max_bytes</code>、改用 <code>grep_files</code>）一起写进文案。
+      </p>
+    </div>
+
+    <p>
+      还有两处同源的取舍：非 UTF-8 文件在第一个非法字节处停下并说明原因，而不是把非法字节换成替换字符——
+      换成替换字符的话，用户看到的「一堆问号」会被当成文件内容，而真相是编码不对；取消时把<strong>已经读到的部分
+      照常交出去</strong>并注明它是残缺的。两条都遵循同一条约定：<strong>停下时必须说清是哪一种停</strong>，
+      否则模型会把「读到这里为止」当成「文件就到这里」
+      （<code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ReadFileTool.java:128-203</code>
+      这一段就是这两个分支）。
+    </p>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：以为 <code>max_bytes</code> 是「不再截断」的那道闸</span>
+      <p>
+        <strong>现象</strong>：给 <code>read_file</code> 传一个很大的 <code>max_bytes</code>，
+        输出仍然被截断，还多了一个落盘文件。<br>
+        <strong>根因</strong>：这是两道路径。工具自己的 <code>max_bytes</code> 只是<strong>工具级的默认安全带</strong>
+        （<code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ReadFileTool.java:46-47</code>），
+        它让绝大多数调用不必惊动内核；内核那层还会再兜一次底，输出超过预算时落盘、只回灌头尾预览
+        （见 <a href="18-tools-io.html">18 页</a>）。两道都省不掉：工具不管，内核的落盘会被频繁触发；
+        内核不管，某个工具忘了限流就会把上下文撑爆。<br>
+        <strong>规避</strong>：读大文件用 <code>offset</code> / <code>limit</code> 分片，
+        不要指望把 <code>max_bytes</code> 调大就能「一次读完」——落盘信封给的是预览与回查路径，不是全文。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>5. edit_file / write_file：匹配校验与原子替换</h2>
+
+    <p>
+      两个写工具分工明确：<code>write_file</code> 是「这个文件现在应该是这样」，
+      <code>edit_file</code> 是「把这一段换成那一段」。后者的核心是一个字符串查找，但替换之前要过三道判断。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/EditFileTool.java:66-88（匹配计数、读后校验、原子替换）</div>
+
+<pre><code class="language-java">        Stamp before = Stamp.of(file);
+        String content = readText(file);
+        int matches = countMatches(content, oldText);
+        if (matches == 0) {
+            throw new JellyfishException("文件中未找到 old_text 匹配内容，请确认原文（缩进与换行必须完全一致）: "
+                    + ToolPaths.display(file));
+        }
+        if (matches &gt; 1 &amp;&amp; !replaceAll) {
+            throw new JellyfishException("old_text 在文件中匹配到 " + matches
+                    + " 处，请补足上下文使其唯一，或设置 replace_all=true 全部替换");
+        }
+        String replaced = replaceAll ? content.replace(oldText, newText) : replaceOnce(content, oldText, newText);
+        // 读之后、写之前再看一眼：这两步之间文件可能被别人（另一个代理、用户自己的编辑器）改过，
+        // 而我们是整份覆盖——不查就会把他的改动静默抹掉
+        requireUnchanged(file, before);
+        if (!Files.isWritable(file)) {
+            // 原子替换只受目录权限约束，会绕过文件自身的只读位——那与「不可写就别写」的直觉相反，
+            // 因此这里显式挡一道，保持与普通写入一致的语义
+            throw new JellyfishException("文件不可写: " + ToolPaths.display(file));
+        }
+        try {
+            // 原子替换：写到一半失败时留下的仍是原来那份完整内容，而不是半截文件
+            Utf8Files.writeAtomic(file, replaced.getBytes(StandardCharsets.UTF_8));
+</code></pre>
+
+    <p>三种「不替换」的情况，各自解决一个具体的失败模式：</p>
+
+    <ul>
+      <li>
+        <strong>找不到（<code>matches == 0</code>）</strong>：模型写的「原文」与文件里的实际文本不一致，
+        常见成因是缩进或换行不同——错误文案把这两个成因直接点名。这条判断在<strong>替换之前</strong>，
+        因此不会留下写了一半的文件。
+      </li>
+      <li>
+        <strong>匹配多处且没声明 <code>replace_all</code>（<code>matches &gt; 1</code>）</strong>：
+        模型写的原文常常是文件里很常见的一小段（一个变量名、一句 import），直接替换会把不相关的地方一起改掉。
+        这里<strong>拒绝执行</strong>，要求补足上下文使匹配唯一——这条错误信息比一次错误改写便宜得多。
+      </li>
+      <li>
+        <strong>读之后文件被别人改过（<code>requireUnchanged</code>）</strong>：<code>edit_file</code> 是
+        「整份读出、整份写回」，读与写之间若有人改过这个文件，整份覆盖会把那些改动静默抹掉。
+        判据是文件的「身份」——大小 + 修改时间
+        （<code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/EditFileTool.java:174</code>
+        是取身份的那个方法），取这两样而不是重读一遍内容，因为重读要再付一次 IO。
+      </li>
+    </ul>
+
+    <p>
+      替换本身用<strong>字面量匹配而不是正则</strong>：被改的是代码，里面的 <code>.</code>、<code>(</code>、
+      <code>$</code> 全是普通字符；一旦按正则解释，模型必须自己转义，错一次就改坏文件。匹配计数也刻意不重叠计数
+      （<code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/EditFileTool.java:211</code>），
+      否则 <code>aa</code> 在 <code>aaa</code> 里会被算成两处。写回时用的是<strong>同目录临时文件 + 原子移动</strong>：
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/Utf8Files.java:88-103（原子替换：要么旧的，要么新的）</div>
+
+<pre><code class="language-java">    static void writeAtomic(Path file, byte[] content) throws IOException {
+        Path directory = file.toAbsolutePath().getParent();
+        Path temp = Files.createTempFile(directory, file.getFileName().toString(), ".tmp");
+        try {
+            Files.write(temp, content, StandardOpenOption.TRUNCATE_EXISTING);
+            copyPermissions(file, temp);
+            try {
+                Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                // 少数网络盘不支持原子移动：退回普通替换。内容已经完整写在临时文件里，
+                // 因此这里丢掉的只是「替换那一瞬间的原子性」
+                Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            Files.deleteIfExists(temp);
+        }
+    }
+</code></pre>
+
+    <p>
+      <code>Files.write</code> 是「先截断再写」：写到一半失败（磁盘满、进程被杀）留下的是一份残缺的原文件——
+      而它原本是好的。临时文件 + <code>ATOMIC_MOVE</code> 把「替换」变成一个瞬间动作，没有第三种结果。
+      <code>copyPermissions</code> 那一步容易被忽略：临时文件是按「只有自己可读写」创建的，直接换上去会把原文件的权限改掉，
+      对共享脚本与可执行文件尤其刺眼
+      （<code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/Utf8Files.java:112</code>）。
+    </p>
+
+    <p>
+      <code>write_file</code> 走的是普通写入，因为它的语义就是整份覆盖；但「覆盖」与「新建」必须区分开，
+      否则模型发现不了「本意是改一处、却把整份文件写没了」：
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/WriteFileTool.java:49-70（覆盖语义与「新建 / 覆盖」的区分）</div>
+
+<pre><code class="language-java">    public ToolCallResult handle(ToolCallRequest request) {
+        ToolArguments arguments = new ToolArguments(request.getArguments());
+        Path file = ToolPaths.resolve(arguments.requireString("path"));
+        String content = arguments.requireText("content");
+        if (Files.isDirectory(file)) {
+            throw new JellyfishException("这是一个目录，无法写入: " + ToolPaths.display(file));
+        }
+        boolean existed = Files.exists(file);
+        Path parent = file.getParent();
+        try {
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            Files.write(file, content.getBytes(StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            throw new JellyfishException("写入文件失败: " + ToolPaths.display(file) + " (" + e.getMessage() + ')', e);
+        }
+        int bytes = content.getBytes(StandardCharsets.UTF_8).length;
+        String label = existed ? "覆盖" : "新建";
+</code></pre>
+
+    <p>
+      一个细节值得记：<code>content</code> 用的是 <code>requireText</code> 而不是 <code>requireString</code>。
+      前者允许空串（合法的空文件），后者会把空串判成参数错误——两个入口分开的原因就写在
+      <code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ToolArguments.java:52-64</code>。
+    </p>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：对非 UTF-8 文件做「改一处」</span>
+      <p>
+        <strong>现象</strong>：对一个 GBK 源码文件执行 <code>edit_file</code>，工具直接拒绝，提示「这不是 UTF-8 文本」。<br>
+        <strong>根因</strong>：它整份读出、整份写回。若按「非法字节换成替换字符」的方式读，
+        一次替换就会把整个 GBK 文件变成乱码——那是不可逆的数据损毁。因此读取用严格解码器，非法字节即报错
+        （<code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/Utf8Files.java:47</code>
+        就是那个严格解码器）。<br>
+        <strong>规避</strong>：先转码，或者用 <code>write_file</code> 整份重写。想确认一个文件是不是 UTF-8，
+        用 <code>read_file</code>：它在第一个非法字节处停下，并写明「不是合法 UTF-8」。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>6. list_dir / grep_files：遍历与限额</h2>
+
+    <p>
+      这两个工具是「看」的工具，风险不是改坏东西，而是<strong>把上下文或时间耗光</strong>。
+      两边都有限额，但限额管的不是同一件事。
+    </p>
+
+    <h3>list_dir：显示分页 + 枚举上限</h3>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ListDirTool.java:45-55（两个数字：每页 200 项，枚举最多 5 万项）</div>
+
+<pre><code class="language-java">    /** 缺省每页最多返回的条目数。 */
+    private static final int DEFAULT_LIMIT = 200;
+
+    /**
+     * 一次列举最多收集多少个条目。
+     * &lt;p&gt;
+     * 取值远大于 {@link #DEFAULT_LIMIT}：这个上限不是给人看的，而是给内存与耗时兜底——
+     * 正常目录都在几千项以内，真撞上它是「这个目录不正常」的信号，此时如实说没看全比整份读进来更安全。
+     * 不配置化，与 {@code grep_files} 的两个上限同一个理由。
+     */
+    private static final int MAX_ENTRIES = 50000;
+</code></pre>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ListDirTool.java:188-208（枚举循环：每项查一次取消，到顶即停）</div>
+
+<pre><code class="language-java">    private static Listing listEntries(Path directory, CancellationToken token, int maxEntries) {
+        Listing listing = new Listing();
+        listing.limit = maxEntries;
+        try (DirectoryStream&lt;Path&gt; stream = Files.newDirectoryStream(directory)) {
+            for (Path entry : stream) {
+                if (token.isCancelled()) {
+                    listing.cancelled = true;
+                    return listing;
+                }
+                if (listing.entries.size() &gt;= maxEntries) {
+                    listing.truncated = true;
+                    return listing;
+                }
+                listing.entries.add(entry);
+            }
+        } catch (IOException e) {
+            throw new JellyfishException("列举目录失败: " + ToolPaths.display(directory)
+                    + " (" + e.getMessage() + ')', e);
+        }
+        return listing;
+    }
+</code></pre>
+
+    <p>
+      「截断」与「取消」是两个独立标志
+      （<code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ListDirTool.java:216-238</code>），
+      因为要对用户说的话不同：<strong>截断是「这个目录太大了」，取消是「这次列举没做完」</strong>。
+      输出里这两句的顺序也是刻意的——先报「没看全」，再报「没显示完」，反了会让人以为条目总数是确定的
+      （<code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ListDirTool.java:139-149</code>）。
+      这个工具<strong>不做任何过滤</strong>：<code>target</code>、<code>node_modules</code> 照常列出。
+      过滤是替模型判断哪些项不重要，上限只是明确告诉它这次没看全，两者不矛盾。
+    </p>
+
+    <h3>grep_files：五道限额，三种停法</h3>
+
+    <p>
+      「五道限额」是本页最该记住的一个数：<code>max_results</code>（匹配数）、<code>max_line_chars</code>（单行字符数）、
+      <code>max_bytes</code>（结果总字节数）管<strong>结果有多大</strong>；<code>MAX_VISITED_FILES</code> 与取消令牌管<strong>要花多久</strong>。
+      后两者必需的原因很直白：搜一个不存在的词时一处匹配都不会有，前三道限额一次都用不上，而遍历要走完整棵树。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/GrepFilesTool.java:63-65（跳过名单：常量，不配置化）</div>
+
+<pre><code class="language-java">    /** 搜索时整体跳过的目录名。 */
+    private static final Set&lt;String&gt; SKIPPED_DIRECTORIES = Collections.unmodifiableSet(
+            new HashSet&lt;String&gt;(Arrays.asList(".git", ".idea", "target", "build", "node_modules")));
+</code></pre>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/GrepFilesTool.java:90（时间预算：一次搜索最多访问两万个文件）</div>
+
+<pre><code class="language-java">    private static final int MAX_VISITED_FILES = 20000;
+</code></pre>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/GrepFilesTool.java:400-413（两种「停」在同一个判定点合流）</div>
+
+<pre><code class="language-java">        private boolean stopped() {
+            if (stop != StopReason.COMPLETED) {
+                return true;
+            }
+            if (token.isCancelled()) {
+                stop = StopReason.CANCELLED;
+                return true;
+            }
+            if (visitedFiles &gt;= maxVisitedFiles) {
+                stop = StopReason.FILE_LIMIT;
+                return true;
+            }
+            return false;
+        }
+</code></pre>
+
+    <p>
+      <code>StopReason</code> 是一等状态而不是布尔量，因为<strong>三种提前停各要说一句不同的话</strong>：
+      结果收满、树没扫完、被取消，它们在模型眼里都会表现为「结果看起来是完整的」：
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/GrepFilesTool.java:220-233（渲染：为什么停比找到几处更重要）</div>
+
+<pre><code class="language-java">    private static String render(Searcher searcher) {
+        String body = joinMatches(searcher);
+        switch (searcher.stop) {
+            case CANCELLED:
+                return body.isEmpty()
+                        ? "[已取消：搜索被中止，还没找到匹配；这不代表真的没有]"
+                        : body + "\n[已取消：搜索被中止，以上是已找到 " + searcher.matches.size()
+                                + " 处匹配，可能还有遗漏]";
+            case FILE_LIMIT:
+                return body.isEmpty()
+                        ? "[已扫描 " + searcher.maxVisitedFiles + " 个文件后停止（未扫完整棵树），没有匹配到内容；"
+                                + "这不代表真的没有，可收窄 path 再搜]"
+                        : body + "\n[已截断：只扫描了前 " + searcher.maxVisitedFiles + " 个文件（未扫完整棵树），"
+                                + "共显示 " + searcher.matches.size() + " 处匹配；可收窄 path 再搜]";
+</code></pre>
+
+    <p>
+      取消的处理与 shell 插件同口径：<strong>返回已经找到的匹配并说明被中止，而不是抛异常</strong>——
+      已经把一部分工作做完了，丢掉它只会让用户白等一场
+      （<code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/GrepFilesTool.java:36-48</code>）。
+      取消检查做在三个粒度上：目录访问、每个文件、以及每 <code>CANCEL_CHECK_LINES</code> 行一次
+      （<code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/GrepFilesTool.java:99</code>，
+      值 <code>8192</code>）——不能只在文件边界查，一个几百 MB 的日志文件就足够让按 Esc 之后等上几十秒。
+    </p>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：把「没扫完」读成「没有匹配」</span>
+      <p>
+        <strong>现象</strong>：在仓库根跑一次宽正则，结果只有几十行，于是得出「这个符号只被引用了这些次」。<br>
+        <strong>根因</strong>：命中的可能不是 <code>COMPLETED</code>。上限、字节预算与跳过名单都能让搜索提前结束，
+        而提前结束时输出只是「就这么几行」，缺少一句说明就无法与「真扫完了」区分；
+        「一处都没有」的三种成因也必须各说各的话
+        （<code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/GrepFilesTool.java:212-215</code>）。<br>
+        <strong>规避</strong>：读结果末尾那句方括号说明；看到「未扫完整棵树」就收窄 <code>path</code> 再搜。
+        另外记住跳过名单是常量，所以「搜 build 产物里的东西」只能换工具，不能靠配置打开。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>7. 路径处理：解析、展示与路径闸门</h2>
+
+    <p>
+      路径是文件工具唯一的「外部输入」，它有三件事要说清：<strong>相对路径按谁解析</strong>、
+      <strong>输出里怎么写</strong>、<strong>谁能拦住一个越界的路径</strong>。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ToolPaths.java:66-68（相对路径的解析基准只有一处）</div>
+
+<pre><code class="language-java">    static Path resolve(String raw) {
+        return Paths.get(expandHome(raw)).toAbsolutePath().normalize();
+    }
+</code></pre>
+
+    <p>
+      基准是<strong>进程工作目录</strong>
+      （<code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ToolPaths.java:36-37</code>），
+      不是会话目录——因为 <code>ToolCallRequest</code> 不带工作目录，会话里也没有 cwd 这个概念。这条口径集中在一处，
+      将来补上会话级 cwd 时只改这里。第三件约定是「行首的 <code>~</code> 要认」：内核回灌工具结果落盘路径时
+      会把它缩写成 <code>~</code>（以免把真实用户名写进上下文），模型照抄那条路径回查时必须打得开，
+      所以工具侧用同一套规则展开
+      （<code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ToolPaths.java:80-95</code>）。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ToolPaths.java:167-174（展示口径：绝对路径又长又难读，还让相邻两次调用无法比对）</div>
+
+<pre><code class="language-java">    static String display(Path path) {
+        Path absolute = path.toAbsolutePath().normalize();
+        if (!absolute.startsWith(WORKING_DIRECTORY)) {
+            return absolute.toString();
+        }
+        String relative = WORKING_DIRECTORY.relativize(absolute).toString();
+        return relative.isEmpty() ? "." : relative;
+    }
+</code></pre>
+
+    <p>
+      越界拦截<strong>不在工具里</strong>：工具只解析、只展示，能不能访问交给权限层——agent 授权、
+      插件按模式收窄的白名单，以及本插件自己的 <code>PathPolicy</code>
+      （<code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ToolPaths.java:22-25</code>）。
+      工具自己再收一道窄口子，只会让「读工作目录外的文件」这种正常需求无法完成。但「闸门与工具必须用同一套解析规则」
+      这条纪律很硬：两边对「同一个路径落在哪」的判断一旦分叉，分叉的方向恰恰是闸门被绕过。闸门本身很小，
+      它把「这个路径在不在允许范围内」翻成一次权限裁定：
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/PathGuardContribution.java:49-55（认领工具名，再把判定交给策略）</div>
+
+<pre><code class="language-java">    public PermissionVerdict handle(PermissionCheckRequest request) {
+        PathAccess access = accessByTool.get(request.getToolName());
+        if (access == null || access == PathAccess.NONE) {
+            return PermissionVerdict.abstain();
+        }
+        return policy.verdict(access, request.getToolName(), request.getArguments());
+    }
+</code></pre>
+
+    <p>
+      第一件事是<strong>认领</strong>：<code>PermissionCheckRequest</code> 是<strong>类型级</strong>扩展点，
+      注册之后<strong>每一次</strong>工具调用的权限检查都会进来——包括不属于本插件的工具。
+      因此不在本表里的工具名一律「无异议」，绝不替别人的工具做判断。策略侧的裁定只有三种结果，且都不含「放行」：
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/PathPolicy.java:320-332（无异议 / 要审批 / 拒绝）</div>
+
+<pre><code class="language-java">    PermissionVerdict verdict(PathAccess access, String toolName, Map&lt;String, Object&gt; arguments) {
+        Rule rule = ruleFor(access);
+        if (rule == null || rule.outside == Outside.ALLOW) {
+            return PermissionVerdict.abstain();
+        }
+        Path target = targetOf(arguments);
+        if (target == null || ToolPaths.insideAny(target, rule.allow)) {
+            return PermissionVerdict.abstain();
+        }
+        String reason = toolName + " 的目标在工作目录之外（" + target + "）：允许的路径是 "
+                + rule.describe();
+        return rule.outside == Outside.DENY ? PermissionVerdict.deny(reason) : PermissionVerdict.ask(reason);
+    }
+</code></pre>
+
+    <p>
+      缺省策略是「<strong>只管写、且只允许工作目录</strong>」：读不设限，因为「读工作目录外的文件」是常规需求
+      （读别的仓库、读配置、读内核回灌的工具结果），默认拦它会把正常用法一起挡掉。写方向的范围之外缺省是
+      <code>ASK</code>——升级为人工审批；没有审批者的外壳（例如 <code>-cli</code>）里它按拒绝处理
+      （<code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/PathPolicy.java:67-68</code>）。
+      对应的两个常量是：
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/PathPolicy.java:55-59（缺省允许清单与缺省裁定）</div>
+
+<pre><code class="language-java">    private static final List&lt;String&gt; DEFAULT_ALLOW = Collections.unmodifiableList(
+            Collections.singletonList(DEFAULT_PATH));
+
+    /** 工作目录之外的路径缺省如何处理。 */
+    private static final Outside DEFAULT_OUTSIDE = Outside.ASK;
+</code></pre>
+
+    <p>
+      判定时不能只比规范化的字面路径，必须先解掉符号链接——工作目录里放一个指向 <code>/etc</code> 的链接，
+      字面路径就在允许范围内，而工具顺着链接读写的却是外面，闸门等于不存在：
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ToolPaths.java:111-119（按真实位置比）</div>
+
+<pre><code class="language-java">    static boolean insideAny(Path target, List&lt;Path&gt; roots) {
+        Path real = realPath(target);
+        for (Path root : roots) {
+            if (real.startsWith(realPath(root))) {
+                return true;
+            }
+        }
+        return false;
+    }
+</code></pre>
+
+    <p>
+      <code>realPath</code> 不能直接用 <code>toRealPath()</code>：它对不存在的路径抛异常，而闸门恰恰要判
+      「模型准备新建的那个文件在哪」。做法是往上找到最近一个已存在的祖先、解开它的链接，再把缺掉的那几段按原样接回去
+      （<code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ToolPaths.java:134-159</code>）。
+      参数里取不到路径时（缺参数、类型不对）闸门返回「无异议」——那种情况下工具自己会报「参数不合法」，
+      那是比「权限不允许」准确得多的错，而且没有路径就没有可判的对象
+      （<code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/PathPolicy.java:356-365</code>）。
+    </p>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：策略与实现放在一起，而不是在内核里立一份「路径参数表」</span>
+      <p>
+        内核不认识「<code>path</code>」这种工具参数语义；把「哪些参数是路径」写进核心策略，
+        会让内核被迫认识每一种工具的参数表。而权限扩展点本来就带着 <code>toolName</code> 与 <code>arguments</code>，
+        插件侧完全判得出来。另一半理由是<strong>方向性</strong>：<code>PermissionVerdict</code> 只有
+        「无异议 / 要审批 / 拒绝」三态、没有「放行」
+        （<code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/PathPolicy.java:22-23</code>），
+        因此插件无论怎么配都只能收紧，内核的核心策略结论不会被放宽。同理，工具的访问性质由工具自己声明而不是在闸门里列清单
+        ——清单会漂移，漂移的方向正是闸门被绕过。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>8. shell 插件：注册面的三件事</h2>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellPlugin.java:52-67（工具 + 权限处理器 + 输入指令）</div>
+
+<pre><code class="language-java">    public void start(PluginContext context) {
+        PluginConfig config = PluginConfig.from(context);
+        ShellProcessRunner created = new ShellProcessRunner(new CommonsExecShellProcessLauncher());
+        ShellTool tool = new ShellTool(config, created);
+        // 先装配再注册：处理器一旦注册就可能被调用，依赖必须已经就绪
+        context.handle(ToolCallRequest.class, ShellTool.TOOL_NAME, ShellTool.descriptor(), tool);
+        context.contribute(PermissionCheckRequest.class, new ShellPermissionContribution(config.commandPolicy()));
+        context.handle(InputDirectiveRequest.class, ShellInputDirective.MARKER,
+                new InputDirectiveDescriptor("执行一条 shell 命令（结果进入上下文）"),
+                new ShellInputDirective());
+        this.runner = created;
+        LOG.info("命令行插件已启动: timeout={}s maxTimeout={}s idleTimeout={}s allowed={} trusted={}",
+                Integer.valueOf(config.timeoutSeconds()), Integer.valueOf(config.maxTimeoutSeconds()),
+                Integer.valueOf(config.idleTimeoutSeconds()), Integer.valueOf(config.allowedCommands().size()),
+                Integer.valueOf(config.commandPolicy().trustedCommandCount()));
+    }
+</code></pre>
+
+    <p>
+      三件事：<strong>① 工具</strong>——路由键 <code>ShellTool.TOOL_NAME</code>，也就是 <code>"shell"</code>；
+      <strong>② 权限处理器</strong>——类型级贡献，给命令分类；<strong>③ 输入指令</strong>——把输入框里以
+      <code>!</code> 开头的行翻译成一次 <code>shell</code> 工具调用。「先装配再注册」那条注释不是洁癖：
+      注册一旦完成，处理器就可能被别的线程调用，而 <code>ShellTool</code> 依赖的配置与执行器必须在那之前就位。
+      顺手记下这个数：<strong>shell 插件只注册 1 个工具</strong>，<code>!命令</code> 不是第二个工具，它只是一种输入形式。
+    </p>
+
+    <p>
+      <code>!</code> 那条指令的实现只有十几行，纪律是「<strong>只翻译，不执行</strong>」：
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellInputDirective.java:35-44（返回一份工具调用意图）</div>
+
+<pre><code class="language-java">    public InputDirectiveResult handle(InputDirectiveRequest request) {
+        String input = request.getInput() == null ? "" : request.getInput().trim();
+        if (!input.startsWith(MARKER)) {
+            // 标记相同但语法不匹配（理论上不该发生，因为路由键就是首字符）
+            return InputDirectiveResult.unclaimed();
+        }
+        String command = input.substring(MARKER.length()).trim();
+        Map&lt;String, Object&gt; arguments = Collections.&lt;String, Object&gt;singletonMap("command", command);
+        return InputDirectiveResult.toolCall(ShellTool.TOOL_NAME, arguments);
+    }
+</code></pre>
+
+    <p>
+      它返回的是 <code>InputDirectiveResult.toolCall(...)</code>，也就是「请内核发起一次工具调用」，
+      而不是自己去跑命令。这条分工的后果很直接：<strong>权限判定、人工审批、超时、进程树终止、输出截断与落盘
+      全部与模型发起的工具调用一致</strong>；而且插件拿不到 <code>PermissionManager</code>，即便想「顺手把命令跑了」
+      也做不到
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellInputDirective.java:13-15</code>）。
+      卸载本插件后 <code>!</code> 不再被认领，用户敲它就只是一段普通文本。
+    </p>
+
+    <p>
+      还有一件<strong>没做</strong>的事值得说明：shell 插件不注册提示词贡献。理由是工具名片里的描述已经把
+      「每次调用都是一个全新的 shell，<code>cd</code> 不会跨调用保留」「读文件请优先用 <code>read_file</code>」
+      这些话说清楚了，再往 system prompt 里塞一段就是每轮都重复付费
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellPlugin.java:30-31</code>）。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>9. 命令怎么跑起来：启动、环境与输出流</h2>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellTool.java:85-103（handle：不物化输出，也不知道落盘路径）</div>
+
+<pre><code class="language-java">    public ToolCallResult handle(ToolCallRequest request) {
+        ShellArguments arguments = new ShellArguments(request.getArguments());
+        String command = arguments.requireCommand();
+        Path workingDirectory = resolveWorkingDirectory(arguments.optionalCwd());
+        ShellInvocation invocation = new ShellInvocation(command, workingDirectory,
+                timeoutMillis(arguments.optionalTimeoutSeconds()),
+                config.idleTimeoutSeconds() * 1000L,
+                ShellEnvironment.build(System.getenv(), sensitivePatterns(), config.environment()));
+        ToolOutputSink sink = request.getOutputSink();
+        ShellResult result = runner.run(invocation, sink, request.getCancellationToken());
+        String summary = result.summary(workingDirectory.toString());
+        // 元数据先声明再收尾：它必须出现在正文首行，而正文是 sink 收尾时才渲染的
+        sink.summary(summary);
+        String captured = sink.finish();
+        // sink 是 NOOP 的调用点（非内核调用）拿不到任何内容，此时至少要让结论可见，
+        // 否则模型看到一片空白，无法区分「命令没输出」与「命令没跑」
+        // 元数据与首行结论同源：模型读文本，界面与审计读字段
+        return new ToolCallResult(TOOL_NAME, captured == null ? summary : captured, result.metadata());
+    }
+</code></pre>
+
+    <p>
+      四个变量各有讲究。<strong>工作目录</strong>缺省是进程启动目录，传了 <code>cwd</code> 就提前校验它存在且是目录
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellTool.java:112-123</code>）
+      ——不提前报错的话，失败会以「命令找不到」的形式出现，而真实原因是目录写错了。<strong>墙钟超时</strong>
+      会被钳制到配置上限而不是拒绝
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellTool.java:131-135</code>），
+      理由是模型要求一个过大的超时通常只是保守，直接报错会浪费一整轮往返。<strong>静默超时</strong>来自插件配置。
+      <strong>环境变量</strong>是父环境剔除敏感变量后的完整一份。另外 <code>timeout_seconds</code> 参数写 0 会被拒绝，
+      而不被解释成「不超时」——内核里没有「无上限」这个语义
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellArguments.java:76-89</code>）。
+    </p>
+
+    <h3>进程是怎么起的</h3>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommonsExecShellProcessLauncher.java:39-50（Commons Exec 启动 + 两条泵线程）</div>
+
+<pre><code class="language-java">    public ShellProcess launch(ShellInvocation invocation, OutputStream mergedOutput) throws IOException {
+        // 非零退出码不是异常：grep 没匹配到返回 1 是信息而不是故障，
+        // 让 Commons Exec 抛 ExecuteException 只会把退出码埋进异常里更难取
+        CapturingExecutor executor = new CapturingExecutor();
+        executor.setExitValues(null);
+        executor.setStreamHandler(NoopStreamHandler.INSTANCE);
+        Process process = executor.launch(shellCommand(invocation.command()), invocation.environment(),
+                invocation.workingDirectory().toFile());
+        Thread stdout = pump(PUMP_PREFIX + "stdout", process.getInputStream(), mergedOutput);
+        Thread stderr = pump(PUMP_PREFIX + "stderr", process.getErrorStream(), mergedOutput);
+        return new CommonsExecShellProcess(process, stdout, stderr);
+    }
+</code></pre>
+
+    <p>
+      三个动作一句一坑。<code>setExitValues(null)</code>：告诉 Commons Exec 任何退出码都不算异常，
+      否则 <code>grep</code> 无匹配（返回 1）会变成异常，退出码反而更难取。改用 <code>CapturingExecutor</code>
+      重写 <code>DefaultExecutor.launch</code> 是为了拿到 <code>Process</code> 句柄——终止链需要它，
+      而该库默认不对外暴露
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommonsExecShellProcessLauncher.java:233-256</code>）。
+      <code>NoopStreamHandler</code>：该库自带的流处理器在设置进程时会直接关掉子进程的 stdin，
+      且它的线程无法被有界地等待，所以这里换成一个什么都不做的处理器、由自己起的泵线程接管
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommonsExecShellProcessLauncher.java:19-26</code>）。
+      泵线程把两条流写进<strong>同一个</strong> <code>OutputStream</code>，顺序即到达顺序，像终端一样——
+      命令失败的原因常常恰好是 stderr 与 stdout 交错的顺序；而且<strong>泵不关闭目标流</strong>：
+      先结束的那条一关，另一条之后的内容就丢了
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommonsExecShellProcessLauncher.java:71-72</code>）。
+    </p>
+
+    <p>命令原文怎么变成 <code>/bin/sh -c</code> 的那一行只有六行，但有一个必须照抄的细节：</p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommonsExecShellProcessLauncher.java:58-66（原文作为一个 argv 元素交给 shell，不做任何转义）</div>
+
+<pre><code class="language-java">    private static CommandLine shellCommand(String command) {
+        boolean windows = System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
+        CommandLine line = new CommandLine(windows ? "cmd.exe" : "/bin/sh");
+        line.addArgument(windows ? "/c" : "-c");
+        // 不做引号处理：命令原文必须作为一个 argv 元素原样交给 shell，
+        // 任何转义都会改变用户写的重定向、管道与通配符的含义
+        line.addArgument(command, false);
+        return line;
+    }
+</code></pre>
+
+    <p>
+      输入是<strong>命令原文，不是 argv 数组</strong>。拆成数组就得自己实现整门 shell 语法，
+      而且会与用户对「命令行」的预期不一致
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellTool.java:23-25</code>）。
+      因此管道、重定向、通配符、<code>&amp;&amp;</code> 都按 shell 语义工作，代价是这个工具只能活在 POSIX 环境里。
+    </p>
+
+    <h3>环境变量：继承 + 剔除 + 覆盖，顺序不能颠倒</h3>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellEnvironment.java:63-68（先注入防挂死默认值，再叠加用户配置）</div>
+
+<pre><code class="language-java">        result.putAll(ANTI_HANG);
+        if (overrides != null) {
+            result.putAll(overrides);
+        }
+        return result;
+    }
+</code></pre>
+
+    <p>
+      <code>ANTI_HANG</code> 是六条默认变量
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellEnvironment.java:157-166</code>）：
+      <code>PAGER=cat</code>、<code>GIT_PAGER=cat</code> 挡的是分页器（<code>git log</code> 会停在
+      <code>less</code> 里等按键），<code>GIT_TERMINAL_PROMPT=0</code> 挡的是凭据提示（没有终端时会一直等），
+      <code>TERM=dumb</code>、<code>NO_COLOR=1</code>、<code>DEBIAN_FRONTEND=noninteractive</code>
+      让输出不带颜色与光标控制——那些转义序列对模型没有价值，只会浪费上下文。<strong>顺序不能颠倒</strong>：
+      先按模式剔除父环境、再注入默认值、最后叠加用户配置；用户写在 <code>environment</code> 里的值必须能盖掉默认值，
+      「可配置」的含义就是「我说了算」。
+    </p>
+
+    <p>
+      继承父环境而不是严格白名单，是因为丢掉 <code>PATH</code> 就意味着几乎所有命令都是 command not found；
+      代价是<strong>剔除敏感变量必须默认开启</strong>：工具输出会被送到远端 LLM，一次 <code>env</code> 或
+      <code>printenv</code> 就是一次凭据外泄，而用户不会记得为这件事做配置
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellEnvironment.java:12-15</code>）。
+      内置模式是 <code>*KEY*</code>、<code>*TOKEN*</code>、<code>*SECRET*</code>、<code>*PASSWORD*</code>、
+      <code>*CREDENTIAL*</code>
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/PluginConfig.java:64-66</code>），
+      用户可以在 <code>sensitivePatterns</code> 里追加
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/PluginConfig.java:132</code>），
+      但<strong>不能减</strong>——合并规则是「内置表 + 用户追加」
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellEnvironment.java:76-83</code>）。
+    </p>
+
+    <h3>输出：从字节到字符，再到内核的捕获通道</h3>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellOutputCapture.java:218-234（解码结果写进 sink；二进制只计数不写入）</div>
+
+<pre><code class="language-java">    private void emit() {
+        chars.flip();
+        if (!chars.hasRemaining()) {
+            chars.clear();
+            return;
+        }
+        String text = chars.toString();
+        chars.clear();
+        textChars += text.length();
+        replacements += countReplacements(text);
+        // 占比判据只在文本已经有一定量之后才有意义：几个字符就下结论会把「开头恰好有个坏字节」误判
+        if (replacements &gt;= REPLACEMENT_THRESHOLD &amp;&amp; replacements * REPLACEMENT_RATIO &gt; textChars) {
+            markBinary();
+            return;
+        }
+        sink.write(text);
+    }
+</code></pre>
+
+    <p>
+      那个适配流做了三件事，每件都对应一个具体故障：<strong>跨块解码</strong>——用有状态的
+      <code>CharsetDecoder</code> 累积残余字节
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellOutputCapture.java:51-59</code>），
+      而不是每块各自 <code>new String(bytes)</code>，否则一个被切成两块的汉字会变成乱码，
+      而那些中文日志恰恰是排查时最需要看清的部分；<strong>二进制识别</strong>——出现 NUL 字节即判定，
+      或替换字符达到 4 个且占比超过 5%
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellOutputCapture.java:29-30</code>），
+      识别之后<strong>只标记、不中断</strong>，后续字节继续被读取与计数，只是不再进入上下文；
+      <strong>持续 drain</strong>——无论是否保留内容都必须一直读，停止读取会让子进程因管道写满而永久阻塞，
+      表现是「命令卡死」，这是最难归因的一类故障。
+    </p>
+
+    <p>
+      这里就是「工具输出落盘」的衔接点：<code>ShellOutputCapture</code> 把文本写进 <code>ToolOutputSink</code>，
+      而<strong>落盘、命名、清理、信封格式全部由内核实现</strong>——插件只依赖 <code>jellyfish-api</code>，
+      拿不到内核的落盘存储，若让它自己写文件就会出现第二套目录、命名与清理策略
+      （<code>Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/ToolOutputSink.java:11-13</code>）。
+      <code>sink.summary(...)</code> 声明的那一行元数据会被渲染在正文首行，因此头尾切分时它不会被截掉
+      （<code>Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/ToolOutputSink.java:57-59</code>）
+      ——这正是 <code>ShellTool</code> 里「元数据先声明再收尾」两句注释的由来。
+    </p>
+
+    <div class="mermaid">
+sequenceDiagram
+  participant Tool as ShellTool
+  participant Runner as ShellProcessRunner
+  participant Launcher as CommonsExecShellProcessLauncher
+  participant Proc as 子进程
+  participant Sink as ToolOutputSink
+  Tool->>Runner: run(invocation, sink, token)
+  Runner->>Launcher: launch(invocation, capture)
+  Launcher->>Proc: 起 /bin/sh -c 并接两条泵线程
+  Proc-->>Sink: stdout 与 stderr 合并写入
+  Runner->>Runner: 等待循环判定超时 / 静默 / 取消
+  Runner->>Proc: 需要时 killTree
+  Runner-->>Tool: ShellResult
+  Tool->>Sink: summary 后再 finish
+</div>
+    <p class="figure-cap">图 22-2　一条 shell 命令的执行链：工具不物化输出，只把结论与元数据交出去</p>
+
+    <!-- ============================================================ -->
+    <h2>10. 超时、终止与失败表达</h2>
+
+    <p>
+      执行器里有<strong>三条计时/中断来源</strong>：墙上时钟超时、静默超时、用户取消。
+      它们都在同一个等待循环里判定，「谁先到谁触发」只有一个真源：
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellProcessRunner.java:206-230（三条来源、一个判定点）</div>
+
+<pre><code class="language-java">            if (token.isCancelled()) {
+                return Verdict.of(ShellResult.Termination.CANCELLED);
+            }
+            try {
+                if (process.waitFor(POLL_MILLIS)) {
+                    // 进程退出之后要再确认一次取消：取消回调会直接给子进程发信号，
+                    // 因此「进程退出了」在取消场景下同样成立，先判退出会把取消误报成正常完成
+                    return Verdict.of(token.isCancelled() ? ShellResult.Termination.CANCELLED
+                            : ShellResult.Termination.COMPLETED);
+                }
+            } catch (InterruptedException e) {
+                // 谁中断了我们：按取消处理最保守——进程还活着，必须要终止
+                Thread.currentThread().interrupt();
+                return Verdict.of(ShellResult.Termination.CANCELLED);
+            }
+            long now = System.currentTimeMillis();
+            if (now &gt;= deadline) {
+                return Verdict.of(ShellResult.Termination.TIMEOUT);
+            }
+            long idle = invocation.idleTimeoutMillis();
+            if (idle &gt; 0 &amp;&amp; now - capture.lastOutputAt() &gt;= idle) {
+                // 把「真的静默了多久」一路带出去：判定点知道这个数，判定之后就没别人知道了
+                return Verdict.idle(now - capture.lastOutputAt(), idle);
+            }
+</code></pre>
+
+    <p>
+      等待用 100ms 的轮询切片而不是阻塞等待
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellProcessRunner.java:39-40</code>），
+      因此三种判定的精度都是这个量级，代价只是每秒十次 <code>isAlive()</code>。这也解释了为什么本类
+      <strong>不使用 <code>ExecuteWatchdog</code></strong>：若把墙钟交给它、静默与取消留在循环里，
+      同一次调用的终止就有两个发起方，事后没人能说清是哪一个动的手
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellProcessRunner.java:16-20</code>）。
+      取消回调只发信号（<code>token.onCancel(process::destroy)</code>，
+      <code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellProcessRunner.java:115</code>）：
+      它可能在界面渲染线程上执行（用户按下 Esc 的那一刻），因此不能等待、不能递归查进程树，
+      完整的终止链由等待循环在几十毫秒内接手。
+    </p>
+
+    <p>
+      终止之后还要清理进程树与插件停止两条路。前者是 <code>ProcessTrees.killTree(...)</code>：宽限 2 秒后强杀；
+      后者是插件停止时的兜底：
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellProcessRunner.java:179-189（终止全部在途进程：先立旗再取快照，杀进程在锁外做）</div>
+
+<pre><code class="language-java">    void killAll() {
+        Set&lt;ShellProcess&gt; snapshot;
+        synchronized (lock) {
+            closed = true;
+            snapshot = new HashSet&lt;ShellProcess&gt;(active);
+        }
+        for (ShellProcess process : snapshot) {
+            LOG.warn("插件停止，终止在途命令: pid={}", Long.valueOf(process.pid()));
+            ProcessTrees.killTree(process, KILL_GRACE_MILLIS, KILL_WAIT_MILLIS);
+        }
+    }
+</code></pre>
+
+    <p>
+      这条纪律的目的写在注释里：<strong>否则用户看到的是「jellyfish 都退出了，那条命令还在跑」</strong>，
+      而它可能正是插件热部署或关闭的原因。注意「杀进程在锁外做」——杀一棵进程树要等 SIGTERM 的宽限期，
+      占着锁会让正在收尾的调用线程排队等它。<code>ShellPlugin.stop()</code> 做的就是取走执行器再调 <code>killAll()</code>
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellPlugin.java:69-76</code>），
+      而执行器字段声明为 <code>volatile</code>：<code>start()</code> 与 <code>stop()</code> 由 PF4J 在不同线程上调用，
+      读到陈旧 <code>null</code> 的后果是「一次都没杀」
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellPlugin.java:43-49</code>）。
+    </p>
+
+    <h3>非零退出码是信息，不是异常</h3>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellResult.java:25-42（五种终止原因）</div>
+
+<pre><code class="language-java">    enum Termination {
+
+        /** 命令自己跑完了（退出码有意义）。 */
+        COMPLETED,
+
+        /** 达到墙上时钟超时。 */
+        TIMEOUT,
+
+        /** 达到静默超时：连续一段时间没有任何输出。 */
+        IDLE_TIMEOUT,
+
+        /** 用户取消（Esc / 客户端断连）。 */
+        CANCELLED,
+
+        /** 插件停止（热部署、内核关闭）：进程是被我们连根拔掉的，不是命令自己出了事。 */
+        STOPPED
+    }
+</code></pre>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：为什么非零退出码不抛异常</span>
+      <p>
+        <code>grep</code> 没匹配到返回 1、<code>diff</code> 有差异返回 1，这些都是<strong>信息</strong>而不是故障。
+        把它们变成异常会把工具调用的失败语义稀释掉——模型与外壳都再也分不清「命令说了没有」与
+        「命令根本没跑起来」
+        （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellResult.java:12-14</code>）。
+        同理，被我们杀掉的进程<strong>不报退出码</strong>：那时的 143 / 137 只反映我们发的信号，
+        报出来会被读成「命令自己出了问题」，所以只如实给出终止原因
+        （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellResult.java:16-17</code>）。
+      </p>
+    </div>
+
+    <p>机器可读的那一份放进元数据，只有两个键是内核约定认识的：</p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellResult.java:144-160（metadata：退出码只在 COMPLETED 时填）</div>
+
+<pre><code class="language-java">    Map&lt;String, Object&gt; metadata() {
+        Map&lt;String, Object&gt; metadata = new LinkedHashMap&lt;String, Object&gt;();
+        if (termination == Termination.COMPLETED) {
+            metadata.put(ToolMetadata.KEY_EXIT_CODE, exitCode);
+        }
+        metadata.put(ToolMetadata.KEY_TERMINAL, termination.name());
+        metadata.put("durationMs", durationMillis);
+        if (termination == Termination.IDLE_TIMEOUT) {
+            // 与首行结论同源：读文本的是模型，读字段的是界面与审计，两者不该各算一个数
+            metadata.put("idleMs", idleMillis);
+        }
+        if (binaryOutput) {
+            metadata.put("binary", Boolean.TRUE);
+            metadata.put("binaryBytes", binaryBytes);
+        }
+        return metadata;
+    }
+</code></pre>
+
+    <p>
+      <code>ToolMetadata.KEY_TERMINAL</code> 的值就是枚举的 <code>name()</code>（例如 <code>IDLE_TIMEOUT</code>），
+      因此「这条命令是怎么结束的」在界面与审计里有稳定的字符串可比对；内核只透传不解释，
+      由外壳按 <code>ToolMetadata#failed</code> 判「值不值得警示」
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellResult.java:136-137</code>）。
+      模型读的是首行的同一份事实，两者同源：
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellResult.java:167-178（首行结论：不同终止原因说不同的话）</div>
+
+<pre><code class="language-java">        switch (termination) {
+            case COMPLETED:
+                text.append("exit: ").append(exitCode);
+                break;
+            case TIMEOUT:
+                text.append("已超时（超过 ").append(seconds(durationMillis)).append(" 秒），已终止");
+                break;
+            case IDLE_TIMEOUT:
+                // 报「实际静默了多久」而不是耗时：一条先跑了 1.4 秒才安静下来的命令，
+                // 用耗时说「连续 N 秒无输出」会把有输出的那一段也算进去——那个数字不真
+                text.append("连续 ").append(seconds(idleMillis)).append(" 秒无输出，判定为卡住并终止");
+                break;
+</code></pre>
+
+    <p>
+      注意 <code>IDLE_TIMEOUT</code> 报的是<strong>实际静默时长</strong>而不是总耗时，因此 <code>ShellResult</code>
+      里单独留了 <code>idleMillis</code> 字段
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellResult.java:53-60</code>），
+      而它只能由等待循环那个判定点算出来——这就是为什么「结论」被单独做成了一个值对象 <code>Verdict</code>
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellProcessRunner.java:253-260</code>）。
+      最后，<code>"已取消"</code> 与 <code>"插件已停止"</code> 分开说：取消是用户按了 Esc，后者连插件都没了，
+      两者对读的人意味着完全不同的下一步
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellResult.java:182-186</code>）。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>11. 危险操作的边界：审批 + 白名单 + 分类器</h2>
+
+    <p>
+      shell 是这套系统里<strong>最需要审批的工具</strong>，原因写在工具类注释里：<strong>没有沙箱</strong>——
+      命令以本进程的权限执行，能读写本用户的任何文件。它是能力而不是漏洞，但必须让用户知道，
+      因此推荐把它放进 <code>askTools</code> 让每次调用都过一眼
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellTool.java:27-28</code>）。
+      审批本身由内核的权限链负责（见 <a href="06-permissions.html">06 页</a>），
+      插件做的是<strong>给命令分类</strong>，把结论翻译成一次裁定：
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellPermissionContribution.java:43-53（认领工具名后交给命令策略）</div>
+
+<pre><code class="language-java">    public PermissionVerdict handle(PermissionCheckRequest request) {
+        if (!ShellTool.TOOL_NAME.equals(request.getToolName())) {
+            return PermissionVerdict.abstain();
+        }
+        Object command = request.getArguments().get("command");
+        if (!(command instanceof String) || ((String) command).trim().isEmpty()) {
+            // 拿不到命令原文时不能假设它无害：空声明等于放行，宁可让人看一眼
+            return PermissionVerdict.ask("无法读取命令原文，需要确认");
+        }
+        return policy.verdict(((String) command).trim());
+    }
+</code></pre>
+
+    <p>
+      这里同样有两处「认领」与「宁可多问」：<code>PermissionCheckRequest</code> 是类型级扩展点，
+      注册之后每一次工具调用的权限检查都会进来——包括 <code>read_file</code>、<code>todo_write</code> 等等，
+      不给非本工具的命令表态不是风格问题：插件返回的裁定会参与「取最严」的合并，给别的工具下结论等于越过自己的边界去管别人
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellPermissionContribution.java:12-15</code>）。
+      拿不到命令原文时返回 <code>ask</code> 而不是「无异议」——<strong>空声明等于放行</strong>。
+    </p>
+
+    <p>命令策略是三只旋钮，回答两个问题：</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>配置键</th><th>回答的问题</th><th>缺省</th><th>源码位置</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>allowedCommands</code></td>
+            <td>能不能跑（默认拒绝）</td>
+            <td>空列表＝不启用</td>
+            <td><code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/PluginConfig.java:123</code></td>
+          </tr>
+          <tr>
+            <td><code>commandPolicy.trustedCommands</code></td>
+            <td>要不要问人（命中即免审批）</td>
+            <td>空列表＝不启用</td>
+            <td><code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/PluginConfig.java:134</code></td>
+          </tr>
+          <tr>
+            <td><code>commandPolicy.readOnlyCommands</code></td>
+            <td>要不要问人（只读查询不打扰）</td>
+            <td>内置表 + 用户追加</td>
+            <td><code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:90-94</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      内置只读表是 <code>ls</code>、<code>cat</code>、<code>head</code>、<code>tail</code>、<code>wc</code>、
+      <code>pwd</code>、<code>echo</code>、<code>which</code>、<code>type</code>、<code>date</code>、
+      <code>uname</code>、<code>whoami</code>、<code>id</code>、<code>df</code>、<code>du</code>、<code>ps</code>、
+      <code>stat</code>、<code>file</code>，以及两 token 形式的 <code>git status</code> / <code>git log</code> /
+      <code>git diff</code> / <code>git show</code> / <code>git rev-parse</code> / <code>npm ls</code> /
+      <code>pnpm ls</code>
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:90-94</code>）。
+      刻意保守的三条也写在注释里：<code>find</code> 不在（<code>find -delete</code>）、<code>git fetch</code> /
+      <code>git push</code> 不在（会改远端与本地 ref）、<code>npm test</code> / <code>mvn test</code> 不在
+      （执行仓库里的任意代码）——这三个都是「看起来无害」的典型误判点
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:47-50</code>）。
+    </p>
+
+    <p>裁定的顺序即优先级，逐段判定是核心：</p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:264-291（白名单 → 拒绝形状 → 可信表 → 分类器）</div>
+
+<pre><code class="language-java">        if (!allowedCommands.isEmpty()) {
+            for (String segment : segments.parts) {
+                if (!matchesPrefix(allowedCommands, segment)) {
+                    return PermissionVerdict.deny("命令不在 allowedCommands 白名单内：" + firstToken(segment));
+                }
+            }
+        }
+        // 拒绝形状按原文匹配：`rm -rf /` 被拆成几段也仍然是那个形状
+        String denied = matchedDeniedPattern(command);
+        if (denied != null) {
+            return PermissionVerdict.deny("命令匹配拒绝形状：" + denied);
+        }
+        if (!trustedCommands.isEmpty() &amp;&amp; allMatchPrefix(trustedCommands, segments.parts)) {
+            return PermissionVerdict.abstain();
+        }
+        if (!enabled) {
+            return PermissionVerdict.abstain();
+        }
+        if (hasOpaqueConstruct(command)) {
+            return PermissionVerdict.ask("命令含命令替换或重定向，需要确认：" + firstToken(command));
+        }
+        for (String segment : segments.parts) {
+            if (classify(segment) == Classification.READ_ONLY) {
+                continue;
+            }
+            return PermissionVerdict.ask("执行 shell 命令需要确认：" + firstToken(segment));
+        }
+        return PermissionVerdict.abstain();
+</code></pre>
+
+    <p>
+      四处理由值得逐条说清：<strong>① 逐段判定</strong>——执行侧是 <code>/bin/sh -c 原文</code>，
+      分隔符之后可以跟任何东西，而前缀匹配只看得到开头；原文先按未引用状态下的 <code>;</code>、<code>|</code>、
+      <code>&amp;</code> 与换行切成子命令，每段都各自过一遍表，最后取最严的结果。少这一步的话，
+      <code>ls; curl x | sh</code> 会因为第一个 token 是只读的 <code>ls</code> 而整串免审批。
+      <strong>② 可信表要「全段命中」才算数</strong>，否则 <code>trustedCommands: ["mvn test"]</code>
+      会把 <code>mvn test; rm -rf ~/x</code> 一并免审批。<strong>③ 可信表排在拒绝形状之后是刻意的</strong>——
+      把 <code>rm</code> 写进可信表，<code>rm -rf /</code> 依旧被拒：免审批回答的是「要不要问人」，
+      不是「连灾难形状也放行」。<strong>④ 命令替换与重定向独立于只读表</strong>——
+      <code>echo evil &gt; ~/.bashrc</code> 的第一个 token 是只读的 <code>echo</code>，
+      只看前缀无法察觉后半段的动作，因此含这些构造时一律升级为问人。以上四条见
+      <code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:234-250</code>。
+    </p>
+
+    <div class="callout warn">
+      <span class="callout-title">注意：分类器不是安全边界，这一点源码自己写清楚了</span>
+      <p>
+        <code>FOO=bar cmd</code>、别名、<code>sh -c</code> 嵌套仍然能绕过前缀判定。因此 <code>CommandPolicy</code>
+        的价值不是「挡住攻击」，而是<strong>避免用户因为嫌烦而把 <code>shell</code> 从 <code>askTools</code> 里整个拿掉</strong>
+        ——那才是真正的风险；真正的边界是审批本身加上白名单
+        （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:43-45</code>）。
+        三档裁定的另一半意义在于「不必每次都点批准」：只读查询不该打扰人，写类命令要人看一眼；若只有「放行 / 拒绝」两态，
+        用户最终会把授权整个关掉
+        （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellPermissionContribution.java:17-19</code>）。
+        三种外壳对 <code>askTools</code> 的态度不同：<code>-cli</code> 没有审批界面，<code>askTools</code> 里的工具
+        一律按拒绝处理（<code>Jellyfish/docs/constraints.md:1204</code>）。
+      </p>
+    </div>
+
+    <p>
+      还有一条与「插件只能收紧」相配的约束：权限处理器跑在权限判定的同步路径上（每一轮、每次工具调用），
+      且拿不到会话正文，因此这里<strong>只做字符串前缀匹配</strong>，不碰文件系统、不启动进程
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellPermissionContribution.java:21-22</code>）。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>12. 坑点清单</h2>
+
+    <h3>12.1 服务端外壳里的 shell，与 <code>ServerCommandGate</code> 不是一回事</h3>
+
+    <p>
+      <strong>现象</strong>：以为 <code>-server</code> 模式里有人把关，于是把 <code>shell</code> 留在
+      <code>askTools</code> 之外，结果 HTTP 调用链可以直接执行命令。<br>
+      <strong>根因</strong>：内核确实给命令端点装了一道闸门，但它<strong>拒绝的是「在按 id 寻址的服务化外壳里
+      没有意义、或会改进程级状态」的那七条命令</strong>——<code>new</code>、<code>resume</code>、<code>reload</code>、
+      <code>session</code>、<code>sessions</code>、<code>delete</code>、<code>rm</code>
+      （<code>Jellyfish/jellyfish-server/src/main/java/zcd/jellyfish/server/handler/ServerCommandGate.java:42-43</code>，
+      判定在 <code>Jellyfish/jellyfish-server/src/main/java/zcd/jellyfish/server/handler/ServerCommandGate.java:57-67</code>）。
+      它是「外壳寻址方式」的兼容性闸门，不是「危险动作」的闸门；名单是常量、不开放配置，
+      因为它是语义不兼容而不是可调策略。<br>
+      <strong>规避</strong>：管危险动作的仍然是 <code>askTools</code> / <code>deniedTools</code> /
+      <code>allowedCommands</code> 这套；服务模式下没有审批界面，因此要按「无人值守」来配——
+      要么把 <code>shell</code> 放进 <code>deniedTools</code>，要么把允许的命令收进 <code>allowedCommands</code> 白名单。
+    </p>
+
+    <h3>12.2 输出落盘保护的是磁盘，不是 CPU</h3>
+
+    <p>
+      <strong>现象</strong>：命令输出几百 MB，系统没有崩、也没把内存吃光，但机器 CPU 被那条命令占满，
+      一直跑到超时。<br>
+      <strong>根因</strong>：内核的捕获通道管的是「输出进不进内存/磁盘」（落盘与头尾预览，见
+      <a href="18-tools-io.html">18 页</a>），它不限制子进程本身干什么。<code>yes</code> 之类的命令会一直产出，
+      <code>ShellOutputCapture</code> 继续 drain（必须继续，否则子进程会因管道写满而卡住），计数在涨，
+      而 CPU 已经是那条命令的了。<br>
+      <strong>规避</strong>：靠<strong>时间</strong>兜底，不靠输出量——<code>timeoutSeconds</code>（缺省 120 秒）
+      与 <code>idleTimeoutSeconds</code>（缺省 0，即关闭）就是为此存在的
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/PluginConfig.java:38-47</code>）。
+      对可能长时间静默的命令（例如等一次构建）应显式设置静默超时，否则卡住时只能等墙钟超时。
+    </p>
+
+    <h3>12.3 <code>cd</code> 不跨调用保留</h3>
+
+    <p>
+      <strong>现象</strong>：先执行 <code>cd src</code>，下一次调用 <code>ls</code> 仍在原目录。<br>
+      <strong>根因</strong>：每次调用都是一个新的 <code>/bin/sh -c</code> 进程，工作目录由 <code>ShellTool</code>
+      每轮单独解析
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellTool.java:112-123</code>）。<br>
+      <strong>规避</strong>：用 <code>cd 目录 &amp;&amp; 命令</code>，或直接传 <code>cwd</code> 参数。
+      这句话已经写进工具名片，模型不需要额外的提示词就应当知道
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellTool.java:51-52</code>）。
+    </p>
+
+    <h3>12.4 Windows 未验证</h3>
+
+    <p>
+      <strong>现象</strong>：在 Windows 上运行 shell 工具，行为未定义。<br>
+      <strong>根因</strong>：非 POSIX 平台被映射成 <code>cmd.exe /c</code>，但它没有在真机上跑过——
+      源码注释明确写着「不要把它当成已支持」
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommonsExecShellProcessLauncher.java:28-29</code>）。<br>
+      <strong>规避</strong>：把它当作 POSIX 专用能力；跨平台需求走 <code>tools</code> 的文件工具，
+      它们只依赖 JDK 的 <code>java.nio.file</code>，没有平台假设。
+    </p>
+
+    <div class="callout tip">
+      <span class="callout-title">顺带说：这两个插件的测试怎么跑</span>
+      <p>
+        <code>tools</code> 的单测不需要第三方库（它只依赖 JDK 与内核契约），而 shell 有一个真实的端到端测试
+        profile：<code>shell-it</code>，它只跑 <code>**/*IT.java</code>，因为那些用例会真的 fork 进程
+        （<code>echo</code>、<code>sleep</code>、<code>exit</code>），不进普通的 <code>mvn test</code>
+        （<code>Jellyfish-Plugins/jellyfish-plugin-shell/pom.xml:107-132</code>）。
+        两个插件另有一组「插件加载链路」的端到端验证，靠 <code>jellyfish-infra</code> 的 test 作用域依赖提供
+        真实的 PF4J 管理器与注册表——这条依赖绝不可升为 compile
+        （<code>Jellyfish-Plugins/jellyfish-plugin-tools/pom.xml:55-61</code>）。
+      </p>
+    </div>
+
+    <div class="conclusion">
+      <h2>关键结论</h2>
+      <ol>
+        <li>
+          <code>tools</code> 插件注册 <strong>6 个工具</strong>（<code>read_file</code>、<code>write_file</code>、
+          <code>edit_file</code>、<code>list_dir</code>、<code>grep_files</code>、<code>ask_user</code>），
+          外加一道路径闸门、一条 <code>@</code> 引用与它的提示词约定；<code>shell</code> 插件注册
+          <strong>1 个工具</strong>（<code>shell</code>）、一个权限处理器与一条 <code>!</code> 输入指令。
+        </li>
+        <li>
+          工具参数 Schema 只用 <code>type</code> + <code>description</code> 两个键，用「参数名 / Schema 交替」
+          的可变参数组装；不引入 JSON 库，也不生成 <code>minimum</code> 这类关键词——合法性判断归工具自己。
+        </li>
+        <li>
+          文件工具的纪律是<strong>如实说明「为什么停下」</strong>：行数到顶就分页并给续读偏移，单行超预算则报错，
+          非 UTF-8 在首个非法字节处停下，取消时交出已读部分并注明残缺。
+        </li>
+        <li>
+          <code>edit_file</code> 用字面量匹配、替换前先数匹配数（0 处报错、多处要求唯一或显式
+          <code>replace_all</code>）、写前再校验文件身份，写回走临时文件 + 原子移动；<code>write_file</code>
+          是整份覆盖，因此必须区分「新建」与「覆盖」。
+        </li>
+        <li>
+          路径的三件事分属三层：解析与展示在工具（同一处口径），拦截在权限层（<code>PathPolicy</code> 只收紧、
+          按真实位置比较、缺省只管写），两者必须共用同一套解析规则，否则闸门会被绕过。
+        </li>
+        <li>
+          shell 的三条计时/中断来源共用一个判定点，非零退出码是信息不是异常，被杀的进程不报退出码；
+          执行链把输出交给内核的 <code>ToolOutputSink</code>，因此落盘、命名与信封格式只有一份实现。
+        </li>
+        <li>
+          命令策略（白名单 + 可信表 + 分类器）只回答「能不能跑」与「要不要问人」，它<strong>不是安全边界</strong>；
+          真正的边界是审批与白名单，因此 <code>shell</code> 最该做的事是待在 <code>askTools</code> 里。
+        </li>
+      </ol>
+    </div>
+
+    <nav class="pager" aria-label="翻页">
+      <a class="prev" href="21-plugin-overview.html"><span class="pager-dir">上一页</span>21 官方插件总览</a>
+      <a class="next" href="23-plugin-session-compact.html"><span class="pager-dir">下一页</span>23 session-file 与 compact 插件</a>
+    </nav>
+
+  </main>
+</div>
+
+<footer class="footer">
+  Jellyfish 源码深度解析 · 本页源码依据：<code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ToolsPlugin.java</code>、<code>PluginTool.java</code>、<code>ToolSchema.java</code>、<code>ToolArguments.java</code>、<code>ToolSummaries.java</code>、<code>ReadFileTool.java</code>、<code>WriteFileTool.java</code>、<code>EditFileTool.java</code>、<code>ListDirTool.java</code>、<code>GrepFilesTool.java</code>、<code>AskUserTool.java</code>、<code>ToolPaths.java</code>、<code>PathAccess.java</code>、<code>PathPolicy.java</code>、<code>PathGuardContribution.java</code>、<code>Utf8Files.java</code>、<code>FileReferenceCompletion.java</code>、<code>FileReferencePromptContribution.java</code>、<code>Jellyfish-Plugins/jellyfish-plugin-tools/pom.xml</code>、<code>jellyfish-plugin-tools/src/main/resources/plugin.properties</code>、<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellPlugin.java</code>、<code>ShellTool.java</code>、<code>ShellArguments.java</code>、<code>ShellInvocation.java</code>、<code>ShellProcessRunner.java</code>、<code>ShellProcess.java</code>、<code>ShellProcessLauncher.java</code>、<code>CommonsExecShellProcessLauncher.java</code>、<code>ProcessTrees.java</code>、<code>ShellOutputCapture.java</code>、<code>ShellResult.java</code>、<code>ShellEnvironment.java</code>、<code>ShellInputDirective.java</code>、<code>ShellPermissionContribution.java</code>、<code>CommandPolicy.java</code>、<code>PluginConfig.java</code>、<code>Jellyfish-Plugins/jellyfish-plugin-shell/pom.xml</code>、<code>jellyfish-plugin-shell/src/main/resources/plugin.properties</code>、<code>Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/ToolOutputSink.java</code>、<code>Jellyfish/jellyfish-server/src/main/java/zcd/jellyfish/server/handler/ServerCommandGate.java</code>、<code>docs/constraints.md</code>。
+</footer>
+
+<!-- 资源按「本地 vendor 优先、CDN 兜底」引用：文件缺失时 assets/app.js 会自动回退到 CDN -->
+<script src="assets/vendor/highlight.min.js"></script>
+<script src="assets/vendor/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

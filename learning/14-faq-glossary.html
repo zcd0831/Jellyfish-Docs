@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>14 常见问题与术语表 · Jellyfish 源码深度解析</title>
+<meta name="description" content="Jellyfish 术语表（50+ 条）与高频疑问速查：harness、turn、run、spill、失效信号、boundary、vendorBody、ask/approval 等，含源码位置与指向页面。">
+<link rel="stylesheet" href="assets/style.css">
+<!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
+</head>
+<body>
+
+<header class="topbar">
+  <button class="nav-toggle" id="navToggle" aria-label="切换导航" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">🐙 Jellyfish 源码深度解析</a>
+  <div class="topbar-tools">
+    <input id="navSearch" type="search" placeholder="搜索页面…" aria-label="搜索页面">
+  </div>
+</header>
+
+<div class="layout">
+
+  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <div class="sidebar-title">文档目录</div>
+    <ul class="nav-list">
+      <li><a href="index.html">首页 · 总览与导航</a></li>
+    </ul>
+    <div class="nav-group">入门</div>
+    <ul class="nav-list">
+      <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
+      <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
+      <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
+    </ul>
+    <div class="nav-group">内核重点</div>
+    <ul class="nav-list">
+      <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
+      <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
+      <li><a href="06-permissions.html">06 权限与审批系统</a></li>
+      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
+      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+    </ul>
+    <div class="nav-group">外壳与实战</div>
+    <ul class="nav-list">
+      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
+      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
+      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+    </ul>
+    <div class="nav-group">拓展</div>
+    <ul class="nav-list">
+      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
+      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
+      <li><a href="14-faq-glossary.html" aria-current="page">14 常见问题与术语表</a></li>
+      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
+      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+    </ul>
+    <div class="nav-group">子系统</div>
+    <ul class="nav-list">
+      <li><a href="17-commands.html">17 命令系统</a></li>
+      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
+      <li><a href="19-config.html">19 配置体系</a></li>
+      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
+    </ul>
+    <div class="nav-group">插件详解</div>
+    <ul class="nav-list">
+      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
+      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
+      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
+      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
+      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
+      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
+      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <nav class="breadcrumb" aria-label="面包屑">
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>14 常见问题与术语表</span>
+    </nav>
+
+    <h1>14 常见问题与术语表</h1>
+    <p class="page-sub">
+      阅读过程中随时回来查。术语按主题分组，每条给一句释义 + 源码位置 + 深入阅读的页面。
+    </p>
+
+    <section class="goals">
+      <h2>学习目标</h2>
+      <ul>
+        <li>用一句话说清项目里每个专有名词的含义与落点；</li>
+        <li>遇到高频疑问时能直接跳到解释它的那一页；</li>
+        <li>知道哪些术语在本项目里有<strong>非标准含义</strong>（例如 <code>boundary</code>、<code>spill</code>）。</li>
+      </ul>
+    </section>
+
+    <h2>术语关系图</h2>
+
+    <p>先看这张图建立概念地图，再往下查具体条目会快很多。</p>
+
+    <div class="mermaid">
+flowchart TB
+  SHELL["外壳<br/>-cli / -tui / -server"] -->|"唯一的智能入口"| HARNESS["AgentHarness"]
+  HARNESS -->|"提交到 react 池"| TURN["回合 turn<br/>终态：completed / truncated /<br/>cancelled / blocked"]
+  TURN -->|"由多个轮 round 组成"| ROUND["轮 round = 一次模型调用"]
+  ROUND --> ASM["PromptAssembler<br/>组装 system / 摘要 / 历史 / 工具"]
+  ASM --> BOUNDARY["boundary 压缩边界"]
+  ASM --> CROP["裁剪 crop（不写回）"]
+  ASM --> AGING["老化 aging（信封 → stub）"]
+  ASM --> LLM["LlmClient<br/>type → 厂商实现"]
+  ROUND --> TE["ToolExecutor（唯一执行点）"]
+  TE --> PERM["核心策略 → 插件拦截 → 审批"]
+  TE --> SPILL["spill 溢写 → 回灌信封"]
+  ROUND -->|"可委派"| RUN["子代理 run<br/>agent-run 池 + 许可门控"]
+  ASM --> SESS["会话 Session<br/>唯一真源"]
+  SESS -->|"经扩展点"| PERSIST["会话持久化插件"]
+  TE -->|"经扩展点"| PLUG["插件<br/>ExtensionRegistry / EventChannel"]
+    </div>
+    <p class="figure-cap">图 14-1　术语关系：从外壳到插件的一条主线，所有术语都挂在这条线上</p>
+
+    <!-- ============================================================ -->
+    <h2>A. 架构与装配</h2>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th style="width:190px">术语</th><th>释义</th><th>位置 / 详见</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>外壳（shell）</strong></td>
+            <td>与用户交互的那一层：<code>-cli</code> / <code>-tui</code> / <code>-server</code>。三种外壳共享同一内核。</td>
+            <td><a href="03-architecture.html">03 页</a></td>
+          </tr>
+          <tr>
+            <td><strong>内核（kernel）</strong></td>
+            <td><code>api</code> + <code>infra</code> + <code>core</code> 三模块。只提供机制，不提供能力。</td>
+            <td><a href="01-overview.html">01 页</a></td>
+          </tr>
+          <tr>
+            <td><strong>composition root</strong></td>
+            <td>装配层。<code>jellyfish-di</code> 就是它——「谁依赖谁、哪些实例必须唯一」只写一份。</td>
+            <td><code>di/</code>、<a href="03-architecture.html">03 页</a></td>
+          </tr>
+          <tr>
+            <td><strong><code>JellyfishRuntime</code></strong></td>
+            <td>不含任何 DI 注解的普通接口，23 个访问器。外壳只认它，不关心对象图是 Dagger 还是手写的。</td>
+            <td><code>JellyfishRuntime.java</code></td>
+          </tr>
+          <tr>
+            <td><strong><code>AgentHarness</code></strong></td>
+            <td>内核的「装配 + 生命周期 + 智能入口」枢纽。<code>chat(sessionId, input, listener)</code> 是内核的回合入口（外壳经 <code>ConversationService.submit</code> + <code>ShellStreams.subscribe</code>）。</td>
+            <td><code>core/AgentHarness.java</code>、<a href="04-agent-loop.html">04 页</a></td>
+          </tr>
+          <tr>
+            <td><strong><code>RunMode</code></strong></td>
+            <td>模式实现接口，只有 <code>checkEnvironment</code> / <code>shell</code> / <code>run</code> 三个方法。三种外壳的差异全在实现类里。</td>
+            <td><code>cli/mode/RunMode.java</code></td>
+          </tr>
+          <tr>
+            <td><strong>装配期 vs 运行期</strong></td>
+            <td>装配期 = <code>bootstrap()</code> 之前/期间（读配置、建对象图）；运行期 = 回合在跑。
+                某些配置在装配期就被读走，<strong>改完必须重启</strong>。</td>
+            <td><a href="11-pitfalls.html">11 页 A8</a></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>B. Agent 循环与会话</h2>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th style="width:190px">术语</th><th>释义</th><th>位置 / 详见</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>ReAct</strong></td>
+            <td>Reason + Act 交替：模型输出 → 执行工具 → 结果回灌 → 再问模型。本项目的实现是<strong>带上限的 <code>for</code> 循环</strong>，不是状态机。</td>
+            <td><code>core/ReActLooper.java:432-523</code>、<a href="04-agent-loop.html">04 页</a></td>
+          </tr>
+          <tr>
+            <td><strong>轮（round）</strong></td>
+            <td><strong>一次模型调用</strong>。上限 <code>react.maxRounds</code>（缺省 16）/ <code>subAgent.maxRounds</code>（缺省 8）。</td>
+            <td><code>ReactSettings.java:39</code></td>
+          </tr>
+          <tr>
+            <td><strong>回合（turn）</strong></td>
+            <td>从一次用户输入开始，到得出一个<strong>终态</strong>为止，可能含多轮。终态四种：
+                <code>completed</code> / <code>truncated</code> / <code>cancelled</code> / <code>blocked</code>。</td>
+            <td><code>ReActResult.java:74, 102, 113, 131</code></td>
+          </tr>
+          <tr>
+            <td><strong>在途回合表 / <code>TurnRegistry</code> / Slot</strong></td>
+            <td>每个会话一个信号量槽位，挡住同一会话的并发提交；<code>Esc</code> 取消也走它。
+                <strong>登记必须带槽位</strong>（没有无槽位重载）。</td>
+            <td><code>TurnRegistry.java:62, 136, 206, 265</code></td>
+          </tr>
+          <tr>
+            <td><strong><code>react</code> 线程池</strong></td>
+            <td>跑顶层回合的固定 8 线程池，队列 128，daemon，线程名前缀 <code>react</code>。
+                <strong>审批 / 提问的等待发生在这里</strong>，所以它的容量是个敏感参数。</td>
+            <td><code>ReActLooper.java:85, 913-925</code></td>
+          </tr>
+          <tr>
+            <td><strong><code>agent-run</code> 线程池</strong></td>
+            <td>跑子代理 run 的独立池。<strong>嵌套回合绝不进 <code>react</code> 池</strong>——这是避免死锁的结构性设计。</td>
+            <td><code>RunScheduler.java:105-139</code></td>
+          </tr>
+          <tr>
+            <td><strong>run</strong></td>
+            <td>一次子代理执行实例（含自己的会话、上下文、预算）。与「回合」不同层级：一个 run 里可能含多个嵌套回合。</td>
+            <td><code>core/runtime/</code>、<a href="04-agent-loop.html">04 页</a></td>
+          </tr>
+          <tr>
+            <td><strong><code>RunTree</code> / 额度 / 深度</strong></td>
+            <td>整棵委派树的形状约束：<code>depth &lt; maxDepth &amp;&amp; spawnCount &lt; maxSpawnsPerTurn</code>（缺省 1 / 12）。</td>
+            <td><code>RunTree.java:66-67</code>、<code>SubAgentSettings.java:40, 53</code></td>
+          </tr>
+          <tr>
+            <td><strong>许可（permit）</strong></td>
+            <td><code>Semaphore</code> 许可，控制同时真正在跑的 run 数（缺省 3）。
+                <strong>父 run 在等子 run 时会让出许可</strong>，否则会死锁。</td>
+            <td><code>RunScheduler.java:432-436</code>、<code>AgentRuntime.java:113-125</code></td>
+          </tr>
+          <tr>
+            <td><strong>STEER / <code>drainTurnBoundary</code></strong></td>
+            <td>插件在「工具批次之后、收敛之前」插一条消息，让<strong>本回合多跑一轮</strong>（而不是开新回合）。</td>
+            <td><code>ReActLooper.java:488, 516</code>、<code>ActionDispatcher</code></td>
+          </tr>
+          <tr>
+            <td><strong>提交管线 / <code>Submission</code></strong></td>
+            <td>把用户输入分流成「命令 / 输入指令 / 起回合」三类的入口。<strong>必须先订阅再提交。</strong></td>
+            <td><code>core/conversation/Submission.java</code>、<code>CliRunMode.java:98-100</code></td>
+          </tr>
+          <tr>
+            <td><strong>ephemeral（会话）</strong></td>
+            <td>不落盘的会话——子代理会话就是。<code>create()</code> 也刻意不落盘。</td>
+            <td><code>SessionManager.java:196-206, 1300-1306</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>C. 权限与插件</h2>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th style="width:190px">术语</th><th>释义</th><th>位置 / 详见</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>核心策略</strong></td>
+            <td>三段名单的判定：<code>deniedTools</code> &gt; <code>askTools</code> &gt; <code>allowedTools</code>。
+                <strong>精确集合匹配，没有通配符</strong>；<code>allowedTools</code> 为 <code>null</code> = 不限制，为 <code>[]</code> = 全拦。</td>
+            <td><code>PermissionPolicy.java:118-142</code>、<a href="06-permissions.html">06 页</a></td>
+          </tr>
+          <tr>
+            <td><strong>插件拦截</strong></td>
+            <td>插件通过 <code>PermissionCheckRequest</code> 参与的判定。三态 <code>ABSTAIN</code> / <code>ASK</code> / <code>DENY</code>，
+                <strong>类型上没有 <code>ALLOW</code></strong>——插件只能收紧。</td>
+            <td><code>PermissionVerdict.java:29-38</code></td>
+          </tr>
+          <tr>
+            <td><strong>fail-closed</strong></td>
+            <td>「说不清楚就拒绝」。审批的三个触发条件：无审批者 / 超时 / 中断。
+                插件拦截抛异常或返回 <code>null</code> 也按拒绝。</td>
+            <td><code>ApprovalChannel.java:304-330</code>、<code>PermissionManager.java:205-216</code></td>
+          </tr>
+          <tr>
+            <td><strong>fail-open</strong></td>
+            <td>「说不清楚就放行」。<strong><code>ask_user</code> 是 fail-open</strong>（无人应答时返回「不可用」让模型继续），
+                审批是 fail-closed。两者不同，别混。</td>
+            <td><code>AskChannel.java:204-206</code></td>
+          </tr>
+          <tr>
+            <td><strong>TOCTOU</strong></td>
+            <td>「检查后使用的时间差」。本项目用它解释<strong>为什么参数改写必须在权限判定之前</strong>——
+                否则审批看到参数 A、实际执行参数 B。</td>
+            <td><code>ToolExecutor.java:180-184</code></td>
+          </tr>
+          <tr>
+            <td><strong>扩展点</strong></td>
+            <td>插件接入内核的 27 个位置。<strong>类型即地址</strong>——不用字符串 ID，请求的 Class 对象就是地址。</td>
+            <td><code>api/extension/</code>、<a href="07-plugins.html">07 页</a></td>
+          </tr>
+          <tr>
+            <td><strong><code>ExtensionRegistry</code></strong></td>
+            <td>同步、<strong>不可丢</strong>的扩展点派发器。调用方要等返回值。</td>
+            <td><code>infra/extension/ExtensionRegistry.java</code></td>
+          </tr>
+          <tr>
+            <td><strong><code>EventChannel</code></strong></td>
+            <td>异步、<strong>可丢</strong>的事件通道。判据是「能否丢弃」而不是「有没有返回值」。
+                <strong>与 <code>ExtensionRegistry</code> 共用同一个 <code>TypeRegistry</code>。</strong></td>
+            <td><code>infra/event/EventChannel.java</code></td>
+          </tr>
+          <tr>
+            <td><strong><code>ShellIngress</code> / 外壳贡献</strong></td>
+            <td>插件把内容「推」给外壳的信箱（<code>present()</code>），容量 64，满即丢最新。
+                <code>ShellContribution</code> 是唯一<strong>不是 <code>*Request</code></strong> 的扩展点。</td>
+            <td><code>infra/shell/ShellIngress.java:64, 75, 209</code></td>
+          </tr>
+          <tr>
+            <td><strong>owner / 命名空间</strong></td>
+            <td>注册项的来源标记，形如 <code>pluginId::unit</code>。回收按前缀 <code>pluginId::*</code> 一次清干净。
+                因此 <code>plugin.id</code> <strong>不能含 <code>::</code></strong>。</td>
+            <td><code>PluginOwnerNamespace.java</code>、<code>PluginContextFactory.java:193-206</code></td>
+          </tr>
+          <tr>
+            <td><strong>fail-closed（插件停后）</strong></td>
+            <td><code>stop()</code> 之后任何注册 / 发布会当场抛错。
+                <strong>注册窗口是「插件存活期」而不是「<code>start()</code> 期间」</strong>。</td>
+            <td><code>ContextLifecycle.java:34-43</code></td>
+          </tr>
+          <tr>
+            <td><strong><code>PluginClasspathGuard</code></strong></td>
+            <td>运行期护栏，只拦 <code>zcd/jellyfish/api/</code> 与 <code>org/pf4j/</code> 两个前缀。
+                <strong>只记 loadError 不抛异常</strong>，所以冲突表现为「静默不启动」。</td>
+            <td><code>PluginClasspathGuard.java:29-32, 47-60</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>D. 上下文与提示词</h2>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th style="width:190px">术语</th><th>释义</th><th>位置 / 详见</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>boundary（压缩边界）</strong></td>
+            <td><strong>本项目的非标准用法</strong>：一个消息下标。边界之前的消息已被摘要替代，
+                组装时从边界之后开始取历史。压缩 = <strong>把 boundary 往前推一格</strong>，历史一条不删。</td>
+            <td><code>PromptAssembler.effectiveBoundary</code>、<a href="08-session-context.html">08 页</a></td>
+          </tr>
+          <tr>
+            <td><strong>裁剪（crop）</strong></td>
+            <td><code>ContextWindow</code> 从<strong>最新组向最旧组</strong>累加，装不下就<strong>整组丢</strong>；
+                最新一组永远保留、单独超预算时组内截断。<strong>只裁本次请求，不写回会话。</strong></td>
+            <td><code>ContextWindow.java:59-79</code></td>
+          </tr>
+          <tr>
+            <td><strong>老化（aging）</strong></td>
+            <td><code>ToolResultAger</code> 把<strong>已落盘的信封</strong>换成更短的 stub。
+                非信封消息一个不动。<code>agingPercent = 0</code> 是切换口径，<strong>不是关闭</strong>。</td>
+            <td><code>ToolResultAger.java:30-40, 121-126</code></td>
+          </tr>
+          <tr>
+            <td><strong>压缩（compaction）</strong></td>
+            <td><strong>插件能力</strong>（<code>CompactionStrategy</code>），内核只给机制。
+                触发：使用率 ≥ <code>autoCompactPercent</code>（缺省 80）<strong>或</strong>本次已发生机械裁剪。
+                <strong>非破坏式</strong>，屏幕与落盘仍是全文。</td>
+            <td><code>ConversationCompactor.java:290-301</code></td>
+          </tr>
+          <tr>
+            <td><strong>cache-safe fork</strong></td>
+            <td>压缩摘要调用<strong>复用父请求的字节前缀</strong> + <code>tool_choice: none</code>，
+                目的是命中 prompt cache，避免「压缩比被压缩的对话还贵」。</td>
+            <td><code>ConversationCompactor.java:427</code>、<code>PromptAssembler.buildFork:197</code></td>
+          </tr>
+          <tr>
+            <td><strong>spill（溢写）</strong></td>
+            <td>工具输出超过阈值时落盘。<code>SpillCapturingSink</code> 未溢出时全缓冲，超 <code>maxChars</code> 才转溢写、
+                只留头尾窗口。<strong>落盘上限保护的是磁盘，不是 CPU。</strong></td>
+            <td><code>SpillCapturingSink.java:78-135, 196-206</code></td>
+          </tr>
+          <tr>
+            <td><strong>回灌信封</strong></td>
+            <td>落盘之后回灌给模型的那段<strong>合法 JSON</strong>：
+                <code>_truncated / _tool / _total_chars / _total_lines / _path / _hint / _partial / preview</code>。
+                <code>_hint</code> 里写明怎么回读。</td>
+            <td><code>ToolOutputEnvelope.java:29-57, 259-269</code></td>
+          </tr>
+          <tr>
+            <td><strong><code>_partial</code></strong></td>
+            <td><code>true</code> 表示<strong>落盘文件本身也不完整</strong>（触及溢写上限），回读拿不到全部。</td>
+            <td><code>ToolOutputEnvelope.java:41-56</code></td>
+          </tr>
+          <tr>
+            <td><strong>工具配对（pairing）</strong></td>
+            <td><code>assistant(toolCalls)</code> 与 <code>tool</code> 结果必须同进同出。
+                破坏配对（孤儿 / 悬空）会被厂商 <strong>400</strong> 拒掉，而且之后每次请求都失败。</td>
+            <td><code>ToolPairing.java:30-40</code></td>
+          </tr>
+          <tr>
+            <td><strong><code>PromptPlacement</code></strong></td>
+            <td>提示词贡献的三档：<code>STATIC</code> / <code>SESSION</code> / <code>VOLATILE</code>。
+                分档的意义是<strong>缓存前缀</strong>，且<strong>只有追加、没有替换语义</strong>。</td>
+            <td><code>PromptPlacement.java:18-39</code></td>
+          </tr>
+          <tr>
+            <td><strong><code>TurnContextRequest</code></strong></td>
+            <td>往<strong>本轮用户消息</strong>里追加内容的扩展点。
+                会随轮次变化的状态<strong>应该走它</strong>，而不是塞进 system prompt（后者会毁掉缓存）。</td>
+            <td><code>PromptAssembler.java:660</code></td>
+          </tr>
+          <tr>
+            <td><strong><code>CacheBreakWatcher</code></strong></td>
+            <td>逐轮比对三层指纹（system prompt 散列 / 工具清单散列 / 逐条消息散列），断裂时 WARN 一次。
+                <strong>命中率不在这里统计</strong>，由 <code>SessionUsageSnapshot</code> 现算。</td>
+            <td><code>CacheBreakWatcher.java:27, 351</code>、<code>SessionUsageSnapshot.java:9-12</code></td>
+          </tr>
+          <tr>
+            <td><strong><code>keepAliveSeconds</code></strong></td>
+            <td>定时重发「复用父前缀 + 最小输出」的请求以续 cache TTL。
+                <strong>缺省 0（关闭）</strong>，每空闲期最多 3 次，<strong>每次都是计费调用</strong>，且与 <code>thinking.budget_tokens</code> 互斥。</td>
+            <td><code>ProviderCacheSettings.java:34-46</code>、<code>CacheKeepAlive.java:92-208</code></td>
+          </tr>
+          <tr>
+            <td><strong><code>TokenEstimator</code></strong></td>
+            <td><strong>不是「字符数 / 4」</strong>：CJK 按 1 token、其余按 0.25，向上取整；每条 +4，每个 toolCall +2。</td>
+            <td><code>TokenEstimator.java:14-24, 60-90</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>E. LLM 适配与外壳</h2>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th style="width:190px">术语</th><th>释义</th><th>位置 / 详见</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong><code>type</code>（provider）</strong></td>
+            <td>注册表 key，指向具体客户端实现。取值 <code>openai</code> / <code>deepseek</code> / <code>minimax</code> /
+                <code>gemini</code>（别名 <code>google</code>）/ <code>claude</code>（别名 <code>anthropic</code>）。
+                <strong>内核自带类型优先，插件不能覆盖。</strong></td>
+            <td><code>ProviderTypes.java</code>、<code>LlmClientFactory.java:140-172</code></td>
+          </tr>
+          <tr>
+            <td><strong><code>vendorBody</code> / <code>vendorHeaders</code></strong></td>
+            <td>绕过中性抽象、直接透传厂商私有字段的口子。来源<strong>只有 <code>models.json</code></strong>；
+                body 深合并且 <strong>model 覆盖 provider</strong>；保留键被静默丢弃。
+                <strong>改它不在客户端缓存签名里</strong>，要 <code>/reload</code>。</td>
+            <td><code>VendorBody.java:74, 141</code>、<a href="05-llm-api.html">05 页</a></td>
+          </tr>
+          <tr>
+            <td><strong>保留键（<code>RESERVED_KEYS</code>）</strong></td>
+            <td><code>temperature</code> / <code>max_tokens</code> / <code>cache_control</code> / <code>messages</code> 等内核自己要写的键，
+                <strong>任意嵌套深度都会被拦且静默丢弃</strong>。</td>
+            <td><code>VendorBody.java:74</code></td>
+          </tr>
+          <tr>
+            <td><strong><code>cache_control</code> / 缓存断点</strong></td>
+            <td><strong>只有 Claude 需要显式标注</strong>。缺省 2 个断点（<code>DEFAULT_CACHE_BREAKPOINTS</code>）：
+                    ① 最后一个 system 块（无 system 时落到最后一个工具定义），② 最后一条消息的最后一个块。<code>0</code> = 关闭。</td>
+            <td><code>ClaudeLlmClient.java:187-203, 282, 314, 331, 534</code>、<code>RequestTuning.java:26</code></td>
+          </tr>
+          <tr>
+            <td><strong><code>StreamToolCallAccumulator</code></strong></td>
+            <td>流式拼接分片的工具调用：按 <code>index</code> 合并；<strong>没有 index 时用伪造 key（100000+）</strong>，
+                避免错误地拼到第 0 个调用上；<code>arguments</code> 是字符串拼接。</td>
+            <td><code>StreamToolCallAccumulator.java:19, 36</code></td>
+          </tr>
+          <tr>
+            <td><strong><code>[DONE]</code></strong></td>
+            <td>OpenAI 系 SSE 的终止标记（Claude 靠 <code>message_stop</code>）。
+                没读到终止标记就按 <code>asIncomplete</code> 处理，不当作成功。</td>
+            <td><code>AbstractHttpLlmClient.java:432</code>、<code>ClaudeLlmClient.java:716</code></td>
+          </tr>
+          <tr>
+            <td><strong>传输快照</strong></td>
+            <td>跨内核 / 插件边界的<strong>不可变值类型</strong>（如 <code>LlmTransportRequest</code>、<code>SessionSnapshot</code>）。
+                约定：<strong>恰好只有一个可见构造器</strong>（这样插件无法伪造），且 <code>-parameters</code> 不许去掉。</td>
+            <td><code>api/llm/LlmTransport*.java</code>、<code>PluginLlmClientAdapter.java:179</code></td>
+          </tr>
+          <tr>
+            <td><strong>项目配置信任闸</strong></td>
+            <td><code>ProjectConfigTrust</code>。信任单位 =「文件绝对路径 + SHA-256 内容指纹」。
+                三条授予途径：<code>--trust-project-config</code>（本次）/ <code>trustForSession()</code>（会话）/ <code>grant()</code>（持久）。
+                <code>classpath:</code> 不受管辖。</td>
+            <td><code>ProjectConfigTrust.java:46, 128, 137, 171-178</code></td>
+          </tr>
+          <tr>
+            <td><strong>段声明标记</strong></td>
+            <td>双源合并的判断依据——「这一段<strong>被声明过</strong>」而不是「这一段非空」。
+                    旧实现用「非空」判断是真实 bug。同类标记：<code>allowListDeclared</code> / <code>enabledDeclared</code>。</td>
+            <td><code>RuntimeConfig.java:510-524</code></td>
+          </tr>
+          <tr>
+            <td><strong>失效信号（<code>UiInvalidatedEvent</code>）</strong></td>
+            <td>跨线程刷新的机制：非渲染线程只写数据 + 发这个<strong>幂等</strong>信号，
+                渲染线程下一帧才动界面。<strong>幂等是可丢判据成立的前提。</strong></td>
+            <td><code>UiContributions.java:207-220</code>、<a href="09-tui.html">09 页</a></td>
+          </tr>
+          <tr>
+            <td><strong><code>InflightTurn</code></strong></td>
+            <td>承载回合进行中状态的容器：react 线程写、渲染线程 <code>snapshot()</code> 读。
+                有<strong>硬上限</strong>（正文 256K / 思考 64K / 工具输出末 20 行 × 200 字符）。</td>
+            <td><code>InflightTurn.java:27-28, 58-67, 345</code></td>
+          </tr>
+          <tr>
+            <td><strong>DOCK</strong></td>
+            <td>TUI 里「命令输出与插件面板」的停靠区域，<strong>命令输出优先于插件面板</strong>。</td>
+            <td><code>ChatShell.java:30-46</code></td>
+          </tr>
+          <tr>
+            <td><strong>SSE 事件名</strong></td>
+            <td><code>turn_start</code> / <code>text</code> / <code>thinking</code> / <code>tool_start</code> /
+                <code>tool_output</code> / <code>tool_done</code> / <code>done</code> / <code>cancelled</code> /
+                <code>turn_blocked</code> / <code>error</code>（<strong>前缀不统一</strong>：只有首尾两个带 <code>turn_</code>）。</td>
+            <td><code>SseTurnListener.java:120-155</code>、<a href="10-cli-server.html">10 页</a></td>
+          </tr>
+          <tr>
+            <td><strong><code>-p</code> / 位置参数</strong></td>
+            <td><code>-p</code> 是单次模式的输入；<code>-server</code> 的位置参数是端口。
+                <code>--key=value</code> 写法<strong>被明确拒绝</strong>。</td>
+            <td><code>StartupOptionsParser.java:161-212</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>F. 常见问题</h2>
+
+    <h3>Q1. 我没有模型 API，能玩吗？</h3>
+    <p>
+      能，但只能用命令域：<code>-cli -p "/help"</code>。命令走 <code>CommandManager</code>，完全不经过 LLM。
+      但<strong>没有模型就没有 agent 能力</strong>——工具调用是模型驱动的。
+    </p>
+
+    <h3>Q2. 我把 <code>models.json</code> 放在项目里了，为什么不生效？</h3>
+    <p>
+      因为项目级配置<strong>默认不加载</strong>。用 <code>--trust-project-config</code>（仅本次），
+      或者在 TUI 的确认框里选择记住。详细理由见 <a href="01-overview.html">01 页</a>。
+    </p>
+
+    <h3>Q3. 为什么我配了 <code>allowedTools: ["shell*"]</code> 还是被拒？</h3>
+    <p>
+      因为没有通配符。<code>shell*</code> 是个普通字符串。必须精确列名。见 <a href="06-permissions.html">06 页</a>。
+    </p>
+
+    <h3>Q4. 我装了插件，但 <code>/reload</code> 之后没生效？</h3>
+    <p>
+      如果变的是<strong>jar 本身</strong>（新增 / 删除 / 替换），必须<strong>重启进程</strong>——
+      PF4J 管理器明确「不做 jar 热部署」。<code>/reload</code> 只管「已加载插件的配置段变化」与「启用 / 禁用名单变化」。
+      见 <a href="11-pitfalls.html">11 页 B1</a>。
+    </p>
+
+    <h3>Q5. 为什么我按 <code>Enter</code> 没反应？</h3>
+    <p>
+      TUI 的发送键是 <strong><code>Ctrl+S</code></strong>，<code>Enter</code> 是换行。
+      原因是多数终端不解码修饰键，做不出「<code>Enter</code> 发送 / <code>Shift+Enter</code> 换行」。见 <a href="09-tui.html">09 页</a>。
+    </p>
+
+    <h3>Q6. 为什么它一直卡着不动？</h3>
+    <p>按可能性排序，三个方向：</p>
+    <ul>
+      <li><strong>在等审批</strong>：TUI 会弹框；<code>-cli</code> 无审批者会立即拒绝（不会卡）。
+          如果是 TUI 卡着，看是否有弹框被别的输出挡住。</li>
+      <li><strong>配了 <code>timeout: 0</code>（永不超时）</strong>：<code>ask.timeoutSeconds</code> 或
+          <code>permission.approvalTimeoutSeconds</code> 写 0 会永久等待，且<strong>不自愈</strong>。见 <a href="11-pitfalls.html">11 页 C1</a>。</li>
+      <li><strong>SSE / 网络空闲超时</strong>：流式有 300 秒空闲超时，超时会走 <code>streamFailure</code>，不会无限等。</li>
+    </ul>
+
+    <h3>Q7. 上下文里的内容我看不到了，是丢了吗？</h3>
+    <p>
+      大概率没丢。有四层「上限」，口径完全不同：消息区 500 条（屏幕）、裁剪（本次请求）、老化（本轮 tool 结果形态）、
+      压缩（后续边界）。<strong>四者都不删历史。</strong>见 <a href="08-session-context.html">08 页</a>与 <a href="11-pitfalls.html">11 页 D4</a>。
+    </p>
+
+    <h3>Q8. 我想让它并行干活，怎么做到？</h3>
+    <p>
+      一个回合内的多个工具调用是<strong>严格串行</strong>的。要并行得用编排：多个 <code>task</code> 先 <code>spawn</code>
+      再 <code>await</code>（<code>SubAgentLauncher.java:164-170</code>），或者用 <code>jellyfish-plugin-workflow</code>。
+      并发由许可门控（缺省 3）。见 <a href="04-agent-loop.html">04 页</a>。
+    </p>
+
+    <h3>Q9. 账单比预期高很多，先查什么？</h3>
+    <ol>
+      <li><strong>system prompt 是否每轮都在变</strong>（插件塞了易变状态）——这会让整个历史按未命中价重发。
+          用 <code>/usage</code> 看 <code>cacheReadTokens / promptTokens</code>。</li>
+      <li><strong>是否开了 <code>keepAliveSeconds</code></strong>——它是计费调用，缺省应关。</li>
+      <li><strong>是否标了 <code>cache_control</code></strong>（Claude）——不标命中率恒为 0。</li>
+      <li><strong>压缩频率</strong>——每次压缩是一次额外 LLM 调用（有 cache-safe fork 优化）。</li>
+    </ol>
+    <p>见 <a href="08-session-context.html">08 页</a>与 <a href="11-pitfalls.html">11 页 F 组</a>。</p>
+
+    <h3>Q10. <code>-server</code> 开了之后别人能读我的会话吗？</h3>
+    <p>
+      缺省只绑 <code>127.0.0.1</code>，本机之外访问不到。但如果你用 <code>--host 0.0.0.0</code> 暴露出去，
+      <strong>不配密钥就谁都能读</strong>。好在内核会拦住这种情况——<strong>绑非回环地址 + 无密钥 = 拒绝启动</strong>退 3。
+      配密钥请用环境变量 <code>JELLYFISH_SERVER_API_KEY</code>，不要用 <code>--api-key</code>（会进 <code>ps</code>）。
+      见 <a href="10-cli-server.html">10 页</a>。
+    </p>
+
+    <h3>Q11. 同一份 <code>agents.json</code>，CLI 能用，TUI 却被拒，为什么？</h3>
+    <p>
+      因为 <code>-cli</code> <strong>从不挂接审批者</strong>，而审批 fail-closed——命中 <code>askTools</code> 就直接拒绝。
+      挂接审批的有<strong>两处</strong>：<code>-tui</code>（<code>TuiRunMode.java:198</code>）与
+      <code>-server</code>（<code>JellyfishServer.java:166</code>）；<code>-cli</code> 从不挂接。见 <a href="06-permissions.html">06 页</a>。
+    </p>
+
+    <h3>Q12. 我想知道某个改动要不要重启进程？</h3>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>改动</th><th>重启进程？</th></tr></thead>
+        <tbody>
+          <tr><td>插件配置段（<code>jellyfish.json</code> 里的 <code>plugins.configurations</code>）</td><td>不用，<code>/reload</code></td></tr>
+          <tr><td>启用 / 禁用名单</td><td>不用，<code>/reload</code></td></tr>
+          <tr><td>新增 / 删除 / 替换插件 jar</td><td><strong>要</strong></td></tr>
+          <tr><td><code>plugins.roots</code>（在 <code>config.json</code>）</td><td><strong>要</strong></td></tr>
+          <tr><td><code>config.json</code> 的任何改动</td><td><strong>要</strong></td></tr>
+          <tr><td><code>models.json</code> 的 <code>vendorBody</code>（不在客户端缓存签名里）</td><td>要（或 <code>/reload</code> / <code>clearCache()</code>）</td></tr>
+          <tr><td>装配期读到的配置（如 <code>subAgent</code> 并发 / 墙钟）</td><td><strong>要</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Q13. 怎么加一个新工具？</h3>
+    <p>
+      写一个 PF4J 插件，实现 <code>ToolCallRequest</code> 的 handler 并注册。
+      <strong>不需要改内核一行代码。</strong>细节见 <a href="07-plugins.html">07 页</a>与 <code>Jellyfish-Plugins</code> 仓库的插件开发教程。
+      注意两个约束：插件 pom 里 <code>jellyfish-api</code> / <code>pf4j</code> 必须标 <code>provided</code>；
+      权限判定的通配符不存在，所以工具名要设计得能被精确列举。
+    </p>
+
+    <h3>Q14. 子代理的「只读模式」在哪配？</h3>
+    <p>
+      内核里<strong>没有「只读」这个概念</strong>。内核管的是「委派不得提权」（子授权必须是父授权子集）。
+      只读能力由插件自己声明，例如官方 plan 插件的
+      <code>plugins.configurations.jellyfish-plugin-plan.readOnlyTools</code>。
+      见 <a href="04-agent-loop.html">04 页</a>。
+    </p>
+
+    <h3>Q15. 为什么日志里什么都看不到？</h3>
+    <p>
+      默认级别是 <code>WARN</code> 且只写 stderr（<code>log4j2.xml:12-16</code>）。
+      加 <code>--verbose</code>，或 <code>-Djellyfish.log.level=DEBUG</code>。
+      排查「配了不生效」类问题时必须先做这一步——很多坑都是<strong>只告警不报错</strong>的。
+    </p>
+
+    <div class="conclusion">
+      <h2>关键结论</h2>
+      <ol>
+        <li>本页里最需要记住的是三个<strong>非标准或反直觉</strong>的术语：<code>boundary</code>（压缩边界，不是文件边界）、
+            <code>spill</code>（输出溢写落盘）、<code>fail-open</code>（<code>ask_user</code> 是它，审批不是）。</li>
+        <li>遇到「配了不生效」，第一反应应该是<strong>降日志级别</strong>——这个项目里大量失败是「只告警不报错」的。</li>
+        <li>遇到「卡住了」，按「等审批 → 永不超时配置 → 网络空闲超时」三个方向查。</li>
+        <li>遇到「看到了 / 没看到」的困惑，先分清是<strong>屏幕、本次请求、本轮工具结果、压缩边界</strong>四层里的哪一层。</li>
+      </ol>
+    </div>
+
+    <nav class="pager" aria-label="翻页">
+      <a class="prev" href="13-learning-path.html"><span class="pager-dir">上一页</span>13 学习路径与阅读顺序</a>
+      <a class="next" href="15-observability.html"><span class="pager-dir">下一页</span>15 可观测性与运行观测</a>
+    </nav>
+
+  </main>
+</div>
+
+<footer class="footer">
+  Jellyfish 源码深度解析 · 术语与问答均基于仓库源码整理，源码位置请以实际代码为准。
+</footer>
+
+<!-- 资源按「本地 vendor 优先、CDN 兜底」引用：文件缺失时 assets/app.js 会自动回退到 CDN -->
+<script src="assets/vendor/highlight.min.js"></script>
+<script src="assets/vendor/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

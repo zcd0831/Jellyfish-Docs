@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>13 学习路径与阅读顺序 · Jellyfish 源码深度解析</title>
+<meta name="description" content="按依赖自底向上的三阶段阅读路线：先跑起来、再顺一条工具调用读到底、最后向外扩展。每阶段附自测问题与源码阅读清单。">
+<link rel="stylesheet" href="assets/style.css">
+<!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
+</head>
+<body>
+
+<header class="topbar">
+  <button class="nav-toggle" id="navToggle" aria-label="切换导航" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">🐙 Jellyfish 源码深度解析</a>
+  <div class="topbar-tools">
+    <input id="navSearch" type="search" placeholder="搜索页面…" aria-label="搜索页面">
+  </div>
+</header>
+
+<div class="layout">
+
+  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <div class="sidebar-title">文档目录</div>
+    <ul class="nav-list">
+      <li><a href="index.html">首页 · 总览与导航</a></li>
+    </ul>
+    <div class="nav-group">入门</div>
+    <ul class="nav-list">
+      <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
+      <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
+      <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
+    </ul>
+    <div class="nav-group">内核重点</div>
+    <ul class="nav-list">
+      <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
+      <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
+      <li><a href="06-permissions.html">06 权限与审批系统</a></li>
+      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
+      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+    </ul>
+    <div class="nav-group">外壳与实战</div>
+    <ul class="nav-list">
+      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
+      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
+      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+    </ul>
+    <div class="nav-group">拓展</div>
+    <ul class="nav-list">
+      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
+      <li><a href="13-learning-path.html" aria-current="page">13 学习路径与阅读顺序</a></li>
+      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
+      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
+      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+    </ul>
+    <div class="nav-group">子系统</div>
+    <ul class="nav-list">
+      <li><a href="17-commands.html">17 命令系统</a></li>
+      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
+      <li><a href="19-config.html">19 配置体系</a></li>
+      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
+    </ul>
+    <div class="nav-group">插件详解</div>
+    <ul class="nav-list">
+      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
+      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
+      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
+      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
+      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
+      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
+      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <nav class="breadcrumb" aria-label="面包屑">
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>13 学习路径与阅读顺序</span>
+    </nav>
+
+    <h1>13 学习路径与阅读顺序</h1>
+    <p class="page-sub">
+      一个 8.5 万行的 Java 仓库，逐文件读是读不完的。这一页给一条<strong>可执行</strong>的路线：
+      三阶段、每阶段有明确目标和自测题。
+    </p>
+
+    <section class="goals">
+      <h2>学习目标</h2>
+      <ul>
+        <li>拿到一条按依赖顺序、每步都有产出的阅读路线；</li>
+        <li>用自测题检验自己是否真的理解了，而不是「读过」；</li>
+        <li>知道哪些文件应该精读、哪些只读类注释、哪些可以跳过；</li>
+        <li>会用 <code>docs/constraints.md</code>（跨模块规则的单一真源）与 <code>README.md</code>（使用者文档）的分工。</li>
+      </ul>
+    </section>
+
+    <div class="mermaid">
+flowchart LR
+  P1["阶段一<br/>跑起来<br/>约 1 小时"] --> P2["阶段二<br/>顺一条工具调用<br/>读到底<br/>约 4-6 小时"]
+  P2 --> P3["阶段三<br/>向外扩展<br/>按需"]
+  P1 -.- A1["02 快速上手"]
+  P2 -.- A2["03 → 04 → 06 → 05 → 08"]
+  P3 -.- A3["07 插件<br/>09 TUI<br/>10 CLI/Server"]
+    </div>
+    <p class="figure-cap">图 13-1　三阶段路线：先让它跑，再钻透一条主干道，最后按需扩展</p>
+
+    <!-- ============================================================ -->
+    <h2>阶段一：跑起来（约 1 小时）</h2>
+
+    <p><strong>目标不是理解代码，而是先建立「它是什么样」的直觉。</strong>没跑过就读架构，容易把设计问题想歪。</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>#</th><th>做什么</th><th>产出</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>1.1</td>
+            <td><code>mvn -o clean package -DskipTests</code>，然后
+                <code>java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli -p "/help"</code></td>
+            <td>确认「没有模型也能跑命令」这件事——它直观说明了命令域不走 LLM</td>
+          </tr>
+          <tr>
+            <td>1.2</td>
+            <td>看一眼不装插件时的样子：<strong>模型一个工具都调不了</strong>（只有系统命令可用）</td>
+            <td>理解「工具即插件」不是概念，而是可观察的事实</td>
+          </tr>
+          <tr>
+            <td>1.3</td>
+            <td>跑 <code>Jellyfish-Plugins</code> 的 <code>mvn package</code> + <code>./cpPlugins.sh</code>，
+                <code>mkdir -p ~/.jellyfish/plugins</code> 并重启</td>
+            <td>体会「插件变更必须重启进程」</td>
+          </tr>
+          <tr>
+            <td>1.4</td>
+            <td>配一份 <code>models.json</code>（先放<strong>全局级</strong> <code>~/.jellyfish/</code>，避开信任闸），跑一次 <code>-cli -p "…"</code></td>
+            <td>拿到第一个「模型 → 工具 → 回答」的完整回合</td>
+          </tr>
+          <tr>
+            <td>1.5</td>
+            <td>把同样的文件放到 <code>./.jellyfish/</code>，再跑一次</td>
+            <td><strong>亲眼看到项目级配置默认不生效</strong>——这是全项目最独特的一条设计，先见一次比先读文档更有效</td>
+          </tr>
+          <tr>
+            <td>1.6</td>
+            <td>跑 <code>-tui</code>，敲一句话，按 <code>Ctrl+S</code> 发送</td>
+            <td>理解为什么发送键不是 <code>Enter</code>（试一下 <code>Enter</code> 就知道了）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">自测：这三个问题能答上来就可以进阶段二</span>
+      <ul>
+        <li>不装任何插件时，Jellyfish 还能做什么？为什么？</li>
+        <li>为什么 <code>./.jellyfish/models.json</code> 默认不生效？它防的是什么？</li>
+        <li>三种模式（<code>-cli</code> / <code>-tui</code> / <code>-server</code>）里，哪一种「当前会话」这个概念不成立？</li>
+      </ul>
+      <p>对应答案在 <a href="01-overview.html">01 页</a>、<a href="02-quickstart.html">02 页</a>、<a href="03-architecture.html">03 页</a>。</p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>阶段二：顺一条工具调用读到底（约 4–6 小时）</h2>
+
+    <p>
+      <strong>这是整条路线的核心。</strong>不要按模块读，要按<strong>一条数据流</strong>读——
+      从一个用户输入开始，跟到一次工具调用结束。这条路径会把所有核心模块都串一遍。
+    </p>
+
+    <div class="mermaid">
+sequenceDiagram
+  autonumber
+  participant U as 用户输入
+  participant APP as JellyfishApplication / Launcher
+  participant SUB as ConversationService / Submission
+  participant H as AgentHarness
+  participant L as ReActLooper
+  participant PA as PromptAssembler
+  participant LLM as LlmClient
+  participant TE as ToolExecutor
+  participant PM as PermissionManager
+  participant PL as 插件工具
+
+  U->>APP: "统计一下有多少个 Java 文件"
+  APP->>SUB: 提交（先订阅再提交）
+  SUB->>H: chat(sessionId, input, listener)
+  H->>L: 提交到 react 线程池
+  loop 每一轮
+    L->>PA: assemble(session, model, filter)
+    PA->>PA: system / 摘要 / 历史 / 老化 / 裁剪 / 工具清单
+    L->>LLM: callStreaming(...)
+    LLM-->>L: 正文 + tool_calls
+    L->>L: appendMessage(assistant)
+    loop 每个 tool_call（串行）
+      L->>TE: execute(..., Source.MODEL)
+      TE->>TE: 参数改写
+      TE->>PM: decide(request)
+      PM->>PM: 核心策略 → 插件拦截 → 审批
+      PM-->>TE: ALLOW / DENY
+      TE->>PL: invokeTool(...)
+      PL-->>TE: 原始输出
+      TE->>TE: 结果整形 → 截断 / 落盘信封
+      TE-->>L: ToolCallResult
+      L->>L: appendMessage(tool)
+    end
+  end
+  L-->>H: ReActResult（completed / truncated / cancelled / blocked）
+  H-->>U: 事件回灌外壳，投影到屏幕
+    </div>
+    <p class="figure-cap">图 13-2　一条主干道：沿着它读，每一站都是一个核心模块</p>
+
+    <h3>精读清单（按顺序）</h3>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>序</th><th>文件</th><th>读什么</th><th>行数量级</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td><code>cli/JellyfishApplication.java</code></td><td><code>main</code> → 参数解析 → 日志初始化（注意「扫两遍」）</td><td>165</td></tr>
+          <tr><td>2</td><td><code>cli/Launcher.java</code></td><td>启动时序、三层 <code>try</code> 与退出码分类</td><td><strong>200（精读）</strong></td></tr>
+          <tr><td>3</td><td><code>core/AgentHarness.java</code></td><td><code>chat</code> 委托、<code>bootstrap()</code>、<code>shutdown()</code> 顺序</td><td><strong>331（精读）</strong></td></tr>
+          <tr><td>4</td><td><code>core/conversation/ConversationService.java</code> + <code>TurnRegistry.java</code></td><td>提交管线、在途回合表、并发提交怎么被挡</td><td>231 / 480</td></tr>
+          <tr><td>5</td><td><code>core/ReActLooper.java</code> 的 <code>loop()</code></td><td><strong>只读 <code>loop()</code> 与 <code>executeTool</code></strong>（第 432-523 行区间 + 附近辅助方法）</td><td><strong>925 中的约 150（精读）</strong></td></tr>
+          <tr><td>6</td><td><code>core/prompt/PromptAssembler.java</code> 的 <code>assemble()</code></td><td>组装顺序；其余 900 行可以先跳过</td><td><strong>977 中的约 40（精读）</strong></td></tr>
+          <tr><td>7</td><td><code>core/tool/ToolExecutor.java</code></td><td><strong>全文精读</strong>——七步顺序、参数改写在权限之前、结果整形</td><td><strong>553（精读）</strong></td></tr>
+          <tr><td>8</td><td><code>infra/permission/PermissionManager.java</code></td><td><code>decide()</code> + <code>evaluatePolicy()</code> + <code>intercept()</code> 的 javadoc</td><td><strong>280（精读）</strong></td></tr>
+          <tr><td>9</td><td><code>infra/permission/PermissionPolicy.java</code></td><td>三段集合语义（很短）</td><td>163</td></tr>
+          <tr><td>10</td><td><code>infra/llm/LlmClientFactory.java</code> + <code>AbstractHttpLlmClient.java</code></td><td>路由顺序、SSE 读流、异常映射</td><td>338 / 590</td></tr>
+          <tr><td>11</td><td><code>infra/session/SessionManager.java</code> 的追加与落盘路径</td><td><code>appendMessage</code> / <code>beginTurn</code> / <code>flush</code> / <code>doPersist</code></td><td><strong>1364 中的约 120（精读）</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">读代码的具体技巧（针对这个仓库）</span>
+      <ul>
+        <li><strong>先读类注释，再看方法。</strong>这个仓库的类注释质量高于方法注释，很多「为什么不能那样做」直接写在类注释里。
+            典型例子：<code>PermissionManager.intercept()</code> 的 javadoc 用四段篇幅解释「插件抛异常为什么按拒绝处理」。</li>
+        <li><strong>注释里带「为什么」的那几句不要跳。</strong>例如 <code>ReActLooper</code> 里
+            「压缩与这一轮的模型调用并发」「用下标循环而不是 for-each」，都是一句话解释一个设计决策。</li>
+        <li><strong>看到「不可挪」「必须早于」「不能」这类词，停下来想清楚依赖关系。</strong>
+            这些词标记的都是硬约束，是排查问题的第一手材料。</li>
+        <li><strong>javadoc 里的行号/数字可能过时</strong>，遇到「有几个方法」「第几步」这类数字<strong>先自己数一遍</strong>。
+            本套文档就改过 <code>JellyfishRuntime</code> 类注释里一处过时的访问器计数。以代码为准。</li>
+      </ul>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">自测：能答上来就说明主干道通了</span>
+      <ol>
+        <li>「一轮」和「一个回合」分别指什么？回合有几种终态？</li>
+        <li>为什么一批工具调用是串行的？想要并行该怎么做？</li>
+        <li><code>ToolExecutor</code> 的七步里，为什么参数改写必须在权限判定之前？</li>
+        <li>插件拦截为什么不需要 <code>ALLOW</code>？插件抛异常时会发生什么，为什么？</li>
+        <li>「没写 <code>temperature</code>」与「写了 <code>temperature: 0</code>」在代码里怎么区分？</li>
+        <li>为什么裁剪只裁本次请求、不写回会话？</li>
+        <li>为什么 <code>flushAll()</code> 必须早于 <code>pluginManager.close()</code>？</li>
+      </ol>
+      <p>全部对应 <a href="04-agent-loop.html">04</a> / <a href="06-permissions.html">06</a> / <a href="05-llm-api.html">05</a> / <a href="08-session-context.html">08</a> 四页。</p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>阶段三：向外扩展（按需）</h2>
+
+    <p>主干道通了之后，按兴趣或工作需要选一条支线深入。</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>支线</th><th>适合谁</th><th>精读文件</th><th>配套页</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>写一个插件</strong></td>
+            <td>想给 Jellyfish 加能力</td>
+            <td><code>api/plugin/JellyfishPlugin.java</code>、<code>api/plugin/PluginContext.java</code>（526 行，接口即文档）、
+                <code>infra/plugin/JellyfishPluginManager.java</code>、官方插件仓库里的一个简单插件（如 <code>jellyfish-plugin-todo</code>）</td>
+            <td><a href="07-plugins.html">07</a></td>
+          </tr>
+          <tr>
+            <td><strong>改 TUI</strong></td>
+            <td>想改界面 / 加面板</td>
+            <td><code>tui/TuiApp.java</code> 的四个回调、<code>ChatShell.java</code>（区域）、<code>ChatLayout.java</code>（高度账本）、
+                <code>TranscriptProjector.java</code>（投影）</td>
+            <td><a href="09-tui.html">09</a></td>
+          </tr>
+          <tr>
+            <td><strong>做一次集成</strong></td>
+            <td>要把内核嵌进自己的系统</td>
+            <td><code>di/JellyfishRuntime.java</code>（23 个访问器）、<code>di/JellyfishAssembler.java</code>（569 行，手工装配）、
+                各 <code>*Module.java</code>、workspace 下的 <code>Jellyfish-Spring-Boot-Starter/</code></td>
+            <td><a href="03-architecture.html">03</a></td>
+          </tr>
+          <tr>
+            <td><strong>接一个新模型厂商</strong></td>
+            <td>要用自建网关 / 私有模型</td>
+            <td><code>infra/llm/AbstractHttpLlmClient.java</code>、<code>AbstractOpenAiCompatibleLlmClient.java</code>、
+                <code>ProviderTypes.java</code>、<code>di/LlmModule.java</code>、<code>VendorBody.java</code></td>
+            <td><a href="05-llm-api.html">05</a></td>
+          </tr>
+          <tr>
+            <td><strong>调上下文与成本</strong></td>
+            <td>账单太高或容易超窗</td>
+            <td><code>core/prompt/ContextWindow.java</code>、<code>TokenEstimator.java</code>、<code>ToolResultAger.java</code>、
+                <code>CacheKeepAlive.java</code>、<code>CacheBreakWatcher.java</code>、<code>core/compact/ConversationCompactor.java</code></td>
+            <td><a href="08-session-context.html">08</a></td>
+          </tr>
+          <tr>
+            <td><strong>做服务化部署</strong></td>
+            <td>要把 Jellyfish 当后端用</td>
+            <td><code>server/JellyfishServer.java</code>（路由）、<code>http/ApiKeyGuard.java</code>、<code>http/OriginGuard.java</code>、
+                <code>ChatHandler.java</code>（SSE）、<code>ApprovalBridge.java</code> / <code>AskBridge.java</code></td>
+            <td><a href="10-cli-server.html">10</a></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- ============================================================ -->
+    <h2>第四份资料：<code>docs/constraints.md</code> 怎么用</h2>
+
+    <p>
+      前面三阶段都在讲「读代码」。但还有一份资料必须在动手改代码<strong>之前</strong>读——
+      <code>Jellyfish/docs/constraints.md</code>。<strong>1253 行、10 章</strong>，
+      而它在前面十几页里只被零散引用了三处（子代理、审批、外壳），
+      这里给它一个导读，因为它是这个项目里<strong>唯一一份「跨模块规则」的载体</strong>。
+    </p>
+
+    <h3>它是什么：三层解释的最上一层</h3>
+
+    <div class="src-block">Jellyfish/docs/constraints.md:1-6（开头自述，逐字）</div>
+
+    <pre><code class="language-text"># Jellyfish 约束与规范
+
+> 本文件是内核仓库的<b>技术约束单一真源</b>：跨模块的规范、边界条件与「不要这么做」。
+> 三层解释的分工是 <b>代码自身 → javadoc（某个类自己的为什么与实测数据）→ 本文件（跨类的规则）</b>。
+> 面向使用者的说明在 [`../README.md`](../README.md)；类内部的设计推导与实测数据在对应类的 javadoc 里，本文不重复。
+> 文档与代码之间容易产生偏移，因此<b>能在类注释里说清的事不写在这里</b>——剩下的每一条都是「改坏了会静默出错」的规则。</code></pre>
+
+    <div class="callout design">
+      <span class="callout-title">这段话本身就是一份「文档分工」的规范</span>
+      <p>
+        它明确划了三层，并给每层指定了<strong>只写什么</strong>：
+      </p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>层</th><th>写什么</th><th>在哪</th></tr></thead>
+          <tbody>
+            <tr><td>代码</td><td>事实本身</td><td>源码</td></tr>
+            <tr><td>javadoc</td><td><strong>某个类自己的</strong>「为什么」与实测数据</td><td>各类的注释</td></tr>
+            <tr><td><code>constraints.md</code></td><td><strong>跨类的</strong>规则、边界与「不要这么做」</td><td>本文件</td></tr>
+            <tr><td><code>README.md</code></td><td>面向<strong>使用者</strong>的说明（不是开发者）</td><td>仓库根</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        最后半句是全篇最有信息量的：<em>「能在类注释里说清的事不写在这里——剩下的每一条都是
+        <strong>『改坏了会静默出错』</strong>的规则」</em>。
+        也就是说，这份文件<strong>不是「完整的规范」，而是「按静默故障风险筛选过的规范」</strong>。
+        读它的时候可以假设：<strong>没写的部分，要么不重要，要么已经写在类的 javadoc 里。</strong>
+      </p>
+      <p>
+        这条筛选标准也解释了为什么这个文件只有 1253 行——它刻意<strong>不</strong>做百科。
+        更妙的是它给了一个「什么时候该往这里加内容」的判据：
+        <strong>只加「改坏了会静默出错」的规则。</strong>能防止文档无限膨胀。
+      </p>
+    </div>
+
+    <h3>十章目录</h3>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>章</th><th>行号区间</th><th>行数</th><th>什么时候查它</th></tr></thead>
+        <tbody>
+          <tr><td><code>## 整体架构图</code></td><td>8–169</td><td>162</td><td>想知道「谁调谁」——含一张 mermaid 全图，标了同步/内部/异步三种边</td></tr>
+          <tr><td><code>## 模块与依赖方向</code></td><td>170–191</td><td>22</td><td>准备新增模块或跨模块引用时（「依赖方向单向，禁止反向或循环」）</td></tr>
+          <tr><td><code>## 扩展层与插件运行时</code></td><td>192–298</td><td>107</td><td>写插件或改扩展点时</td></tr>
+          <tr><td><code>## 会话、持久化与配置</code></td><td>299–434</td><td>136</td><td>改会话、落盘、双源配置时（含 fork 四条硬规则）</td></tr>
+          <tr><td><code>## 权限与审批</code></td><td>435–518</td><td>84</td><td>改权限判定、审批、提问时</td></tr>
+          <tr><td><code>## ReAct 循环、上下文与子代理</code></td><td>519–709</td><td>191</td><td><strong>最大的一章</strong>——改循环、提示词、压缩、委派时</td></tr>
+          <tr><td><code>## 工具执行、输入指令与命令域</code></td><td>710–863</td><td>154</td><td>加工具、改 <code>!</code> 指令或系统命令时</td></tr>
+          <tr><td><code>## 三种外壳与可观测性</code></td><td>864–1104</td><td>241</td><td><strong>行数最多</strong>——改外壳、UI 或指标时</td></tr>
+          <tr><td><code>## Server 接口契约</code></td><td>1105–1207</td><td>103</td><td>改 HTTP 路由、SSE 事件时</td></tr>
+          <tr><td><code>## 边界与明确不做</code></td><td>1208–1253</td><td>46</td><td><strong>提需求之前先读这章</strong>——它列出了「刻意不支持」的东西</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">最后一章最容易被忽略，但最省时间</span>
+      <p>
+        <code>## 边界与明确不做</code>（46 行）列的是<strong>有意不实现的</strong>功能。
+        读它的收益是双向的：作为使用者，它告诉你「这件事别指望」；作为贡献者，
+        它告诉你「这个请求大概会被拒，而且不是你实现得不好」。
+      </p>
+      <p>
+        这与 <a href="02-quickstart.html">02 页</a>讲的「配置错误要么立刻可见、要么别生效」是同一个取向：
+        <strong>把「不做」明确写下来，比让每个人自己试探要省下大量来回。</strong>
+      </p>
+    </div>
+
+    <h3>怎么和这份文档配套使用</h3>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>你的处境</th><th>先看哪</th></tr></thead>
+        <tbody>
+          <tr><td>刚接手这个项目，想建立全局印象</td><td><code>constraints.md</code> 的 <code>## 整体架构图</code>（比读代码快得多）</td></tr>
+          <tr><td>要改某一块的实现</td><td>先在本套文档找到对应页 → 再查 <code>constraints.md</code> 对应章的「禁止/必须」条目</td></tr>
+          <tr><td>遇到「为什么不能这么做」</td><td>先搜 <code>constraints.md</code>（跨类规则），再搜类 javadoc（本类理由）</td></tr>
+          <tr><td>想提一个新功能</td><td><code>## 边界与明确不做</code></td></tr>
+          <tr><td>想知道历史变更与安全修复编号</td><td><code>CHANGELOG.md</code>（按版本 + Added/Changed/Fixed）与 <code>CODE-REVIEW.md</code>（<code>SEC-xx</code> 编号定义在它的「已确认为真实问题」表里）</td></tr>
+          <tr><td>想知道「配了什么、默认是多少」</td><td><code>README.md</code>（面向使用者，有完整配置表）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：这份文件也会滞后</span>
+      <p>
+        它自己也承认了这一点（<code>:5</code>）：「文档与代码之间容易产生偏移，因此<strong>能在类注释里说清的事不写在这里</strong>」——
+        这是用「少写」来降低漂移概率。
+      </p>
+      <p>
+        本套文档在审计过程中就发现了两处<strong>注释滞后</strong>（
+        <a href="03-architecture.html">03 页</a>的 <code>chat</code> 定位、<code>JellyfishRuntime</code> 的访问器计数），
+        两处都已在本套文档编写期间更正。
+        实践建议：<strong>规则类内容以 <code>constraints.md</code> 为准，行号与具体签名以代码为准</strong>。
+        这也正是本套文档每页给 <code>文件:行号</code> 而不是只给结论的原因。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>不该怎么读</h2>
+
+    <div class="callout pitfall">
+      <span class="callout-title">四个常见的低效读法</span>
+      <ul>
+        <li><strong>从 <code>jellyfish-api</code> 的 144 个类开始逐个读。</strong>那是「契约清单」，不是「知识」。
+            正确做法：需要哪个扩展点就查那一页表（<a href="07-plugins.html">07 页</a>）。</li>
+        <li><strong>一开始就读 <code>ConversationCompactor.java</code>（1139 行）。</strong>
+            压缩是最复杂的一块，但它建立在「boundary（边界）」「PromptAssembler」「缓存前缀」三个概念之上。
+            顺序错了会读得很痛苦。</li>
+        <li><strong>把 <code>di/</code> 当成「样板代码」跳过。</strong>「哪些实例必须唯一」这条知识只在这里，
+            而它出错时是<strong>静默故障</strong>。至少读一遍 <code>JellyfishRuntime</code> 的类注释与
+            <code>EventModule</code> ↔ <code>JellyfishAssembler</code> 的对照。</li>
+        <li><strong>读 <code>TuiApp.java</code> 的 2176 行。</strong>先只读 <code>configure</code> / <code>onStart</code> /
+            <code>render</code> 三个回调（加起来不到 200 行），理解「一帧要做什么」，按键分支用到再查。</li>
+      </ul>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">一条经验：找「注释里的为什么」</span>
+      <p>
+        这个仓库里最值钱的不是代码，是注释里那些解释<strong>「为什么不是另一种做法」</strong>的段落。
+        例如 <code>AskChannel.java:44-49</code> 解释永不超时为什么不会自愈；
+        <code>PromptAssembler.java:44-47</code> 把「system prompt 里塞易变状态」定性为 bug 信号；
+        <code>PermissionManager</code> 用四段说明插件故障为什么必须收敛成拒绝。
+      </p>
+      <p>
+        这类段落读一段顶读十个方法。阅读时可以按关键词搜：
+        <code>为什么</code>、<code>不能</code>、<code>必须</code>、<code>否则</code>、<code>而不是</code>。
+      </p>
+    </div>
+
+    <div class="conclusion">
+      <h2>关键结论</h2>
+      <ol>
+        <li>读这个仓库的正确单位不是「模块」，而是<strong>一条数据流</strong>：从用户输入到一次工具调用结束。
+            那条路径把所有核心模块都串起来了。</li>
+        <li>三阶段的分界线是「能不能不看文档复述主干道」。阶段二的自测题就是验收标准。</li>
+        <li>精读与略读的分界要明确：<code>ToolExecutor</code> / <code>PermissionManager</code> / <code>Launcher</code> / <code>AgentHarness</code> 的
+            <code>shutdown()</code> 值得逐行读；<code>TuiApp</code> / <code>ConversationCompactor</code> / 各厂商客户端只读关键路径。</li>
+        <li>最省时间的技巧是按关键词找「为什么」类注释——<strong>这些是这个仓库里密度最高的知识</strong>。</li>
+        <li>这套项目的文档分四层且各有分工：<strong>代码（事实）→ 类 javadoc（本类的为什么）→
+            <code>constraints.md</code>（跨类规则，按「改坏了会静默出错」筛选）→ <code>README.md</code>（使用者说明）</strong>。
+            弄清这四层，就不会在错的地方找答案。</li>
+        <li><code>constraints.md</code> 只有 1253 行却在前面各页只被零散引用三次，说明它的价值不在「被引用」，
+            而在于<strong>动手改代码前该主动查它</strong>——尤其是 <code>## 边界与明确不做</code> 那一章。</li>
+      </ol>
+    </div>
+
+    <nav class="pager" aria-label="翻页">
+      <a class="prev" href="12-comparison.html"><span class="pager-dir">上一页</span>12 与主流工具对比</a>
+      <a class="next" href="14-faq-glossary.html"><span class="pager-dir">下一页</span>14 常见问题与术语表</a>
+    </nav>
+
+  </main>
+</div>
+
+<footer class="footer">
+  Jellyfish 源码深度解析 · 本页依据：模块依赖关系、各页精读结论与实际源码结构；
+  <code>docs/constraints.md</code>（1253 行 / 10 章的章节与行号区间为实测）、<code>CHANGELOG.md</code>、<code>CODE-REVIEW.md</code>、<code>README.md</code>。
+</footer>
+
+<!-- 资源按「本地 vendor 优先、CDN 兜底」引用：文件缺失时 assets/app.js 会自动回退到 CDN -->
+<script src="assets/vendor/highlight.min.js"></script>
+<script src="assets/vendor/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

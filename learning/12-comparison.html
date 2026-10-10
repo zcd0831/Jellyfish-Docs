@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>12 与主流 AI Agent 工具对比 · Jellyfish 源码深度解析</title>
+<meta name="description" content="Jellyfish 与 Claude Code、OpenClaw、OpenAI Codex CLI、Aider、Continue.dev、Cline 的十维度对比：语言与运行时、架构模式、工具权限、厂商适配、会话持久化、TUI、扩展机制、部署形态、适用场景与设计哲学。">
+<link rel="stylesheet" href="assets/style.css">
+<!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
+</head>
+<body>
+
+<header class="topbar">
+  <button class="nav-toggle" id="navToggle" aria-label="切换导航" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">🐙 Jellyfish 源码深度解析</a>
+  <div class="topbar-tools">
+    <input id="navSearch" type="search" placeholder="搜索页面…" aria-label="搜索页面">
+  </div>
+</header>
+
+<div class="layout">
+
+  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <div class="sidebar-title">文档目录</div>
+    <ul class="nav-list">
+      <li><a href="index.html">首页 · 总览与导航</a></li>
+    </ul>
+    <div class="nav-group">入门</div>
+    <ul class="nav-list">
+      <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
+      <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
+      <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
+    </ul>
+    <div class="nav-group">内核重点</div>
+    <ul class="nav-list">
+      <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
+      <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
+      <li><a href="06-permissions.html">06 权限与审批系统</a></li>
+      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
+      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+    </ul>
+    <div class="nav-group">外壳与实战</div>
+    <ul class="nav-list">
+      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
+      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
+      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+    </ul>
+    <div class="nav-group">拓展</div>
+    <ul class="nav-list">
+      <li><a href="12-comparison.html" aria-current="page">12 与主流工具对比</a></li>
+      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
+      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
+      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
+      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+    </ul>
+    <div class="nav-group">子系统</div>
+    <ul class="nav-list">
+      <li><a href="17-commands.html">17 命令系统</a></li>
+      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
+      <li><a href="19-config.html">19 配置体系</a></li>
+      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
+    </ul>
+    <div class="nav-group">插件详解</div>
+    <ul class="nav-list">
+      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
+      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
+      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
+      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
+      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
+      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
+      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <nav class="breadcrumb" aria-label="面包屑">
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>12 与主流 AI Agent 工具对比</span>
+    </nav>
+
+    <h1>12 与主流 AI Agent 工具对比</h1>
+    <p class="page-sub">
+      横向看一遍，才能判断哪些设计是「这个项目的选择」，哪些是「这个领域的共识」。
+      所有结论尽量给事实来源；查不到的明确标注 <strong>未核实</strong>，不猜。
+    </p>
+
+    <section class="goals">
+      <h2>学习目标</h2>
+      <ul>
+        <li>用十个固定维度快速给任何 AI Agent 工具定位；</li>
+        <li>说出 Jellyfish 在「权限模型」和「项目级配置信任」上相对激进的取舍；</li>
+        <li>看清它的两个结构性劣势：能力生态薄、无 IDE 集成；</li>
+        <li>知道哪些格子是「未核实」，不要拿它们当结论。</li>
+      </ul>
+    </section>
+
+    <div class="callout warn">
+      <span class="callout-title">关于证据强度</span>
+      <p>
+        本页表格里 <code>[J]</code> 标记表示依据来自本地仓库（<code>Jellyfish/README.md</code>、<code>AGENTS.md</code>、源码）；
+        其余依据来自各产品的官方文档或代码仓库（见文末来源清单）。
+        <strong>标「未核实」的格子表示未取得一手依据</strong>，我把它们留在表里是为了让你知道「这里不知道」，
+        而不是让你以为「这里没有」。
+      </p>
+      <p>
+        另外提醒一句：<strong>这类产品的细节变化很快</strong>。表里的版本相关描述（Node 版本要求、模型支持范围等）
+        以来源页为准，不要当成长期事实。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>1. 十维度对比总表</h2>
+
+    <div class="mermaid">
+flowchart TB
+  subgraph AX1["轴一：扩展粒度（能改多少内部行为）"]
+    J1["Jellyfish<br/>工具 / 命令 / 提示词 / 权限拦截 /<br/>会话持久化 / UI / 模型厂商 / 压缩策略"]
+    J2["Claude Code<br/>skills / agents / hooks / MCP"]
+    J3["MCP 系（Codex / Continue / Cline）<br/>主要是工具"]
+    J4["Aider<br/>无插件体系"]
+    J1 --> J2 --> J3 --> J4
+  end
+  subgraph AX2["轴二：执行边界的默认严格度"]
+    K1["Jellyfish<br/>fail-closed + 项目配置默认不信任"]
+    K2["Codex CLI<br/>沙箱 + 审批分层，默认只读"]
+    K3["Claude Code / Cline<br/>规则 + 逐次批准"]
+    K4["Aider<br/>自动写盘 + auto-commit"]
+    K1 --> K2 --> K3 --> K4
+  end
+    </div>
+    <p class="figure-cap">图 12-1　两条最有区分度的轴。差异不是「好 vs 坏」，而是产品假设的差异</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>维度</th>
+            <th>Jellyfish</th>
+            <th>Claude Code</th>
+            <th>OpenClaw</th>
+            <th>Codex CLI</th>
+            <th>Aider</th>
+            <th>Continue.dev</th>
+            <th>Cline</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>语言与运行时</strong></td>
+            <td>Java 1.8，Maven 七模块 <code>[J]</code></td>
+            <td>原生二进制（npm 安装需 Node ≥ 22，二进制运行时不调 Node）[4]</td>
+            <td>以 TS 为主，含 Go / Rust / Swift / Kotlin，Node 跑 Gateway [8]</td>
+            <td>Rust（<code>codex-rs</code>）[7]</td>
+            <td>Python [9]</td>
+            <td>TypeScript（VS Code / JetBrains 共享 core）[10]</td>
+            <td>TypeScript（VS Code 扩展 + SDK / CLI）[10]</td>
+          </tr>
+          <tr>
+            <td><strong>架构模式</strong></td>
+            <td>单向依赖七模块；<code>-cli</code> / <code>-tui</code> / <code>-server</code> 三外壳共一内核 <code>[J]</code></td>
+            <td>单 CLI + IDE / 桌面 / Web 多面，插件封装组件 [2][5]</td>
+            <td>单长驻 Gateway + WS 控制面，多 agent / 多通道 [8]</td>
+            <td>CLI / TUI + IDE 扩展，OS 级沙箱 [6]</td>
+            <td>终端 REPL + repo map + 自动 git 提交 [9]</td>
+            <td>IDE 插件（多 IDE 共用 core）+ CLI [10]</td>
+            <td>VS Code webview + SDK / CLI [10]</td>
+          </tr>
+          <tr>
+            <td><strong>工具调用与权限模型</strong></td>
+            <td><code>ToolExecutor</code> 单点；<code>denied &gt; ask &gt; allowed</code>，无通配符；<strong>无审批者 / 超时 / 中断一律拒绝</strong>（fail-closed）<code>[J]</code></td>
+            <td>allow / ask / deny 规则，判定序 deny → ask → allow，落 <code>settings.json</code> [2]</td>
+            <td>未核实</td>
+            <td>沙箱模式 + 审批策略；默认只读、无网络、写限工作区 [6]</td>
+            <td><strong>无逐调用审批</strong>，默认自动写盘并 auto-commit [9]</td>
+            <td>未核实（MCP 工具仅 agent 模式）[10]</td>
+            <td>每次编辑 / 命令需人工批准，可开 auto-approve [10]</td>
+          </tr>
+          <tr>
+            <td><strong>多厂商 LLM 适配</strong></td>
+            <td><code>models.json</code> 声明 provider <code>type</code>；中性采样参数由各客户端翻译；<code>vendorBody/Headers</code> 透传私有字段 <code>[J]</code></td>
+            <td>以 Claude 为主，终端与 IDE 支持第三方 provider [4]</td>
+            <td>模型与 agent harness 皆为可换插件（Claude / Codex / 本地）[8]</td>
+            <td>以 OpenAI 模型为主，其余 provider 未核实</td>
+            <td><strong>100+ LLM</strong>，含本地模型 [9]</td>
+            <td><code>config.yaml</code> 多厂商模型 + hub [10]</td>
+            <td>多家模型，宣称无厂商锁定 [10]</td>
+          </tr>
+          <tr>
+            <td><strong>会话持久化</strong></td>
+            <td><strong>由插件提供</strong>（<code>jellyfish-plugin-session-file</code>）；<code>SessionManager</code> 唯一写入口；<code>--session</code> 恢复 <code>[J]</code></td>
+            <td>未核实</td>
+            <td><code>~/.openclaw/agents/&lt;id&gt;/sessions</code> [8]</td>
+            <td>未核实</td>
+            <td><code>.aider.chat.history.md</code> + <code>--restore-chat-history</code> [9]</td>
+            <td>未核实</td>
+            <td>未核实</td>
+          </tr>
+          <tr>
+            <td><strong>终端 UI（TUI）</strong></td>
+            <td>TamboUI，备用屏 + raw；<code>Ctrl+S</code> 发送；正文 markdown 渲染 <code>[J]</code></td>
+            <td>终端交互 UI（实现库未核实）</td>
+            <td>未核实（控制面 + 原生 App）[8]</td>
+            <td>Rust TUI [7]</td>
+            <td>终端 REPL [9]</td>
+            <td>无（IDE GUI）[10]</td>
+            <td>无（IDE webview）[10]</td>
+          </tr>
+          <tr>
+            <td><strong>扩展机制</strong></td>
+            <td>PF4J jar + <code>jellyfish-api</code> SPI；<code>ExtensionRegistry</code>（同步）/ <code>EventChannel</code>（异步）；官方插件在独立仓库 <code>[J]</code></td>
+            <td>skills / agents / hooks / MCP / LSP 打包成 plugin [2][5]</td>
+            <td>channel / model provider / agent harness 插件 [8]</td>
+            <td>MCP + <code>AGENTS.md</code>（细节未核实）</td>
+            <td>无插件体系（未核实）</td>
+            <td><code>config.yaml</code> + MCP servers + hub [10]</td>
+            <td>MCP + SDK 插件与生命周期 hooks [10]</td>
+          </tr>
+          <tr>
+            <td><strong>部署形态</strong></td>
+            <td>单个 fat jar；server 默认绑 <code>127.0.0.1</code>，绑非回环且无密钥拒绝启动 <code>[J]</code></td>
+            <td>终端 / IDE / 桌面 / Web / Slack / CI [2][4]</td>
+            <td>自托管 Gateway + 多端 App [8]</td>
+            <td>本地 CLI / IDE [6]</td>
+            <td>本地 CLI [9]</td>
+            <td>IDE 插件 + CLI [10]</td>
+            <td>VS Code 扩展 + CLI / SDK [10]</td>
+          </tr>
+          <tr>
+            <td><strong>适用场景与局限</strong></td>
+            <td>内网 / Java 团队自建 agent 平台；局限：须 JDK 8、无 IDE 集成、能力依赖另装插件 <code>[J]</code></td>
+            <td>个人 / 团队终端编码；局限：主要绑定 Claude 订阅 [2][4]</td>
+            <td>接入 IM 做私人 / 团队助理；局限：配置与运维面大 [8]</td>
+            <td>重视沙箱隔离的 CLI 编码；局限：模型面偏 OpenAI [6]</td>
+            <td>小步改码 + git 流；局限：无插件、无强权限门 [9]</td>
+            <td>IDE 内 chat / edit / agent；局限：非独立 CLI 优先 [10]</td>
+            <td>IDE 内有人监督的自主编码；局限：强绑 VS Code [10]</td>
+          </tr>
+          <tr>
+            <td><strong>设计哲学</strong></td>
+            <td>内核最小、能力全在插件；权限 fail-closed；项目级配置默认不信任 <code>[J]</code></td>
+            <td>单产品闭环、多面覆盖、确定性 hooks [2][5]</td>
+            <td>自托管、数据在本地、一切皆插件 [8]</td>
+            <td>沙箱与审批分层，默认保守 [6]</td>
+            <td>简单、代码库地图、自动提交 [9]</td>
+            <td>配置即代码、多 IDE 一致 [10]</td>
+            <td>Plan / Act 分离 + 人工在环 [10]</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="figure-cap">表 12-1　<code>[J]</code> = 本地仓库依据；数字 = 文末来源编号；「未核实」= 未取得一手依据</p>
+
+    <!-- ============================================================ -->
+    <h2>2. 三个维度上的深度对比</h2>
+
+    <h3>2.1 权限模型：谁最保守？</h3>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>工具</th><th>判定模型</th><th>「无人在场」时</th><th>项目级配置</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Jellyfish</strong></td>
+            <td>两段式：核心策略（三段名单）→ 插件拦截（三态，<strong>无 <code>ALLOW</code></strong>）</td>
+            <td><strong>拒绝</strong>（fail-closed）</td>
+            <td><strong>默认不加载</strong>，路径 + 内容指纹信任</td>
+          </tr>
+          <tr>
+            <td>Claude Code</td>
+            <td>allow / ask / deny 规则，判定序 deny → ask → allow</td>
+            <td>取决于 <code>ask</code> 规则与权限模式</td>
+            <td>默认生效（<code>.claude/settings.json</code>）</td>
+          </tr>
+          <tr>
+            <td>Codex CLI</td>
+            <td>沙箱 + 审批策略，默认只读、无网络</td>
+            <td>按所选沙箱模式</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>Aider</td>
+            <td><strong>无逐调用审批</strong></td>
+            <td>自动写盘 + auto-commit</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>Cline</td>
+            <td>每次编辑 / 命令需批准，可开 auto-approve</td>
+            <td>可配置</td>
+            <td>—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout design">
+      <span class="callout-title">这里的差异是「立场」而不是「好坏」</span>
+      <p>
+        Aider 的「自动写盘 + auto-commit」不是安全漏洞，而是<strong>另一个产品假设</strong>：
+        它假设你在 git 仓库里工作，撤销靠 <code>git checkout</code>。Jellyfish 的 fail-closed 假设的是
+        <strong>你可能在没有版本控制的目录里跑它，而且终端前面可能没人</strong>。
+      </p>
+      <p>
+        两家都不是「更对」，而是<strong>对不同使用场景给出的一致的答案</strong>。
+        评估一个 agent 工具时，要问的是「它的假设和我的场景一致吗」——
+        而不是「它的权限模型看起来够不够严」。
+      </p>
+    </div>
+
+    <h3>2.2 扩展机制：PF4J vs MCP vs 插件包</h3>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>方案</th><th>代表</th><th>扩展粒度</th><th>代价</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>进程内插件框架（PF4J）</strong></td>
+            <td>Jellyfish</td>
+            <td>最广：工具 / 命令 / 提示词 / 权限拦截 / 会话持久化 / UI / 模型厂商 / 压缩策略都能换</td>
+            <td>插件与内核同进程 → 类加载隔离必须自己管（<code>PluginClasspathGuard</code>）；jar 变更要重启</td>
+          </tr>
+          <tr>
+            <td><strong>MCP</strong></td>
+            <td>Claude Code / Codex CLI / Continue / Cline</td>
+            <td>主要是<strong>工具</strong>（外部进程 / 服务）</td>
+            <td>进程边界天然隔离，但只能扩展「工具」这一维，改不了提示词组装、权限判定、UI</td>
+          </tr>
+          <tr>
+            <td><strong>插件包（多文件打包）</strong></td>
+            <td>Claude Code（skills / agents / hooks / MCP 打包）</td>
+            <td>中：钩子 + 技能 + 子代理 + MCP</td>
+            <td>受宿主提供的钩子点限制，不能替换内部算法</td>
+          </tr>
+          <tr>
+            <td>配置文件 + hub</td>
+            <td>Continue.dev</td>
+            <td>模型与 MCP server 配置</td>
+            <td>最轻，但扩展面也最窄</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">一个实用的判断法</span>
+      <p>
+        问自己：<strong>我想换的是「能力」还是「行为」？</strong>
+      </p>
+      <ul>
+        <li>只想加工具（连数据库、查 Jira）→ <strong>MCP 就够了</strong>，而且它跨产品通用。</li>
+        <li>想改「权限怎么判」「提示词怎么拼」「上下文怎么压」→ 只有<strong>进程内扩展点</strong>能做到。</li>
+      </ul>
+      <p>
+        Jellyfish 选择后者，代价是插件不通用（不能拿去给别的 agent 用），收益是它能被改造成一个完全不同的产品——
+        连「压缩策略」都是插件，这在这批产品里是很少见的粒度。
+      </p>
+    </div>
+
+    <h3>2.3 厂商适配：广度 vs 深度</h3>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th></th><th>Aider</th><th>Jellyfish</th><th>Continue.dev</th></tr></thead>
+        <tbody>
+          <tr><td>模型数量</td><td><strong>100+</strong>（含本地模型）</td><td>只有 OpenAI 兼容 + Anthropic Messages 两类传输</td><td>多厂商 + hub 清单</td></tr>
+          <tr><td>适配深度</td><td>不同模型用不同的编辑格式（diff / whole）</td><td>厂商特有字段靠 <code>vendorBody</code> 透传；中性参数由各客户端翻译</td><td>配置驱动</td></tr>
+          <tr><td>缓存优化</td><td>未核实</td><td><strong>显式 cache 断点 + keepAlive + cache-safe fork 压缩</strong></td><td>未核实</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      这里体现的是两种思路：<strong>Aider 追求「广」（覆盖尽可能多的模型），Jellyfish 追求「深」</strong>
+      （在支持的厂商上把缓存、思考文本、流式工具分片都做透）。
+      对用户的实际差别是：你用的模型在不在支持的短名单里。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>3. Jellyfish 的相对优势</h2>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>#</th><th>优势</th><th>依据</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td><strong>JVM 可嵌入</strong>：有 <code>Jellyfish-Spring-Boot-Starter</code>，
+                能把内核接进已有 Spring Boot 应用；上表其余工具都不是 JVM 系</td>
+            <td><code>[J]</code>、workspace 下的 <code>Jellyfish-Spring-Boot-Starter/</code>、<code>Jellyfish-Spring-Template/</code></td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td><strong>装配可替换</strong>：Dagger2 与手工装配交付同一个 <code>JellyfishRuntime</code> 契约，容器无关</td>
+            <td><code>[J]</code>，<a href="03-architecture.html">03 页</a></td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td><strong>权限最保守</strong>：三段优先级 + 无审批者 / 超时 / 中断一律拒绝；
+                <code>-cli</code> 无审批界面时按拒绝而非放行</td>
+            <td><code>[J]</code>，对比 Aider 默认自动写盘提交、Cline 可 auto-approve</td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td><strong>项目级配置信任闸</strong>：信任单位是「路径 + 内容指纹」，未信任即跳过并告警</td>
+            <td><code>[J]</code>；<code>.claude/settings.json</code> 与 <code>AGENTS.md</code> 类项目配置在多数工具里默认生效</td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td><strong>三外壳一内核</strong>：CLI / TUI / HTTP(SSE) 同一装配，server 提供 HTTP 化人工审批端点</td>
+            <td><code>[J]</code>，<a href="10-cli-server.html">10 页</a></td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td><strong>厂商中立层较干净</strong>：与厂商无关的 <code>LlmRequest</code>、由各客户端翻译的中性采样参数、
+                <code>vendorBody/Headers</code> 兜底私有字段</td>
+            <td><code>[J]</code>，<a href="05-llm-api.html">05 页</a></td>
+          </tr>
+          <tr>
+            <td>7</td>
+            <td><strong>扩展粒度最深</strong>：连压缩策略、提示词组装、权限拦截都能换插件</td>
+            <td><code>[J]</code>，<a href="07-plugins.html">07 页</a>的 28 个扩展点</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>4. Jellyfish 的相对劣势</h2>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>#</th><th>劣势</th><th>依据</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td><strong>起步成本高</strong>：JDK 8 + Maven 多模块 + PF4J；插件须打包后<strong>重启进程</strong>才加载
+                （<code>/reload</code> 不能新增 jar）</td>
+            <td><code>[J]</code>，<a href="11-pitfalls.html">11 页 B1</a></td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td><strong>能力生态薄</strong>：文件 / shell / MCP / 压缩 / 持久化全在独立仓库。
+                未装压缩插件则 <code>/compact</code> 不可用；未装持久化插件则不能恢复会话。
+                而 Aider / Cline 开箱即用</td>
+            <td><code>[J]</code>，<a href="08-session-context.html">08 页</a>、<a href="12-comparison.html">本页</a>对比表</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td><strong>模型清单窄</strong>：只声明 OpenAI 兼容与 Anthropic Messages 两类传输，
+                没有 Aider 的「100+ 模型」或 Continue 的 hub 式现成清单</td>
+            <td><code>[J]</code>，<code>ProviderTypes.java</code>、<code>LlmModule.java:102-186</code></td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td><strong>无 IDE 集成</strong>：只有 CLI / TUI / Server，没有 VS Code / JetBrains 插件，也没有桌面与移动端</td>
+            <td><code>[J]</code>，仓库只有 7 个模块，无 IDE 相关模块</td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td><strong>运行时约束硬</strong>：必须 Java 8（禁用 9+ API 与语法）；TUI 无可交互终端即退 3</td>
+            <td><code>[J]</code>，<code>pom.xml:54-56</code>、<code>AGENTS.md</code></td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td><strong>缺公开验证数据</strong>：未检索到第三方 benchmark；而 Aider 有 polyglot 榜单、Cline / Continue 有公开活跃度</td>
+            <td><code>[J]</code> + 未在公开渠道检索到（<strong>这条是「未找到」而非「确定没有」</strong>）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout warn">
+      <span class="callout-title">关于劣势 6 的说明</span>
+      <p>
+        「未检索到第三方 benchmark」不等于「项目没有被评测过」。这条只是说：<strong>本次调研没有找到可引用的一手数据</strong>。
+        在这个领域，benchmark 结果对使用决策的影响其实有限——更重要的是「它的能力边界和你的场景匹配吗」。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>5. 一句话总结各家哲学</h2>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>工具</th><th>一句话哲学</th></tr></thead>
+        <tbody>
+          <tr><td>Jellyfish</td><td>内核最小、能力全外置、默认不信任——面向「要被嵌进别人系统里」的场景</td></tr>
+          <tr><td>Claude Code</td><td>单产品闭环、多面覆盖、hooks 保证确定性 [2][5]</td></tr>
+          <tr><td>OpenClaw</td><td>自托管、数据在本地、一切皆插件 [8]</td></tr>
+          <tr><td>Codex CLI</td><td>沙箱与审批分层，默认保守 [6]</td></tr>
+          <tr><td>Aider</td><td>简单、代码库地图、自动提交——把 git 当作安全网 [9]</td></tr>
+          <tr><td>Continue.dev</td><td>配置即代码、多 IDE 一致 [10]</td></tr>
+          <tr><td>Cline</td><td>Plan / Act 分离 + 人工在环 [10]</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="conclusion">
+      <h2>关键结论</h2>
+      <ol>
+        <li>Jellyfish 的差异点集中在四条：<strong>Java/JVM 可嵌入、插件化内核（含压缩与权限拦截）、fail-closed 权限、项目级配置信任闸</strong>。</li>
+        <li>主流工具的优势同样清楚：<strong>开箱即用、模型覆盖广、IDE 与多端形态</strong>。这三条恰好是 Jellyfish 的三条短板。</li>
+        <li>「扩展机制」这一维度上，<strong>MCP 是行业共识的「工具扩展」标准，而进程内插件框架是「行为扩展」的少数派路线</strong>。两者不冲突：Jellyfish 也有 MCP 插件（<code>jellyfish-plugin-mcp</code>）。</li>
+        <li>权限模型上的差异不是「严 vs 松」，而是<strong>产品假设的差异</strong>：Aider 假设你在 git 仓库里（撤销靠版本控制），Jellyfish 假设你可能在无版本控制的目录里且终端前没人。</li>
+        <li>评估这类工具的正确问题不是「哪个更强」，而是「<strong>它的假设和我的场景一致吗</strong>」——
+            而这个假设，通常能从它的「默认行为」里读出来。</li>
+      </ol>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>来源清单</h2>
+
+    <ol>
+      <li>Jellyfish <code>README.md</code> / <code>AGENTS.md</code> / 源码（本地 <code>Jellyfish/</code>；上游 <code>github.com/zcd0831/Jellyfish</code>）</li>
+      <li><a href="https://code.claude.com/docs/en/permissions">Claude Code 权限文档</a></li>
+      <li><a href="https://code.claude.com/docs/en/settings">Claude Code 设置文档</a></li>
+      <li><a href="https://code.claude.com/docs/en/setup">Claude Code 安装与运行环境</a></li>
+      <li><a href="https://code.claude.com/docs/en/hooks-guide">Claude Code hooks</a>、<a href="https://code.claude.com/docs/en/plugins-reference">plugins reference</a></li>
+      <li><a href="https://developers.openai.com/codex/agent-approvals-security">OpenAI Codex 审批与安全</a></li>
+      <li><a href="https://github.com/openai/codex">openai/codex（Rust 实现）</a></li>
+      <li><a href="https://github.com/openclaw/openclaw">openclaw/openclaw</a>、<a href="https://docs.openclaw.ai/architecture">OpenClaw 架构文档</a></li>
+      <li><a href="https://aider.chat/docs/repomap.html">Aider repo map</a>、<a href="https://aider.chat/docs/leaderboards/">Aider leaderboards</a></li>
+      <li><a href="https://docs.continue.dev/reference/">Continue.dev 参考文档</a>、<a href="https://docs.cline.bot/core-workflows/plan-and-act">Cline Plan &amp; Act</a></li>
+    </ol>
+
+    <nav class="pager" aria-label="翻页">
+      <a class="prev" href="11-pitfalls.html"><span class="pager-dir">上一页</span>11 坑点与陷阱清单</a>
+      <a class="next" href="13-learning-path.html"><span class="pager-dir">下一页</span>13 学习路径与阅读顺序</a>
+    </nav>
+
+  </main>
+</div>
+
+<footer class="footer">
+  Jellyfish 源码深度解析 · 本页依据：本地仓库 <code>Jellyfish/README.md</code>、<code>AGENTS.md</code>、源码，
+  以及各产品官方文档（见上）。标注「未核实」的内容未取得一手依据，请以其官方文档为准。
+</footer>
+
+<!-- 资源按「本地 vendor 优先、CDN 兜底」引用：文件缺失时 assets/app.js 会自动回退到 CDN -->
+<script src="assets/vendor/highlight.min.js"></script>
+<script src="assets/vendor/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

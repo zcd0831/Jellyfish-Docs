@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>11 坑点与陷阱清单 · Jellyfish 源码深度解析</title>
+<meta name="description" content="Jellyfish 的 37 条坑点清单：配置、插件、并发、上下文、TUI、性能、安全七组，每条含现象、根因（带源码行号）、规避方式与严重度。">
+<link rel="stylesheet" href="assets/style.css">
+<!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
+</head>
+<body>
+
+<header class="topbar">
+  <button class="nav-toggle" id="navToggle" aria-label="切换导航" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">🐙 Jellyfish 源码深度解析</a>
+  <div class="topbar-tools">
+    <input id="navSearch" type="search" placeholder="搜索页面…" aria-label="搜索页面">
+  </div>
+</header>
+
+<div class="layout">
+
+  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <div class="sidebar-title">文档目录</div>
+    <ul class="nav-list">
+      <li><a href="index.html">首页 · 总览与导航</a></li>
+    </ul>
+    <div class="nav-group">入门</div>
+    <ul class="nav-list">
+      <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
+      <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
+      <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
+    </ul>
+    <div class="nav-group">内核重点</div>
+    <ul class="nav-list">
+      <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
+      <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
+      <li><a href="06-permissions.html">06 权限与审批系统</a></li>
+      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
+      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+    </ul>
+    <div class="nav-group">外壳与实战</div>
+    <ul class="nav-list">
+      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
+      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
+      <li><a href="11-pitfalls.html" aria-current="page">11 坑点与陷阱清单</a></li>
+    </ul>
+    <div class="nav-group">拓展</div>
+    <ul class="nav-list">
+      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
+      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
+      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
+      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
+      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+    </ul>
+    <div class="nav-group">子系统</div>
+    <ul class="nav-list">
+      <li><a href="17-commands.html">17 命令系统</a></li>
+      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
+      <li><a href="19-config.html">19 配置体系</a></li>
+      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
+    </ul>
+    <div class="nav-group">插件详解</div>
+    <ul class="nav-list">
+      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
+      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
+      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
+      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
+      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
+      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
+      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <nav class="breadcrumb" aria-label="面包屑">
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>11 坑点与陷阱清单</span>
+    </nav>
+
+    <h1>11 坑点与陷阱清单</h1>
+    <p class="page-sub">
+      37 条，全部有源码依据。每条给「现象 → 根因（文件:行号）→ 规避 → 严重度」。
+      建议先读一遍建立索引，出问题时按现象回来查。
+    </p>
+
+    <section class="goals">
+      <h2>学习目标</h2>
+      <ul>
+        <li>建立一份「现象 → 根因」的速查索引，遇到问题能直接定位到源码；</li>
+        <li>识别出哪些坑是<strong>反直觉</strong>的（例如 <code>0</code> 表示永不超时、没有通配符）；</li>
+        <li>知道哪些坑必须重启进程才能解决，哪些可以用 <code>/reload</code>。</li>
+      </ul>
+    </section>
+
+    <div class="callout tip">
+      <span class="callout-title">严重度说明</span>
+      <ul>
+        <li><strong>高</strong>：会导致功能失效、安全问题、或进程卡死，且排查困难；</li>
+        <li><strong>中</strong>：会造成错误行为或误导，但有明确的现象可循；</li>
+        <li><strong>低</strong>：影响体验或效率，不影响正确性。</li>
+      </ul>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>排查路径速查</h2>
+
+    <div class="mermaid">
+flowchart TD
+  S["遇到问题"] --> Q1{"是「配了不生效」？"}
+  Q1 -->|"是"| A["降日志级别<br/>--verbose / -Djellyfish.log.level=DEBUG<br/>多数坑只告警不报错"]
+  Q1 -->|"不是"| Q2{"进程卡住不动？"}
+  Q2 -->|"是"| B["① 是否在等审批<br/>② 是否配了 timeout: 0（永不超时）<br/>③ 网络空闲超时 300s"]
+  Q2 -->|"不是"| Q3{"看到 / 没看到 对不上？"}
+  Q3 -->|"是"| C["分清四层：屏幕 500 条 / 本次请求裁剪 /<br/>本轮 tool 结果老化 / 压缩边界<br/>都不删历史"]
+  Q3 -->|"不是"| Q4{"插件行为不对？"}
+  Q4 -->|"是"| D["① jar 变了没重启进程？<br/>② 自带 jellyfish-api 导致类加载冲突？<br/>③ enabled: [] 是「一个都不启用」"]
+  Q4 -->|"不是"| Q5{"账单偏高？"}
+  Q5 -->|"是"| E["① system prompt 是否每轮变<br/>② keepAliveSeconds 是否开着（计费）<br/>③ 是否标了 cache_control"]
+  Q5 -->|"不是"| F["按分组表逐条对照<br/>A 配置 / B 插件 / C 并发 / D 上下文 / E TUI / F 性能 / G 安全"]
+    </div>
+    <p class="figure-cap">图 11-1　排查路径：先按现象分流，再回到分组表逐条对照</p>
+
+    <h2>A. 配置类</h2>
+
+    <h3>A1. 未知字段静默忽略 <span class="tag" style="background:var(--warn-soft);color:var(--warn)">中</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td><code>models.json</code> / <code>agents.json</code> 里键名拼错，没有任何界面提示，「配了不生效」</td></tr>
+          <tr><th>根因</th><td>绑定层把 <code>FAIL_ON_UNKNOWN_PROPERTIES</code> 设为 <code>false</code>（<code>ObjectMapperWrapper.java:43</code>），
+              靠 <code>unknownFields()</code>（<code>:159</code>）事后比对，再由 <code>RuntimeConfig.read</code> 发一条 <code>ConfigWarningEvent</code>（<code>:415-419</code>）</td></tr>
+          <tr><th>规避</th><td>用 <code>--verbose</code> 或直接看 stderr（日志默认 WARN 且只写 stderr）；怀疑配置没生效时，第一件事就是把日志级别降下来</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>A2. <code>${VAR}</code> 缺失 → <strong>整份配置加载失败</strong> <span class="tag" style="background:var(--warn-soft);color:var(--warn)">中</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>进程起不来，报 <code>environment variable is not set: XXX</code>，退 3</td></tr>
+          <tr><th>根因</th><td><code>SettingsBinder.resolve</code> 对必需变量抛 <code>JellyfishException</code>（<code>:29-31, 184-188</code>），异常经 <code>ConfigLoader.read</code> 上抛——<strong>不是局部降级</strong></td></tr>
+          <tr><th>规避</th><td>一律写 <code>${VAR:-默认值}</code>；需要字面量时用 <code>\${VAR}</code> 转义。注意：<strong>环境变量存在但为空串时不会用默认值</strong>（与 shell 语义一致）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>A3. 采样参数被静默丢弃 / 与思考模式冲突 <span class="tag" style="background:var(--warn-soft);color:var(--warn)">中</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>调了 <code>temperature</code> 没反应</td></tr>
+          <tr><th>根因</th><td>三个独立原因：① 非法值被丢弃 + 告警（<code>SamplingSettings.java:52</code>）；② <code>null</code> = 不下发（<code>LlmRequest.java:22</code>，见 <a href="05-llm-api.html">05 页</a>）；
+              ③ <strong>思考模式下厂商侧会忽略采样参数且不报错</strong>（<code>SamplingSettings</code> 类注释）。
+              另外 <strong>model 级无法单独关掉 provider 级已配项</strong>（<code>merge</code> 是覆盖不是删除）</td></tr>
+          <tr><th>规避</th><td>在 <strong>model 级配全</strong>；确认该模型当前是否开着思考模式；要控制采样参数就别在 provider 级配</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>A4. Claude 代际差异导致 400 <span class="tag" style="background:var(--warn-soft);color:var(--warn)">中</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>设了 <code>temperature</code> / <code>top_p</code> / <code>top_k</code> 就被 400 拒；或用了 <code>thinking</code> 就被拒</td></tr>
+          <tr><th>根因</th><td>Claude 4.7+ 不再接受这三个参数（<code>ClaudeLlmClient.java:180</code>）；
+              <code>thinking.budget_tokens</code> <strong>必须小于本次 <code>max_tokens</code></strong>，未配时取 4096（<code>:62</code>）</td></tr>
+          <tr><th>规避</th><td>按模型分开配 <code>sampling</code>；用 thinking 时<strong>显式给 <code>maxOutputTokens</code></strong> 并确保它大于 thinking 预算</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>A5. 项目级配置默认不加载 <span class="tag" style="background:var(--danger-soft);color:var(--danger)">高</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td><code>./.jellyfish/*.json</code> 写了完全不生效，只有一行 WARN</td></tr>
+          <tr><th>根因</th><td>信任单位是「文件绝对路径 + SHA-256 内容指纹」（<code>ProjectConfigTrust.java:46</code>），
+              未信任即 <code>UNTRUSTED</code> → <strong>跳过 + 告警</strong>（<code>RuntimeConfig.java:264-270</code>）；
+              <strong>内容一变即失效</strong>；<code>classpath:</code> 路径不受管辖（<code>:118-122</code>）</td></tr>
+          <tr><th>规避</th><td>本次生效：<code>--trust-project-config</code>（不落盘）；持久：TUI 确认框里选「记住」</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>A6. 项目级段「整对象覆盖」与「只认全局级」的键 <span class="tag" style="background:var(--warn-soft);color:var(--warn)">中</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>项目级只改了别的段，全局级的 <code>ask.timeoutSeconds = 0</code> 却回退成了缺省的 120</td></tr>
+          <tr><th>根因</th><td>0.1.1 修过的真实 bug：旧合并层写成 <code>project != null ? project : global</code>，<strong>语义上看着对但永远走左支</strong>。
+              现在按「段声明标记」（<code>isXxxDeclared()</code>）判断，判据不是「段非空」（<code>RuntimeConfig.java:510-524</code>）。
+              另一类：「收紧安全边界的键」<strong>只认全局级</strong>（<code>JellyfishPluginDescriptor.java:93</code>）</td></tr>
+          <tr><th>规避</th><td>升级到 0.1.1+；用「段非空」推断「段被声明」是错的，理解这一点能省很多排查时间</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>A7. <code>/reload</code> 失败不回滚 <span class="tag" style="background:var(--ok-soft);color:var(--ok)">低</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>reload 报错之后，内存状态与磁盘文件不一致，「改回去了但行为还是新的」</td></tr>
+          <tr><th>根因</th><td>重载是<strong>单向</strong>的，失败原样上抛（<code>ConfigReloader.java:48</code>）</td></tr>
+          <tr><th>规避</th><td>改配置前备份；出现不一致时重启进程最快</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>A8. 某些配置在 <code>refresh()</code> 之前就被读了 <span class="tag" style="background:var(--warn-soft);color:var(--warn)">中</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td><code>subAgent</code> 的并发 / 墙钟预算配了，实际仍按缺省跑</td></tr>
+          <tr><th>根因</th><td><code>RunScheduler</code> 在 <code>RuntimeConfig.refresh()</code> 之前就被构造，读到的是缺省值（CHANGELOG Unreleased / 0.1.1 Fixed）</td></tr>
+          <tr><th>规避</th><td>升级版本；这类「装配期读到的配置」改完必须重启，不要指望 <code>/reload</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>B. 插件类</h2>
+
+    <h3>B1. 新增 / 删除插件 jar 必须重启进程 <span class="tag" style="background:var(--danger-soft);color:var(--danger)">高</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>把 jar 放进 <code>~/.jellyfish/plugins</code>，<code>/reload</code> 之后插件没起来</td></tr>
+          <tr><th>根因</th><td><code>PF4JPluginManager.java:118-121</code> 明确「<strong>不做 jar 热部署</strong>」；
+              <code>/reload</code> 只处理「已加载插件读新配置」与「启用/禁用名单变化」</td></tr>
+          <tr><th>规避</th><td>换 jar 之后重启进程；只改配置段才用 <code>/reload</code>。<code>config.json</code> 也不参与热更新</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>B2. 插件自带 <code>jellyfish-api</code> / <code>pf4j</code> → 类加载冲突 <span class="tag" style="background:var(--danger-soft);color:var(--danger)">高</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>莫名的 <code>ClassCastException</code>、「<code>PluginContext</code> 有两份」，或者插件<strong>静默不启动</strong></td></tr>
+          <tr><th>根因</th><td>PF4J 插件类加载器默认<strong>子优先（PDA）</strong>（<code>PluginClasspathGuard.java:16-21</code>），插件自带这些类会破坏类型同一性。
+              护栏只拦两个前缀且<strong>只记 <code>loadError</code> 不抛异常</strong>（<code>:29-32, 47-60</code>）</td></tr>
+          <tr><th>规避</th><td>插件 pom 把这两个依赖改成 <code>provided</code>；排查时降日志级别搜 <code>PluginClasspathGuard</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>B3. 插件 <code>stop()</code> 之后 fail-closed <span class="tag" style="background:var(--warn-soft);color:var(--warn)">中</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>插件停掉之后还看到「注册失败」的异常；插件拦截抛错时工具被拒</td></tr>
+          <tr><th>根因</th><td><code>stop()</code> 之后任何注册 / 发布<strong>当场抛</strong>（<code>ContextLifecycle.java:34-43</code>、<code>PluginContextImpl.java:364-369</code>）；
+              <code>PermissionVerdict</code> 三态无 <code>ALLOW</code>，抛错或 <code>null</code> 一律 <code>DENY</code>（<code>PermissionManager.java:205-216</code>）</td></tr>
+          <tr><th>规避</th><td>有注册线程的插件必须在 <code>stop()</code> 里先停那个线程；拦截想「放行」要显式返回 <code>abstain()</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>B4. <code>"enabled": []</code> 与「未声明」不是一回事 <span class="tag" style="background:var(--warn-soft);color:var(--warn)">中</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>写了 <code>plugins.enabled</code> 结果所有插件都不启动；或 <code>/reload</code> 之后手动禁用失效了</td></tr>
+          <tr><th>根因</th><td>空数组 = <strong>一个都不启用</strong>（用 <code>enabledDeclared</code> 区分「未声明」，<code>PluginsSettings.java:71-73</code>）；
+              <code>/reload</code> <strong>会清空运行期开关</strong>（<code>ConfigPluginStatusProvider.java:63, 72-73</code>）</td></tr>
+          <tr><th>规避</th><td>想「不限制」就整段删掉该键；别在手动启停之后立刻 <code>/reload</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>B5. <code>plugin.class</code> 缺失时的报错极具误导性 <span class="tag" style="background:var(--ok-soft);color:var(--ok)">低</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>插件加载报出一个跟 <code>org.pf4j.Plugin</code> 有关的莫名错误</td></tr>
+          <tr><th>根因</th><td>描述符校验只在 <code>plugin.class</code> <strong>存在且非空</strong>时才做（<code>JellyfishPluginDescriptorFinder.java:40-51</code>），
+              缺失时回退成 PF4J 的默认值。另外 <code>plugin.id</code> 含 <code>::</code> 会被直接拒绝（<code>:71-97</code>）</td></tr>
+          <tr><th>规避</th><td>写全 <code>plugin.properties</code> 里的 <code>plugin.class</code> 与 <code>plugin.id</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>C. 并发类</h2>
+
+    <h3>C1. 审批 / 提问阻塞 <code>react</code> 池（8 条线程） <span class="tag" style="background:var(--danger-soft);color:var(--danger)">高</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>审批配了 <code>0</code>（永不超时）后界面卡死；攒够 8 个等待中的回合，新回合全部排队</td></tr>
+          <tr><th>根因</th><td><code>react</code> 池固定 8 条（<code>ReActLooper.java:85, 913-925</code>）；
+              审批 / 提问的等待发生在 <strong>react 线程上且是同步的</strong>（<code>ApprovalChannel.java:304-330</code>、<code>AskChannel.java:30-33</code>）；
+              <code>0</code> = 永不超时（<code>AskSettings.isInfinite</code>、<code>PermissionManager.java:248</code>），且<strong>不会自愈</strong></td></tr>
+          <tr><th>规避</th><td>不要写 <code>0</code>；及时裁决；审批 fail-closed 所以拒绝也比挂住好</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>C2. 子代理 run 不得进 <code>react</code> 池 <span class="tag" style="background:var(--warn-soft);color:var(--warn)">中</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>如果把嵌套回合排回 <code>react</code> 池，父子 run 互等，偶发卡死</td></tr>
+          <tr><th>根因</th><td>结构性解法：run 跑在独立的 <code>agent-run</code> 池（<code>RunScheduler.java:105-139</code>），
+              嵌套用 <code>runNested</code> <strong>内联执行</strong>（<code>ReActLooper.java:341-346</code>），
+              且等待中的 run <strong>让出许可</strong>（<code>AgentRuntime.java:113-125</code>）</td></tr>
+          <tr><th>规避</th><td>改委派逻辑时保持这三条；不要「顺手」把嵌套提交到 <code>react</code> 池</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>C3. 在途回合登记必须带槽位 <span class="tag" style="background:var(--warn-soft);color:var(--warn)">中</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td><code>Esc</code> 取消静默失效——按键收到了，但没取消掉</td></tr>
+          <tr><th>根因</th><td>修过的 bug：曾有不传槽位的登记路径，导致取消时找不到对应的在途回合。
+              现在 <code>TurnRegistry.bind</code> <strong>只提供 <code>bind(Slot, ReActTurn)</code></strong>，
+              让「无槽位」在编译期就不可表达（<code>TurnRegistry.java:136, 265</code>）</td></tr>
+          <tr><th>规避</th><td>别为了图方便加一个「无槽位」重载</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>C4. TUI 里 <code>submit</code> 之后 <code>await()</code> <span class="tag" style="background:var(--warn-soft);color:var(--warn)">中</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td><code>Esc</code> 失联、审批弹框画不出来、状态栏不再更新</td></tr>
+          <tr><th>根因</th><td>界面线程阻塞在等回合上，tamboui 的事件循环停了（<code>TuiApp.java:96-98</code> 明确禁止）</td></tr>
+          <tr><th>规避</th><td>回合进行中<strong>拒绝新输入</strong>（<code>SubmissionPolicy</code>），而不是阻塞等待</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>D. 上下文类</h2>
+
+    <h3>D1. <code>@</code> 引用不内联文件内容 <span class="tag" style="background:var(--ok-soft);color:var(--ok)">低</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>以为 <code>@file</code> 会把文件内容塞进 prompt</td></tr>
+          <tr><th>根因</th><td><code>@</code> 只把<strong>路径</strong>写进消息，真正读取由模型调用 <code>read_file</code> 完成——
+              好处是权限判定与 <code>max_bytes</code> 限制照旧生效（<code>InputReferenceCompletion</code>、<code>docs/constraints.md:815</code>）。
+              含空格的路径要写 <code>@my\ file.txt</code>（<code>InputReferenceEscapes</code>）</td></tr>
+          <tr><th>规避</th><td>这就是设计意图，不是 bug；指望「大文件被自动读进来」会失望</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>D2. 工具输出落盘阈值与目录 <span class="tag" style="background:var(--warn-soft);color:var(--warn)">中</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>长输出被替换成一行 stub；<code>~/.jellyfish/tool-outputs</code> 占空间；换项目后找不到上次的输出</td></tr>
+          <tr><th>根因</th><td><code>react.maxToolOutputChars = 20000</code>；目录在主目录而非项目目录；
+              <code>keepFiles = 200</code>、<code>maxBytes = 50 MiB</code>、<code>spillMaxBytes = 32 MiB</code>、<code>keepRecentMessages = 20</code>
+              （<code>ToolOutputSettings.java:36-56</code>）。对无界输出（<code>yes</code>）仍会被读取并丢弃——
+              <strong>落盘上限保护的是磁盘，不是 CPU</strong>（<code>SpillCapturingSink.java:196-206</code>）</td></tr>
+          <tr><th>规避</th><td>配 <code>react.toolOutput.*</code>；<code>0</code> 是关闭该项（但会丢掉所有溢出输出）；注意 <code>_partial = true</code> 时文件本身也不完整</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>D3. 截断封顶与 JSON <span class="tag" style="background:var(--warn-soft);color:var(--warn)">中</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>对工具输出做 <code>substring</code> 封顶后，模型拿到的 JSON 解析失败</td></tr>
+          <tr><th>根因</th><td><code>docs/constraints.md:734-739</code> 明确禁止对可能是 JSON 的输出做 <code>substring</code>；
+              Server 侧还必须按「待发条数」封顶实时输出</td></tr>
+          <tr><th>规避</th><td>用结构化的信封（<code>ToolOutputEnvelope</code>）而不是字符串截断</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>D4. 四层「上限」口径不同 <span class="tag" style="background:var(--warn-soft);color:var(--warn)">中</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>「屏幕上没看到」和「上下文里还有」同时为真，排查时互相矛盾</td></tr>
+          <tr><th>根因</th><td>① 消息区 500 条 = <strong>屏幕</strong>（<code>TranscriptProjector.java:135</code>）；
+              ② 裁剪 <code>ContextWindow</code> = <strong>本次请求</strong>；
+              ③ 老化 <code>ToolResultAger</code> = <strong>本轮 tool 结果发全文还是 stub</strong>；
+              ④ 压缩 = <strong>后续请求的起始边界</strong>。四者<strong>都不删历史</strong></td></tr>
+          <tr><th>规避</th><td>判断依据永远看 <code>usage</code> 与日志，不要看屏幕</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>D5. 孤儿 <code>tool</code> / 悬空 <code>toolCalls</code> 会被 400 <span class="tag" style="background:var(--warn-soft);color:var(--warn)">中</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>一次请求失败之后，<strong>之后每一次请求都失败</strong></td></tr>
+          <tr><th>根因</th><td>裁剪 / 取消破坏了 <code>assistant(toolCalls)</code> 与 <code>tool</code> 的配对，厂商直接 400（<code>ToolPairing.java:30-40</code>）。
+              补救点是 <code>startIndexOf</code> 跳孤儿（<code>PromptAssembler.java:914</code>）与 <code>appendNotRunResults</code>（<code>ReActLooper.java:688-712</code>）</td></tr>
+          <tr><th>规避</th><td>改裁剪 / 取消逻辑时，第一件要确认的事就是配对没被破坏</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>D6. 回合内只标脏，关停必须 <code>flushAll()</code> <span class="tag" style="background:var(--danger-soft);color:var(--danger)">高</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td><code>Ctrl+C</code> 之后当前回合的内容丢了</td></tr>
+          <tr><th>根因</th><td><code>beginTurn</code> 只标脏（<code>SessionManager.java:996-1009</code>），
+              <code>flush</code> 才落盘（<code>:1011-1036</code>）。
+              <strong>硬约束：<code>flushAll()</code> 必须早于 <code>pluginManager.close()</code></strong>
+              （<code>AgentHarness.java:251-254, 274, 284</code>）——落盘经扩展点派发给<strong>插件</strong>，插件一停就没人接了</td></tr>
+          <tr><th>规避</th><td>别动收尾顺序；记住依赖关系「停写者 → 兜底落盘 → 关插件」而不是抄序号清单</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>D7. <code>restore()</code> 早于插件 bootstrap → 静默恢复 0 个会话 <span class="tag" style="background:var(--warn-soft);color:var(--warn)">中</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>装了持久化插件、会话文件也在，但历史会话列表是空的</td></tr>
+          <tr><th>根因</th><td>恢复靠 <code>SessionRestoreRequest</code> 扩展点，插件不启动就没人应答（<code>SessionManager.java:825-830</code>）</td></tr>
+          <tr><th>规避</th><td>凡是走扩展点的能力，都必须在插件启动之后才可用</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>E. TUI 类</h2>
+
+    <h3>E1. 发送键是 <code>Ctrl+S</code> 而不是 <code>Enter</code> <span class="tag" style="background:var(--ok-soft);color:var(--ok)">低</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>按 <code>Enter</code> 只换行，消息发不出去，以为程序卡了</td></tr>
+          <tr><th>根因</th><td>实测多数终端<strong>不解码修饰键</strong>，无法实现「<code>Enter</code> 发送 / <code>Shift+Enter</code> 换行」，
+              于是反转键位（<code>InputKeyMapper.java:9-14</code>）</td></tr>
+          <tr><th>规避</th><td>记住 <code>Ctrl+S</code>；这是终端协议限制逼出来的设计，不是任意选择</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>E2. <code>End</code> 归消息区、<code>\r\n</code> 变两个换行 <span class="tag" style="background:var(--ok-soft);color:var(--ok)">低</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>编辑器里没有「光标到行尾」；粘贴 <code>CRLF</code> 文本出现额外空行</td></tr>
+          <tr><th>根因</th><td><code>InputKeyMapper</code> 把 <code>END</code> 映射为 <code>TO_BOTTOM</code>（跳到最新消息）；
+              裸 <code>\r</code>/<code>\n</code> 落成换行（<code>ChatInputView.java:402</code>）。
+              <em>CRLF 那条在 README:252 有记载，但未在 TUI 源码中定位到显式的归一化逻辑——属「文档记载」而非「源码坐实」</em></td></tr>
+          <tr><th>规避</th><td>粘贴前先在别处把换行统一成 <code>\n</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>E3. 消息区只投影 500 条 <span class="tag" style="background:var(--ok-soft);color:var(--ok)">低</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>更早的消息在屏幕上被折叠成一行提示</td></tr>
+          <tr><th>根因</th><td><code>DEFAULT_MAX_MESSAGES = 500</code>（<code>TranscriptProjector.java:135</code>），
+              因为「每帧投影是 O(总行数)，必须有界」（<a href="09-tui.html">09 页</a>）</td></tr>
+          <tr><th>规避</th><td>纯展示裁剪，消息一条没删——<strong>不代表上下文里没有</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>E4. 粘贴有上限且超限整段不插入 <span class="tag" style="background:var(--ok-soft);color:var(--ok)">低</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>粘一大段日志悄悄没进去，只看到一条提示</td></tr>
+          <tr><th>根因</th><td><code>MAX_PASTE_CHARS = 1 MiB</code>（按码点），判插入后总长，超限<strong>一字不入</strong>（<code>ChatInputView.java:93</code>）</td></tr>
+          <tr><th>规避</th><td>改用 <code>@</code> 引用文件路径，让模型自己读</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>E5. 消息区必须是单个 <code>richText</code> <span class="tag" style="background:var(--warn-soft);color:var(--warn)">中</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>给消息区加子元素（想实现逐条交互），界面卡到不能用</td></tr>
+          <tr><th>根因</th><td>布局与按键路由按元素树做，<strong>子元素数到 120–180 就是性能断崖</strong>（<code>docs/constraints.md</code>）</td></tr>
+          <tr><th>规避</th><td>保持单元素 + 预计算视觉行；需要逐条交互就要换渲染方案</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>E6. TUI 日志必须与终端隔离，且配置要早于第一个 <code>Logger</code> <span class="tag" style="background:var(--ok-soft);color:var(--ok)">低</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>日志混进界面把备用屏撕坏；或者「明明配了 <code>log4j2-tui.xml</code> 却不生效」</td></tr>
+          <tr><th>根因</th><td>TUI 用备用屏 + raw 模式；Log4j2 的配置在<strong>第一次取 Logger 时固化</strong>，
+              晚了切配置无效（<code>JellyfishApplication.java:57, 110, 144-148</code>）</td></tr>
+          <tr><th>规避</th><td>别改启动流程里「先扫参数 → 初始化日志 → 正式解析」的顺序；单文件 10 MB × 5 档，可用 <code>-Djellyfish.log.maxSize/maxFiles</code> 调</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>F. 性能类</h2>
+
+    <h3>F1. prompt cache 命中率与 <code>keepAliveSeconds</code> 的隐性成本 <span class="tag" style="background:var(--warn-soft);color:var(--warn)">中</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>配了保活，命中率没改善，账单却更高了</td></tr>
+          <tr><th>根因</th><td><code>CacheKeepAlive</code> 的空闲重发是<strong>真实计费调用</strong>，每空闲期最多 3 次，缺省关闭
+              （<code>CacheKeepAlive.java:55, 92-151, 188-208</code>）；
+              <strong>Anthropic 不标 <code>cache_control</code> 命中率恒为 0</strong>（<code>ClaudeLlmClient.java:28</code>）；
+              保活与 <code>thinking.budget_tokens</code> <strong>互斥</strong>；部分模型对输出有最小值要求</td></tr>
+          <tr><th>规避</th><td>缺省别开；命中率由 <code>SessionUsageSnapshot</code> 的 <code>cacheReadTokens / promptTokens</code> 现算（分母是<strong>总输入</strong>），别自己算</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>F2. system prompt 每轮变化 → 全历史按未命中价重发 <span class="tag" style="background:var(--danger-soft);color:var(--danger)">高</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>账单突然高很多，但没改任何配置</td></tr>
+          <tr><th>根因</th><td>system prompt 是缓存前缀的第一段。<code>PromptAssembler.java:44-47</code> 把「把易变状态塞进 system prompt」
+              <strong>直接视为 bug 信号</strong>。会随轮次变的内容必须走 <code>TurnContextRequest</code>（<code>:660</code> 起）</td></tr>
+          <tr><th>规避</th><td>插件贡献内容用 <code>PromptPlacement</code> 分档：<code>STATIC</code> 在前、<code>VOLATILE</code> 在后</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>G. 安全类</h2>
+
+    <h3>F3. 思考 token 花了钱但不进 <code>/usage</code> <span class="tag" style="background:var(--warn-soft);color:var(--warn)">中</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>开了思考 / 推理模式后，<code>/usage</code> 的输出明显低于厂商账单，差额说不清</td></tr>
+          <tr><th>根因</th><td><code>LlmUsage</code> 只有五个字段（<code>promptTokens</code> / <code>completionTokens</code> /
+              <code>totalTokens</code> / <code>cacheReadTokens</code> / <code>cacheWriteTokens</code>，
+              <code>LlmUsage.java:38-50</code>），<strong>没有 reasoning 字段</strong>；
+              三家的 usage 解析里也<strong>都没有读</strong>思考数量——
+              OpenAI / DeepSeek 不读 <code>completion_tokens_details.reasoning_tokens</code>（<code>:357-371</code>）、
+              Claude 不单独统计思考（<code>:634-635</code>）、Gemini 不读 <code>thoughtsTokenCount</code>（<code>:498-499</code>）
+          </td></tr>
+          <tr><th>规避</th><td>这是当前的记账边界，不是配置问题。要精确分摊思考成本只能去厂商后台看明细。详见 <a href="05-llm-api.html">05 页 §10.3</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>F4. Claude 的输入是三项之和 <span class="tag" style="background:var(--warn-soft);color:var(--warn)">中</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>自己按 <code>/usage</code> 的字段算缓存命中率，结果大于 100%</td></tr>
+          <tr><th>根因</th><td>Anthropic 把输入拆成三项（普通输入 / <code>cache_read_input_tokens</code> / <code>cache_creation_input_tokens</code>），
+              三者<strong>互斥</strong>。命中率的分母必须是<strong>三者之和</strong>；
+              只拿其中一项当分母就会算出超过 100% 的结果（<code>ClaudeLlmClient.java:634-635</code>）</td></tr>
+          <tr><th>规避</th><td>直接用 <code>SessionUsage.getCacheHitRate()</code>（<code>:209-211</code>），不要自己拆字段算</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>G1. <code>-server</code> 缺省不鉴权 <span class="tag" style="background:var(--danger-soft);color:var(--danger)">高</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>缺省配置安全（只绑 <code>127.0.0.1</code>）；一旦 <code>--host 0.0.0.0</code>，
+              任何能访问端口的人都能读全部会话正文、执行命令、批准审批</td></tr>
+          <tr><th>根因</th><td>鉴权只在配置了密钥时挂载（<code>JellyfishServer.java:169-176</code>）</td></tr>
+          <tr><th>规避</th><td>配 <code>JELLYFISH_SERVER_API_KEY</code>（<strong>不要用 <code>--api-key</code></strong>，会出现在 <code>ps</code> 里）；
+              绑非回环 + 无密钥时内核<strong>拒绝启动</strong>退 3（<code>:248-258</code>）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>G2. 落盘权限与符号链接 <span class="tag" style="background:var(--warn-soft);color:var(--warn)">中</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>旧版本默认 0644，同机其他用户可读会话正文</td></tr>
+          <tr><th>根因</th><td>已修：<code>restrictToOwner</code> 收到 600 / 700，且写临时文件用 <code>NOFOLLOW_LINKS</code> 挡符号链接越权写
+              （<code>SessionStore.java:172-192</code>，CHANGELOG Fixed / SEC-12）</td></tr>
+          <tr><th>规避</th><td>升级；自己实现持久化插件时照抄这两条</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>G3. 终端注入必须收口 <span class="tag" style="background:var(--danger-soft);color:var(--danger)">高</span></h3>
+
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><th style="width:88px">现象</th><td>工具输出里的 <code>ESC</code> 序列能清屏、改标题、甚至<strong>伪造一行看起来像内核日志的内容</strong></td></tr>
+          <tr><th>根因</th><td>转义字符若直写终端就会被解释。收口在 <code>StyledSegment</code> 的构造器；
+              <code>-cli</code> 侧收口在 <code>SystemConsoleIO</code> 的三个写出方法；
+              日志是<strong>第四条出口</strong>，用 log4j2 的 <code>%replace</code> 过滤（<code>docs/constraints.md</code>、CHANGELOG SEC-10/17）</td></tr>
+          <tr><th>规避</th><td><strong>不要绕过 <code>StyledSegment</code> 直接往终端写字符串</strong>；新增输出出口时要同步加过滤</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>一页速查：反直觉清单</h2>
+
+    <p>下面这些如果只记一件事，就记它们——都是「看着像 A，实际是 B」：</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>你以为是</th><th>实际是</th><th>位置</th></tr></thead>
+        <tbody>
+          <tr><td><code>some*</code> 是通配符</td><td><strong>没有通配符</strong>，精确集合判定，<code>shell*</code> 永不命中</td><td><code>PermissionPolicy.java:118-142</code></td></tr>
+          <tr><td><code>allowedTools: []</code> 是「未配置」</td><td><strong>一个都不允许</strong>（全拦）</td><td><code>PermissionPolicy.java:141-142</code></td></tr>
+          <tr><td><code>timeout: 0</code> 是「立即超时/拒绝」</td><td><strong>永不超时</strong>，会挂死 <code>react</code> 线程</td><td><code>AskSettings.java:90</code>、<code>PermissionManager.java:248</code></td></tr>
+          <tr><td>不写 <code>temperature</code> 等于写 0</td><td>不写 = <strong>不下发</strong>；写 0 = 真的发 0</td><td><code>LlmRequest.java:22</code></td></tr>
+          <tr><td><code>jellyfish --verbose</code> 会默认进 TUI</td><td>兜底只认「参数个数为零」，否则退 2</td><td><code>StartupOptionsParser.java:154</code></td></tr>
+          <tr><td>项目级配置优先级更高所以会自动生效</td><td><strong>默认不加载</strong>，要显式信任（路径 + 内容指纹）</td><td><code>ProjectConfigTrust.java:46, 171-178</code></td></tr>
+          <tr><td><code>/reload</code> 能加载新插件</td><td><strong>不做 jar 热部署</strong>，必须重启进程</td><td><code>PF4JPluginManager.java:118-121</code></td></tr>
+          <tr><td>主循环是 <code>while(true)</code> 状态机</td><td>带上限的 <code>for</code>，「一轮」= 一次模型调用</td><td><code>ReActLooper.java:432-438</code></td></tr>
+          <tr><td>一批工具调用会并行执行</td><td><strong>严格串行</strong>，逐个执行完才进下一轮</td><td><code>ReActLooper.java:501-513</code></td></tr>
+          <tr><td>子代理是「只读」的</td><td>约束是<strong>「委派不得提权」</strong>；只读能力由插件自己声明</td><td><code>SubAgentLauncher.java:394-430</code></td></tr>
+          <tr><td><code>ask_user</code> 没人应答 = 拒绝</td><td><strong>fail-open</strong>，返回「不可用」让模型继续（审批才是 fail-closed）</td><td><code>AskChannel.java:204-206</code></td></tr>
+          <tr><td><code>agingPercent = 0</code> 是关闭老化</td><td>是<strong>切换口径</strong>；关闭要写 <code>toolOutput.keepRecentMessages = 0</code></td><td><code>AgingStrategy.java:57, 63, 65</code></td></tr>
+          <tr><td><code>@file</code> 会把文件内容内联进 prompt</td><td>只写<strong>路径</strong>，读取由模型调 <code>read_file</code> 完成</td><td><code>docs/constraints.md:815</code></td></tr>
+          <tr><td>屏幕上没有的消息就不在上下文里</td><td>500 条只是<strong>屏幕</strong>上限；上下文由 <code>PromptAssembler</code> 另算</td><td><code>TranscriptProjector.java:135</code></td></tr>
+          <tr><td>TUI 里 <code>Enter</code> 是发送</td><td><code>Enter</code> 换行，<strong><code>Ctrl+S</code> 发送</strong></td><td><code>InputKeyMapper.java:9-14</code></td></tr>
+          <tr><td>工具执行失败会抛异常</td><td>只<strong>回灌一段文本</strong>；权限拒绝同理，只转成 <code>"权限拒绝：…"</code></td><td><code>ToolExecutor.java:392-395</code></td></tr>
+          <tr><td>配了模型不生效就是「静默降级」</td><td>模型解析不到时<strong>抛异常</strong>，不是用默认——
+                第一请求就失败，不是悄悄用别家</td><td><code>SessionModelResolver.java:31-33</code></td></tr>
+          <tr><td><code>/usage</code> 就是全部花费</td><td><strong>思考 token 不在其中</strong>（<code>LlmUsage</code> 无该字段），
+                开了思考模式会明显低于账单</td><td><code>LlmUsage.java:38-50</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="conclusion">
+      <h2>关键结论</h2>
+      <ol>
+        <li>这 37 条里有很大一部分不是「bug」，而是<strong>设计选择的副作用</strong>。理解设计意图之后，它们就从「坑」变成了「必须记住的语义」。</li>
+        <li>最危险的一类是「<strong>静默</strong>」：未知字段、类加载冲突、缓存签名不含 vendor 配置、<code>agentId</code> 拼错全拦——
+            这些都不会报错，只会安静地按别的逻辑运行。<strong>排查任何「配了不生效」的问题，第一步都是把日志级别降下来。</strong></li>
+        <li>最需要警惕的一类是「<strong>反直觉的 0 / 空</strong>」：<code>timeout: 0</code>、<code>allowedTools: []</code>、
+            <code>enabled: []</code>、<code>agingPercent: 0</code>。它们的语义是设计者定的，不查源码只能猜。</li>
+        <li>「哪些改动必须重启进程」值得单独背下来：插件 jar 集合、扫描目录、<code>config.json</code>、装配期读到的配置。
+            其余（配置段、名单）可以 <code>/reload</code>。</li>
+      </ol>
+    </div>
+
+    <nav class="pager" aria-label="翻页">
+      <a class="prev" href="10-cli-server.html"><span class="pager-dir">上一页</span>10 CLI 与 HTTP Server</a>
+      <a class="next" href="12-comparison.html"><span class="pager-dir">下一页</span>12 与主流工具对比</a>
+    </nav>
+
+  </main>
+</div>
+
+<footer class="footer">
+  Jellyfish 源码深度解析 · 本页依据：全仓源码、<code>docs/constraints.md</code>、<code>CHANGELOG.md</code>、<code>README.md</code>。
+  共 37 条（配置 8 / 插件 5 / 并发 4 / 上下文 7 / TUI 6 / 性能 4 / 安全 3）。
+</footer>
+
+<!-- 资源按「本地 vendor 优先、CDN 兜底」引用：文件缺失时 assets/app.js 会自动回退到 CDN -->
+<script src="assets/vendor/highlight.min.js"></script>
+<script src="assets/vendor/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

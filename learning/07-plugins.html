@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>07 PF4J 插件化架构 · Jellyfish 源码深度解析</title>
+<meta name="description" content="Jellyfish 的插件化：PF4J 生命周期对接、28 个扩展点全表、无编译期依赖与类加载隔离、plugins.roots 扫描顺序、/reload 的判定算法、插件配置下发与子代理委派。">
+<link rel="stylesheet" href="assets/style.css">
+<!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
+</head>
+<body>
+
+<header class="topbar">
+  <button class="nav-toggle" id="navToggle" aria-label="切换导航" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">🐙 Jellyfish 源码深度解析</a>
+  <div class="topbar-tools">
+    <input id="navSearch" type="search" placeholder="搜索页面…" aria-label="搜索页面">
+  </div>
+</header>
+
+<div class="layout">
+
+  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <div class="sidebar-title">文档目录</div>
+    <ul class="nav-list">
+      <li><a href="index.html">首页 · 总览与导航</a></li>
+    </ul>
+    <div class="nav-group">入门</div>
+    <ul class="nav-list">
+      <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
+      <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
+      <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
+    </ul>
+    <div class="nav-group">内核重点</div>
+    <ul class="nav-list">
+      <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
+      <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
+      <li><a href="06-permissions.html">06 权限与审批系统</a></li>
+      <li><a href="07-plugins.html" aria-current="page">07 PF4J 插件化架构</a></li>
+      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+    </ul>
+    <div class="nav-group">外壳与实战</div>
+    <ul class="nav-list">
+      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
+      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
+      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+    </ul>
+    <div class="nav-group">拓展</div>
+    <ul class="nav-list">
+      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
+      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
+      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
+      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
+      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+    </ul>
+    <div class="nav-group">子系统</div>
+    <ul class="nav-list">
+      <li><a href="17-commands.html">17 命令系统</a></li>
+      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
+      <li><a href="19-config.html">19 配置体系</a></li>
+      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
+    </ul>
+    <div class="nav-group">插件详解</div>
+    <ul class="nav-list">
+      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
+      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
+      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
+      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
+      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
+      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
+      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <nav class="breadcrumb" aria-label="面包屑">
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>07 PF4J 插件化架构</span>
+    </nav>
+
+    <h1>07 PF4J 插件化架构 <span class="tag focus">重点</span></h1>
+    <p class="page-sub">
+      「工具即能力、能力全在插件」这条主线怎么落地的。这一页的扩展点清单可以直接当参考手册用。
+    </p>
+
+    <section class="goals">
+      <h2>学习目标</h2>
+      <ul>
+        <li>说清 PF4J 的生命周期如何映射到 <code>JellyfishPlugin.start/stop</code>，以及启动失败时怎么回滚；</li>
+        <li>拿到 28 个扩展点的完整对照表（api 类 → 内核消费点）；</li>
+        <li>解释「无编译期依赖」靠什么实现，以及类加载冲突的表现与检测方式；</li>
+        <li>知道 <code>plugins.roots</code> 的扫描顺序与路径来源；</li>
+        <li>说清 <code>/reload</code> 的判定算法（<code>Map.equals</code> 整段比较），以及哪些变更<strong>必须重启进程</strong>；</li>
+        <li>理解插件配置下发的层级与「安全边界键只认全局级」的原因。</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================ -->
+    <h2>1. 生命周期：唯一的桥是那个适配器</h2>
+
+    <div class="mermaid">
+flowchart TD
+  A["PF4JPluginManager.bootstrap()"] --> B["safeLoadPlugins<br/>扫描 roots → 建描述符"]
+  B --> C["rejectBrokenDescriptors<br/>体检不过 → blocked + markFailed（含依赖传递闭包）"]
+  C --> D["startResolved<br/>跳过 isDisabled / isStarted / blocked"]
+  D --> E["JellyfishPluginAdapter.start()<br/>→ delegate.start(contextFactory.get())"]
+  E -->|"抛错"| F["rollback：stopPlugin 尽力 + contexts.release + markFailed(FAILED)"]
+  E -->|"成功"| G["插件注册扩展点 / 订阅事件 / 提交动作"]
+  G --> H["运行中：插件存活期"]
+  H --> I["close()：逐插件 safeStop + safeUnload"]
+    </div>
+    <p class="figure-cap">图 7-1　启动编排：准入 → 启动 → 失败回滚；关闭时逐个收敛</p>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/JellyfishPluginAdapter.java:58-65
+Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/JellyfishPluginFactory.java:41-42</div>
+
+<pre><code class="language-java">// 适配器：PF4J 的 Plugin.start() / stop() 唯一的挂接点
+@Override
+public void start() {
+    delegate.start(contextFactory.get());   // 注意：上下文每次 start 现造
+}
+
+@Override
+public void stop() {
+    delegate.stop();
+}</code></pre>
+
+    <p>
+      <strong>「上下文每次 <code>start</code> 现造」这个细节很关键</strong>：它意味着插件重启后拿到的是新的
+      <code>PluginContext</code>，从而<strong>重启即读到新配置</strong>，不需要额外的刷新逻辑。
+    </p>
+
+    <h3>三个失败处理</h3>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/JellyfishPluginManager.java:176-204</div>
+
+<pre><code class="language-java">PluginState safeStart(String pluginId) {
+    try { return startPlugin(pluginId); }
+    catch (RuntimeException | LinkageError e) {
+        LOG.error("插件启动失败: {}", pluginId, e);
+        rollback(pluginId, e);
+        return PluginState.FAILED;
+    }
+}
+
+private void rollback(String pluginId, Throwable cause) {
+    try { stopPlugin(pluginId); }
+    catch (RuntimeException | LinkageError e) {
+        LOG.warn("插件启动失败后的回滚停止也失败: {}", pluginId, e);
+    } finally { contexts.release(pluginId); }
+    markFailed(pluginId, cause);
+}</code></pre>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>情形</th><th>处理</th><th>位置</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>start()</code> 抛错</td>
+            <td>转为 <strong><code>PluginState.FAILED</code></strong>，并<strong>回收已经完成的注册</strong>
+                （<code>setFailedException</code> + <code>setPluginState(FAILED)</code> + 发状态事件）</td>
+            <td><code>JellyfishPluginManager.java:255-263</code></td>
+          </tr>
+          <tr>
+            <td>catch 的类型</td>
+            <td><code>RuntimeException | LinkageError</code>——<strong>必须包含 <code>LinkageError</code></strong>，
+                因为类加载失败是 <code>Error</code> 不是 <code>Exception</code></td>
+            <td><code>:176-185</code></td>
+          </tr>
+          <tr>
+            <td>描述符体检不过</td>
+            <td>加入 <code>blocked</code> 集合并 <code>markFailed</code>；<strong>对它的依赖做传递闭包</strong>
+                （依赖一个坏插件 = 自己也没法启动）</td>
+            <td><code>PF4JPluginManager.java:275, 301</code> 起</td>
+          </tr>
+          <tr>
+            <td><code>stop()</code> 之后再注册</td>
+            <td><strong>当场失败</strong>（fail-closed）：<code>AtomicBoolean</code> 生命周期标记 +
+                每个入口 <code>requireAlive</code></td>
+            <td><code>ContextLifecycle.java:34-43</code>、<code>PluginContextImpl.java:364-369</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>回收注册的顺序有个反直觉但正确的细节：</p>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/PluginContextFactory.java:193-209</div>
+
+<pre><code class="language-java">public int release(String pluginId) {
+    if (pluginId != null) {
+        ContextLifecycle lifecycle = lifecycles.remove(pluginId);
+        if (lifecycle != null) {
+            lifecycle.close();
+        }
+        // 与注册同一条存活边界、同一时刻：插件停止后，它在途排队的动作再也无人排空，
+        // 留在队列里只会镀成一个永不兑现的 QUEUED
+        actions.dropByOwner(pluginId);
+        // 与注册、动作队列同一条存活边界、同一时刻。顺序上必须先清空贡献：外壳随后可能收到一条
+        // PluginStateChangedEvent 触发的失效重拉，那时该 owner 的贡献应当已经不在信箱里了
+        shellIngress.reset(pluginId);
+    }
+    int removed = registry.removeAllUnder(pluginId, PluginOwnerNamespace.SEPARATOR);
+    LOG.info("已回收插件注册: pluginId={} registrations={}", pluginId, removed);
+    return removed;
+}</code></pre>
+
+    <p>
+      源码注释比「先失效、再回收」这类概括更具体，逐条读能把顺序的理由讲清：
+    </p>
+
+    <ul>
+      <li><strong>为什么要清动作队列</strong>：「插件停止后，它在途排队的动作再也无人排空，留在队列里只会<strong>镀成一个永不兑现的 <code>QUEUED</code></strong>」——
+          留着它们不会报错，只会让面板上一直挂着一个假的「待执行」。</li>
+      <li><strong>为什么「先清贡献、再清注册」</strong>：「外壳随后可能收到一条 <code>PluginStateChangedEvent</code> 触发的失效重拉，
+          那时该 owner 的贡献应当已经不在信箱里了」。顺序反了，外壳会重拉到已死插件的贡献。</li>
+      <li><strong>为什么整体要早于 <code>removeAllUnder</code></strong>：先关闸门（生命周期失效）、再清场（回收注册），
+          中间不留窗口期——否则插件还能在窗口里注册新东西，而那些东西永远不会被回收。</li>
+      <li>最后那行 <code>LOG.info</code> 把回收数量打出来：排查「插件停了但注册还在」时，这是第一手证据。</li>
+    </ul>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：注册窗口是「插件存活期」而不是「<code>start()</code> 期间」</span>
+      <p>
+        <code>JellyfishPlugin.java:11-16</code> 明确写了这个语义：<strong>插件在 <code>stop()</code> 之前随时可以注册</strong>，
+        不必挤在 <code>start()</code> 里。这支持了「插件起一个后台线程，随后陆续注册工具」这类玩法。
+      </p>
+      <p>
+        代价是插件作者要自己负责生命周期：<strong>有注册线程的插件必须在 <code>stop()</code> 里先停掉那个线程</strong>，
+        否则线程可能在 <code>release</code> 之后继续注册，撞上 fail-closed 抛异常。
+        还有一条不太显眼但重要的：<strong><code>start()</code> 抛错时 PF4J 不保证会调用 <code>stop()</code></strong>，
+        所以插件在 <code>start()</code> 里自己申请的资源（文件句柄、线程、连接）必须在自己的 <code>catch</code> 里释放。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>2. 扩展点全表</h2>
+
+    <p>
+      设计上最重要的一条：<strong>「类型即地址，没有 ID 清单」</strong>——扩展点不用字符串 ID 注册，
+      请求的 Class 对象本身就是地址（<code>api/extension/ExtensionRequest.java:9-15</code>）。
+      这样「新加一个扩展点」不需要维护任何枚举或常量表。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>扩展点</th><th>api 类</th><th>注册方式</th><th>内核消费点</th></tr></thead>
+        <tbody>
+          <tr><td>工具</td><td><code>ToolCallRequest</code> / <code>ToolDescriptor</code></td><td><code>handle(工具名)</code></td><td><code>core/tool/ToolExecutor.java:399</code></td></tr>
+          <tr><td>工具参数前置</td><td><code>ToolArgumentPreRequest</code></td><td><code>contribute</code></td><td><code>ToolExecutor.java:263</code></td></tr>
+          <tr><td>工具结果后置</td><td><code>ToolResultPostRequest</code></td><td><code>contribute</code></td><td><code>ToolExecutor.java:314</code></td></tr>
+          <tr><td>工具激活</td><td><code>ToolActivationRequest</code></td><td><code>contribute</code></td><td><code>core/prompt/ToolCatalog.java:230</code></td></tr>
+          <tr><td>工具渲染提示</td><td><code>ToolRenderHintRequest</code></td><td><code>handle</code></td><td><code>infra/ui/UiContributions.java:135, 155</code></td></tr>
+          <tr><td>命令</td><td><code>CommandRequest</code> / <code>CommandDescriptor</code></td><td><code>handle(命令名)</code></td><td><code>infra/command/CommandManager.java:370</code></td></tr>
+          <tr><td>提示词</td><td><code>PromptContributionRequest</code></td><td><code>contribute</code></td><td><code>core/prompt/PromptAssembler.java:610</code></td></tr>
+          <tr><td>回合上下文</td><td><code>TurnContextRequest</code></td><td><code>contribute</code></td><td><code>PromptAssembler.java:661</code></td></tr>
+          <tr><td>请求调参</td><td><code>RequestTuningRequest</code></td><td><code>contribute</code></td><td><code>PromptAssembler.java:740</code></td></tr>
+          <tr><td>回合前置</td><td><code>TurnBeforeRequest</code></td><td><code>handle</code></td><td><code>core/ReActLooper.java:815</code></td></tr>
+          <tr><td><strong>权限拦截</strong></td><td><code>PermissionCheckRequest</code> / <code>PermissionVerdict</code></td><td><code>contribute</code></td><td><code>infra/permission/PermissionManager.java:114</code></td></tr>
+          <tr><td>压缩策略</td><td><code>CompactionStrategyRequest</code></td><td><code>contribute</code></td><td><code>core/compact/ConversationCompactor.java:534</code></td></tr>
+          <tr><td>压缩前置</td><td><code>CompactionPreRequest</code></td><td><code>handle</code></td><td><code>ConversationCompactor.java:679</code></td></tr>
+          <tr><td>老化策略</td><td><code>AgingStrategyRequest</code></td><td><code>contribute</code></td><td><code>core/prompt/ToolResultAger.java:143</code></td></tr>
+          <tr><td>输入指令</td><td><code>InputDirectiveRequest</code></td><td><code>handler(marker)</code></td><td><code>core/input/InputDirectives.java:404</code></td></tr>
+          <tr><td>输入引用</td><td><code>InputReferenceRequest</code></td><td><code>handler(marker)</code></td><td><code>InputDirectives.java:422</code></td></tr>
+          <tr><td>输入变换</td><td><code>InputTransformRequest</code></td><td><code>contribute</code></td><td><code>core/input/InputTransforms.java:77</code></td></tr>
+          <tr><td><strong>模型厂商</strong></td><td><code>ProviderRegistrationRequest</code></td><td><code>handle(type)</code></td><td><code>infra/llm/LlmClientFactory.java:215</code></td></tr>
+          <tr><td>模型目录</td><td><code>ModelCatalogRequest</code></td><td><code>handle</code></td><td><code>infra/model/ModelManager.java:217-220</code></td></tr>
+          <tr><td><strong>会话持久化</strong></td><td><code>SessionPersistRequest</code> / <code>SessionSnapshot</code></td><td><code>contribute</code></td><td><code>infra/session/SessionManager.java:1309</code></td></tr>
+          <tr><td>会话恢复</td><td><code>SessionRestoreRequest</code></td><td><code>contribute</code></td><td><code>SessionManager.java:828</code></td></tr>
+          <tr><td>会话删除</td><td><code>SessionDeleteRequest</code></td><td><code>contribute</code></td><td><code>SessionManager.java:1245</code></td></tr>
+          <tr><td>分叉前 / 关闭前</td><td><code>SessionBeforeForkRequest</code> / <code>SessionBeforeCloseRequest</code></td><td><code>contribute</code> / <code>handle</code></td><td><code>SessionManager.java:460 / :744</code></td></tr>
+          <tr><td>UI 面板 / 快捷键 / 状态行</td><td><code>PanelContribution</code> / <code>ShortcutContribution</code> / <code>StatusLineContributionRequest</code></td><td><code>contribute</code></td><td><code>UiContributions.java:277 / :176 / :328</code></td></tr>
+          <tr><td>TUI 外壳贡献</td><td><code>ShellContribution</code>（<strong>不是 Request</strong>）</td><td><code>present()</code></td><td><code>infra/shell/ShellIngress.java:64, 209</code>；三外壳各自取件</td></tr>
+          <tr><td>子代理委派</td><td><code>SubAgentPort.spawn</code></td><td><code>delegations()</code></td><td><code>core/subagent/SubAgentDelegationAdapter.java:32, 48</code></td></tr>
+          <tr><td>动作</td><td><code>PluginAction</code>（4 种）</td><td><code>submit()</code></td><td><code>infra/action/ActionQueue.java:127</code>；执行 <code>core/action/ActionDispatcher.java:157-193</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：为什么唯独 <code>ShellContribution</code> 不是 Request？</span>
+      <p>
+        看第 25 行：其他扩展点都是 <code>*Request</code>，走 <code>ExtensionRegistry</code> 的「请求 → 处理器 → 返回值」模型。
+        <code>ShellContribution</code> 不一样——它是<strong>推</strong>而不是<strong>拉</strong>：插件主动
+        <code>present()</code> 一段内容，内核把它放进 <code>ShellIngress</code> 信箱，由三个外壳各自取件
+        （TUI 走 <code>UiCache</code>、Server 走 <code>SseContributionListener</code>、core 走 <code>ShellStreams</code>）。
+      </p>
+      <p>
+        为什么它要特殊？因为「外壳正在渲染 / 正在发 SSE」这件事<strong>与插件的调用栈无关</strong>。
+        如果做成同步 <code>Request</code>，插件就得在一个「外壳可以接受内容」的时机被调用——
+        而那个时机内核自己都不知道。信件箱模型（有界、满了丢最新）把一个时序问题变成了一个队列问题。
+        容量 64，满即丢最新（<code>ShellIngress.java:75</code>）。
+      </p>
+    </div>
+
+    <h3>两个边界，一条判据</h3>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th></th><th><code>ExtensionRegistry</code></th><th><code>EventChannel</code></th></tr></thead>
+        <tbody>
+          <tr><td>同步 / 异步</td><td><strong>同步</strong></td><td><strong>异步</strong></td></tr>
+          <tr><td>能否丢弃</td><td><strong>不可丢</strong>（调用方要等返回值）</td><td><strong>可丢</strong>（通知而已）</td></tr>
+          <tr><td>失败后果</td><td>功能缺陷（工具没执行 / 权限没判）</td><td>少一条通知（界面晚刷新一次）</td></tr>
+          <tr><td>典型内容</td><td>工具调用、权限判定、提示词贡献、命令</td><td>回合进度、插件状态、配置告警、UI 失效</td></tr>
+          <tr><td>共用</td><td colspan="2">同一个 <code>TypeRegistry</code>（<a href="03-architecture.html">见 03 页</a>的「同一实例」约束）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      <strong>判据是「能否丢弃」，而不是「有没有返回值」</strong>——这条是 <code>AGENTS.md</code> 里反复强调的，
+      也是初学者最容易搞错的地方：一个「发出去了就不关心结果」的通知事件，即使它带着数据，也应该走异步通道。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>3. 「无编译期依赖」是怎么做到的</h2>
+
+    <p>
+      这句话有三层含义，缺一层就不成立：
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>层</th><th>机制</th><th>位置</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>1. 插件依赖 <code>provided</code></td>
+            <td>插件 pom 把 <code>jellyfish-api</code>（和 pf4j）标成 <code>provided</code>，
+                打包时不带进来；shade 的 includes 也排除 api / pf4j / slf4j</td>
+            <td><code>Jellyfish-Plugins/jellyfish-plugin-node/pom.xml:22-31, 88</code>、<code>jellyfish-plugin-todo/pom.xml:22-31, 84</code></td>
+          </tr>
+          <tr>
+            <td>2. 运行时护栏</td>
+            <td><code>PluginClasspathGuard</code> <strong>只拦两个前缀</strong>：<code>zcd/jellyfish/api/</code>、<code>org/pf4j/</code>。
+                在 <code>JellyfishPluginDescriptorFinder.find()</code> 里调用，
+                <strong>只记 <code>loadError</code> 不抛异常</strong>（避免一个坏插件整批失败）</td>
+            <td><code>PluginClasspathGuard.java:29-32, 47-60</code>、<code>JellyfishPluginDescriptorFinder.java:53-57</code></td>
+          </tr>
+          <tr>
+            <td>3. 类加载隔离</td>
+            <td>沿用 PF4J 默认的 <code>PluginClassLoader</code>，parent = <strong>内核类加载器</strong>。
+                <strong>全仓没有覆写 <code>createPluginLoader</code> / <code>classLoadingStrategy</code></strong></td>
+            <td><code>PF4JPluginManager.java</code>、<code>PluginClasspathGuard.java:16-21</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：插件自带 <code>jellyfish-api</code> 会导致「静默不启动」</span>
+      <p>
+        PF4J 的插件类加载器默认是<strong>子优先（PDA）</strong>：插件自己的 jar 里若有 <code>PluginContext</code> 这个类，
+        它会先加载自己那份，导致<strong>类型同一性被破坏</strong>——插件眼里的 <code>PluginContext</code>
+        与内核的类型不是同一个，于是出现莫名的 <code>ClassCastException</code>、
+        「<code>PluginContext</code> 有两份」这类症状。
+      </p>
+      <p>
+        最麻烦的地方在于：护栏<strong>只记 <code>loadError</code> 不抛异常</strong>，所以表现是「插件静默不启动」，
+        而不是一条明确的报错。<strong>排查方式：把日志级别降到 WARN / DEBUG，搜 <code>PluginClasspathGuard</code>。</strong>
+        修法是插件 pom 里把这两个依赖改成 <code>provided</code>。
+      </p>
+    </div>
+
+    <h3>实例化的两个约束</h3>
+
+    <ul>
+      <li>插件类必须实现 <code>JellyfishPlugin</code>，并且有<strong>公开无参构造器</strong>（<code>JellyfishPluginFactory.java:44, 73-88</code>）；</li>
+      <li><code>plugin.id</code> <strong>不能含 <code>::</code></strong>（<code>JellyfishPluginDescriptorFinder.java:71-97</code>）——
+          那个分隔符留给了「子单元 owner」的概念（<code>pluginId::unit</code>）。
+          这也是 <code>release()</code> 里 <code>registry.removeAllUnder(pluginId, SEPARATOR)</code> 能按前缀一次清干净的原理。</li>
+    </ul>
+
+    <!-- ============================================================ -->
+    <h2>4. <code>plugins.roots</code> 与开关键名</h2>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>项</th><th>值</th><th>位置</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>配置来源</td>
+            <td><code>config.json</code> 的 <code>plugins.roots</code>；缺省 <code>["~/.jellyfish/plugins/"]</code>，
+                空则回退常量 <code>"plugins"</code></td>
+            <td><code>PluginPaths.java:30, 38-42</code>、<code>PluginRuntimeConfig.java:44</code>、<code>RuntimeConfig.java:686</code></td>
+          </tr>
+          <tr>
+            <td>是否双源合并</td>
+            <td><strong>不合并</strong>（只有行首 <code>~</code> 做展开）</td>
+            <td><code>RuntimeConfig.java:686-701</code></td>
+          </tr>
+          <tr>
+            <td>顺序</td>
+            <td><strong>数组顺序即扫描顺序</strong></td>
+            <td><code>PluginPaths.java:15</code></td>
+          </tr>
+          <tr>
+            <td>目录层级</td>
+            <td>PF4J 在<strong>目录下一层</strong>找 <code>plugin.properties</code>（所以可以一个插件一个子目录）</td>
+            <td><code>README.md:462-464</code></td>
+          </tr>
+          <tr>
+            <td>启用 / 禁用 / 逐插件配置</td>
+            <td><code>jellyfish.json</code> 里的 <code>plugins.enabled</code> / <code>plugins.disabled</code> /
+                <code>plugins.configurations</code></td>
+            <td><code>PluginsSettings.java:71-73</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      <strong>运行期开关优先于配置文件</strong>（<code>ConfigPluginStatusProvider.java:95-108</code>）：
+      判定顺序是「先看运行期有没有人显式启停过，再看配置」。
+    </p>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：<code>"enabled": []</code> 是「一个都不启用」</span>
+      <p>
+        与权限的 <code>allowedTools</code> 同一个陷阱：<strong>空数组不等于「未声明」</strong>。
+        用 <code>enabled/disabled</code> 区分这件事，靠 <code>enabledDeclared</code> / <code>disabledDeclared</code> 标记
+        （<code>PluginsSettings.java:71-73</code>）。
+      </p>
+      <p>
+        还有一个更隐蔽的：<strong><code>/reload</code> 会清空运行期开关</strong>
+        （<code>ConfigPluginStatusProvider.java:63, 72-73</code>）——因为重载后要按文件内容重新收敛。
+        所以「先手动禁用某插件，再 <code>/reload</code>」，它可能又跑起来了。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>5. <code>/reload</code>：只重启配置段变了的插件</h2>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ConfigReloader.java:133-147</div>
+
+<pre><code class="language-java">for (Map.Entry&lt;String, Map&lt;String, Object&gt;&gt; entry : after.entrySet()) {
+    if (!Objects.equals(before.get(entry.getKey()), entry.getValue())) {
+        changed.add(entry.getKey());
+    }
+}
+for (String pluginId : before.keySet()) {
+    if (!after.containsKey(pluginId)) {
+        changed.add(pluginId);
+    }
+}</code></pre>
+
+    <p>
+      判定算法朴素到极致：<strong>整段 <code>Map.equals</code> 比较</strong>，不是逐字段 diff。
+      两个循环覆盖了「新增 / 内容变化」与「消失」两种情形。
+    </p>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：为什么用整段比较而不是逐字段 diff？</span>
+      <p>
+        因为<strong>插件看不到自己的字段级语义</strong>。一个插件可能这样写：
+        <code>if (config.get("mode").equals("x")) { 用 A 方案 } else { 用 B 方案 }</code>。
+        如果内核只告诉它「<code>mode</code> 这个字段变了」，插件还是得自己判断整体状态；
+        而如果内核做逐字段 diff，就要理解每个字段的依赖关系——那是不可能的。
+      </p>
+      <p>
+        <strong>整段比较的语义更简单也更可靠：「这一段配置的可见内容变了，就重启这个插件」。</strong>
+        代价是「改一个无关字段也会重启插件」，但这个代价很小（重启一次 <code>stop</code>+<code>start</code>），
+        而错误地「不重启」会导致插件按旧配置运行——后者难查得多。
+      </p>
+      <p>
+        注：既然 <code>Map.equals</code> 就能判等，说明配置段必须是<strong>有序且无副作用的数据</strong>，
+        这也解释了为什么插件配置用 <code>Map&lt;String, Object&gt;</code> 而不是任意对象。
+      </p>
+    </div>
+
+    <h3>重载的完整顺序与「必须重启进程」的清单</h3>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ConfigReloader.java:101-118（旧值在替换之前取）</div>
+
+    <pre><code class="language-text">ModelManager.refresh(true) → AgentManager.refresh(false) → pluginRuntimeConfig.refresh
+→ 【在替换前取旧值】→ pluginManager.reload → refreshCatalogs → 发事件</code></pre>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>变更</th><th><code>/reload</code> 能处理吗</th><th>依据</th></tr></thead>
+        <tbody>
+          <tr><td>插件配置段变化</td><td><strong>能</strong>——只重启「在运行 + 配置段变 + 未被 blocked」的插件</td><td><code>PF4JPluginManager.java:163-186</code></td></tr>
+          <tr><td>启用 / 禁用名单变化</td><td><strong>能</strong>——按名单先停后启收敛</td><td><code>PF4JPluginManager.java:189-235</code>（<code>applyRoster</code>）</td></tr>
+          <tr><td>新增 / 删除插件 jar</td><td><strong>不能</strong>——「不做 jar 热部署」</td><td><code>PF4JPluginManager.java:118-121</code></td></tr>
+          <tr><td>插件扫描目录变化</td><td><strong>不能</strong>（<code>plugins.roots</code> 在 <code>config.json</code>）</td><td>同上</td></tr>
+          <tr><td><code>config.json</code> 的任何改动</td><td><strong>不能</strong>——它不参与热更新</td><td><code>README.md:487</code></td></tr>
+          <tr><td>描述符 / 内核版本变更</td><td><strong>不能</strong></td><td><code>PF4JPluginManager.java:118-121</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>输出是 <code>PluginReloadReport</code> 的四张<strong>互斥</strong>表（<code>:19-27</code>）：</p>
+
+    <pre><code class="language-text">started（本次启动的）  stopped（本次停止的）  restarted（重启的）  failed（失败的）</code></pre>
+
+    <p>
+      注意<strong>事件只带 <code>restarted</code></strong>（<code>ConfigReloader.java:162-164</code>）——
+      <code>started</code>/<code>stopped</code> 走的是插件状态事件（<a href="01-overview.html">01 页</a>的 <code>EventChannel</code>）。
+    </p>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：重载失败不回滚</span>
+      <p>
+        <code>ConfigReloader.java:48</code> 明确：重载是<strong>单向</strong>的，失败原样上抛，
+        <strong>内存状态与磁盘文件会不一致</strong>。所以改配置前先备份，
+        出现「配置改回去了但行为还是新的」时重启进程是最快的解法。
+      </p>
+      <p>
+        还有一个顺序陷阱：<strong><code>PluginRuntimeConfig.refresh</code> 必须早于 <code>bootstrap()</code></strong>
+        （<code>AgentHarness.java:208-209</code>），否则插件会按<strong>空配置</strong>启动——
+        现象是「插件装了、也启动了，但什么配置都没生效」。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>6. 插件配置是怎么下发的</h2>
+
+    <div class="mermaid">
+flowchart LR
+  A["jellyfish.json<br/>plugins.configurations.&lt;pluginId&gt;"] --> B["JellyfishPluginManager.declarationOf<br/>:124-131"]
+  B --> C["PluginDeclaration<br/>configurationOf / globalConfigurationOf / configScopeOf"]
+  C --> D["PluginContextImpl.config()<br/>:196-206"]
+  D --> E["插件 start() 里读配置"]
+  F["PluginConfigScope<br/>ABSENT / GLOBAL / PROJECT / UNKNOWN"] --> C
+    </div>
+    <p class="figure-cap">图 7-2　配置下发链路：从文件到插件，中间不经过任何全局状态</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>要点</th><th>说明</th><th>位置</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>四个作用域</td>
+            <td><code>ABSENT</code> / <code>GLOBAL</code> / <code>PROJECT</code> / <code>UNKNOWN</code>；
+                同名段<strong>整对象替换</strong></td>
+            <td><code>api/plugin/PluginConfigScope.java</code></td>
+          </tr>
+          <tr>
+            <td><strong>安全边界键只认全局级</strong></td>
+            <td>「收紧安全边界」的键（如提示内联上限、加载目录范围）必须取 <code>globalConfiguration()</code>——
+                <strong>不能被项目级配置放宽</strong></td>
+            <td><code>PluginsSettings.java:59-71, 173-190</code>、<code>JellyfishPluginDescriptor.java:93</code></td>
+          </tr>
+          <tr>
+            <td>重启即读到新配置</td>
+            <td>因为上下文每次 <code>start</code> 现造（见第 1 节）</td>
+            <td><code>JellyfishPluginFactory.java:41-42</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：为什么「收紧安全边界的键」要单独留一份全局值？</span>
+      <p>
+        因为项目级配置<strong>是可以被一个 <code>git clone</code> 的目录改写的</strong>（<a href="02-quickstart.html">02 页</a>）。
+        如果这类键接受项目级覆盖，那么克隆一个仓库就等于让对方能放宽你本地插件的安全边界——
+        比如把「提示里内联文件内容的上限」调大，或者扩大允许读取的目录范围。
+      </p>
+      <p>
+        所以设计上把这些键<strong>单独留底</strong>（<code>globalConfigurations</code>），
+        项目级写了也不生效。这是一个很细的层次：「<strong>可配置</strong>」与「<strong>可被谁配置</strong>」是两个不同的问题。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>7. 插件驱动子代理</h2>
+
+    <div class="src-block">Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/plugin/PluginContext.java:501-503
+Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/PluginContextImpl.java:216-219</div>
+
+    <p>
+      插件通过 <code>PluginContext.delegations()</code> 拿到 <code>SubAgentPort</code>。
+      有个刻意的细节：这个入口<strong>不做 <code>requireAlive</code> 检查</strong>——
+      因为准入判定由内核（<code>SubAgentLauncher</code> 的额度 / 深度 / 不得提权）负责，
+      插件上下文这一层不需要重复把关。两次把关不仅冗余，还会让「为什么被拒」的理由来源变得不明确。
+    </p>
+
+    <p>
+      它和 <code>task</code> 工具走<strong>同一条路径</strong>：<code>SubAgentDelegationAdapter</code> → <code>SubAgentLauncher</code>
+      （<code>SubAgentDelegationAdapter.java:32, 48</code>）。装配在 <code>di/PluginModule.java:104-108</code>
+      与 <code>PluginContextFactory.java:146-165</code>。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>8. 三块没被扩展点表覆盖的机制</h2>
+
+    <p>
+      扩展点表回答「插件能接哪」，但不回答「接上去之后内核靠什么保证一致性」。
+      这三块是支撑性机制，也是读源码时最容易跳过、出问题时最难查的部分。
+    </p>
+
+    <h3>8.1 <code>TypeRegistry</code>：键到底是什么、覆盖怎么还原</h3>
+
+    <p>
+      前面说「类型即地址」——但真到了表里，<strong>键并不是类型本身</strong>：
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>概念</th><th>说明</th><th>行号</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>RegistryKey</code></td>
+            <td>真正的键是 <code>(type, routeKey)</code> 二元组，<code>hashCode</code> 用 <code>Objects.hash(type, routeKey)</code></td>
+            <td><code>RegistryKey.java:21, 65-78</code></td>
+          </tr>
+          <tr>
+            <td><code>routeKey = null</code></td>
+            <td>表示「<strong>类型级</strong>」注册。注释原文：「路由键为 <code>null</code> 表示「类型级」注册：它对该类型下所有路由键都生效」</td>
+            <td><code>RegistryKey.java:9-10</code>、<code>TypeRegistry.java:46</code></td>
+          </tr>
+          <tr>
+            <td><code>registerUnique</code></td>
+            <td>同键只允许一个「可见」者；重名<strong>不抛异常</strong>，而是把新注册<strong>压在链顶</strong></td>
+            <td><code>TypeRegistry.java:94-113</code></td>
+          </tr>
+          <tr>
+            <td>覆盖链</td>
+            <td>源码注释：「覆盖是「压在链顶之上」而不是就地替换：被压住的那一层留着，覆盖者注销时自动回退」</td>
+            <td><code>TypeRegistry.java:106-108</code></td>
+          </tr>
+          <tr>
+            <td><code>overriddenOwner</code></td>
+            <td>被压住那层的 owner，记在注册项上；注销时逐层还原。<code>peek()</code> 取链尾（最新者），<code>visible()</code> 对唯一键只给链顶</td>
+            <td><code>HandlerRegistration.java:41</code>、<code>TypeRegistry.java:523-538</code></td>
+          </tr>
+          <tr>
+            <td><code>registerShared</code></td>
+            <td>同键允许 0..N 个——事件订阅、清单类扩展点走它</td>
+            <td><code>TypeRegistry.java:131-141</code></td>
+          </tr>
+          <tr>
+            <td>同层冲突</td>
+            <td>只在<strong>同一层内</strong>冲突时抛 <code>DUPLICATE_HANDLER</code>（带上「已被谁注册」）</td>
+            <td><code>TypeRegistry.java:103-104</code></td>
+          </tr>
+          <tr>
+            <td><strong><code>version</code></strong></td>
+            <td>每次变更 <code>invalidateCandidates()</code> 只做 <code>version.incrementAndGet()</code>。</td>
+            <td><code>TypeRegistry.java:78, 430-432</code></td>
+          </tr>
+          <tr>
+            <td>它记的历史 bug</td>
+            <td>类注释描述了一个曾经的真实缺陷：缓存命中之后新注册「<strong>永远不可见</strong>」，现象是「装过插件之后，某个内置命令就再也没了」</td>
+            <td><code>TypeRegistry.java:42, 74</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：为什么覆盖要「压链」而不是「替换」？</span>
+      <p>
+        因为<strong>插件是可以卸载的，卸载后必须回到原状</strong>。
+        如果就地替换，被替换掉的原注册项就丢了——插件一停，那个工具或命令就<strong>永久消失</strong>，
+        只能重启进程恢复。压链保留了完整历史：链尾一走，下一层自动显形。
+      </p>
+      <p>
+        这也解释了「跨 owner 重名为什么不报错」：它是一种<strong>受支持的、可回退的</strong>覆盖，
+        而不是配置错误。这是插件生态能长起来的前提——<strong>你想替换内核自带的某个命令，不需要改内核</strong>。
+        反过来说，<code>DUPLICATE_HANDLER</code> 只在同一层内冲突时抛，那才是真的写错了。
+      </p>
+    </div>
+
+    <h3>8.2 <code>ActionQueue</code>：插件唯一能「推动内核」的通道</h3>
+
+    <p>
+      前面所有扩展点都是「内核问插件」或「插件往里注册」。但插件有时需要反向：
+      <strong>主动让内核做一件事</strong>——插一条消息、压缩一次、切个模型、开个分支。
+      这条反向通道是 <code>PluginAction</code> + <code>ActionQueue</code> + <code>ActionDispatcher</code>。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>要点</th><th>说明</th><th>行号</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>状态机</td>
+            <td><code>QUEUED</code> → <code>EXECUTING</code> → <code>DONE</code> / <code>FAILED</code> / <code>DROPPED</code>；
+                默认 <code>QUEUED</code>，出队即 <code>EXECUTING</code></td>
+            <td><code>ActionStatus.java:15-44</code>、<code>ActionQueue.java:599-601</code></td>
+          </tr>
+          <tr><td>容量</td><td><code>DEFAULT_CAPACITY = 16</code>，<strong>按会话</strong>计；满了以 <code>QUEUE_FULL</code> 丢弃</td><td><code>ActionQueue.java:66</code></td></tr>
+          <tr><td>提交</td><td><code>submit</code> 返回 <code>ActionHandle</code>（可查状态 / 结果 / 失败原因）</td><td><code>ActionQueue.java:127</code>、<code>ActionHandle.java:24-70</code></td></tr>
+          <tr>
+            <td><strong>回合窗口</strong></td>
+            <td><code>beginTurn</code> 把上一轮残留收尾为 <code>TURN_SUPERSEDED</code>；<code>endTurn</code> 把剩的标 <code>TURN_ENDED_UNREACHED</code></td>
+            <td><code>ActionQueue.java:147-179</code></td>
+          </tr>
+          <tr><td>取件</td><td><code>takeTurnBoundary</code>（边界档）与 <code>takeConvergence</code>（收敛档）</td><td><code>ActionQueue.java:190, 201</code></td></tr>
+          <tr><td>插件停止时</td><td><code>dropByOwner</code> 用 <code>PLUGIN_STOPPED</code> 清掉该插件的残留动作</td><td><code>ActionQueue.java:215-228</code></td></tr>
+          <tr><td>并发</td><td>窗口表是 <code>ConcurrentHashMap</code>，窗口内四个方法全 <code>synchronized</code></td><td><code>ActionQueue.java:78, 369-438</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4><code>DeliverAs</code>：两种插入点的差别是可观察的</h4>
+
+    <div class="src-block">Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/action/DeliverAs.java:11-17（逐字引文，两行是原文的列表项）</div>
+
+<pre><code class="language-text">两个取值的差别是**可观察的插入点**，不是措辞：
+    · STEER     插在一轮工具批次**之后、下一次模型调用之前**，
+    · FOLLOW_UP  插在模型**本来要收敛那一刻**，让它不收敛、继续跑一轮——</code></pre>
+
+    <p>
+      落到代码上：<code>ActionDispatcher.drainTurnBoundary</code> 取边界档（压缩 / 切模型 / 分支 / 重建清单 / STEER 消息），
+      返回注入条数；<code>drainConvergence</code> 取收敛档（<code>FOLLOW_UP</code>），
+      <strong>返回 <code>&gt;0</code> 就意味着「不收敛」</strong>——这正是
+      <a href="04-agent-loop.html">04 页</a>里 <code>if (actionDispatcher.drainConvergence(...)) { continue; }</code> 那一行的含义。
+      单条动作失败不连坐（<code>execute</code> <code>:134</code>），按 Kind 分派（<code>run</code> <code>:156</code>）。
+    </p>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：为什么「推动内核」要走队列，而不是让插件直接调服务？</span>
+      <p>
+        因为插件的调用栈是<strong>同步的、可能很深的</strong>（权限拦截 → 工具执行 → 插件代码）。
+        如果在那个位置直接调 <code>SessionManager</code> 去插消息，会立刻破坏两条纪律：
+        <strong>「会话变更只在确定的回合位置发生」</strong>与<strong>「不在插件调用栈里改内核状态」</strong>。
+      </p>
+      <p>
+        队列把「我想让内核做 X」变成一条<strong>待执行的意图</strong>，真正的执行时机由内核在回合边界决定。
+        这也解释了 <code>DeliverAs</code> 为什么是<strong>枚举而不是两个方法</strong>：
+        它是「何时执行」的声明，属于数据而非行为——插件的职责是说清意图，不是决定时机。
+      </p>
+    </div>
+
+    <h3>8.3 <code>EventChannel</code>：默认参数与「怎么丢」</h3>
+
+    <p>
+      <a href="03-architecture.html">03 页</a>讲了「异步、可丢」。但「可丢」不是一个态度，而是一组具体参数：
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>参数</th><th>缺省值</th><th>位置</th></tr></thead>
+        <tbody>
+          <tr><td>核心线程数</td><td><strong>2</strong></td><td><code>EventChannelOptions.java:18</code></td></tr>
+          <tr><td>最大线程数</td><td><strong>8</strong></td><td><code>:21</code></td></tr>
+          <tr><td>keepAlive</td><td>60 秒</td><td><code>:24</code></td></tr>
+          <tr><td>队列容量</td><td><strong>1024</strong></td><td><code>:27</code></td></tr>
+          <tr><td>启动缓冲</td><td>1024（<code>start()</code> 之前的事件先攒着）</td><td><code>:30</code></td></tr>
+          <tr><td>关闭等待</td><td>5000 ms</td><td><code>:33</code></td></tr>
+          <tr><td>线程名</td><td><code>jellyfish-event-</code>，<code>setDaemon(true)</code></td><td><code>EventThreadFactory.java:16, 24</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      <code>build()</code> 校验「全为正且 <code>maxPoolSize &gt;= corePoolSize</code>」（<code>:236-253</code>）。
+      注意<strong>拒绝策略不是配置项</strong>，而是构造线程池时直接传入（<code>EventChannel.java:366-377</code>）。
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/event/EventRejectedExecutionHandler.java（43 行）与其类注释 :12-17</div>
+
+<pre><code class="language-text">队列满时只做两件事（:36-39）：stats.droppedEvents.increment() + 一条带 queueSize 与 caller 的 WARN
+
+类注释 :12-17 解释了「为什么不内联降级」：
+  刻意不做「降级为调用线程内联执行」……
+  内联降级会把订阅者拖回 ReAct 调用线程</code></pre>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：这条注释值一整节</span>
+      <p>
+        事件通道满了，最「顺手」的处理是<strong>降级为在调用线程上直接执行订阅者</strong>——
+        很多框架就是这么做的（各种 <code>CallerRunsPolicy</code> 的变体），看起来事件不会丢。
+      </p>
+      <p>
+        但这个项目明确拒绝了它，理由是<strong>「内联降级会把订阅者拖回 ReAct 调用线程」</strong>。
+        也就是说：一个本应异步处理的通知，会在事件风暴时<strong>跑到 react 线程上执行</strong>——
+        而 react 池只有 8 条，且审批 / 提问就在这些线程上等待（<a href="04-agent-loop.html">04 页</a>）。
+        结果会是「事件压力」转化为「回合卡顿」，而<strong>因果链在现象上完全看不出来</strong>。
+      </p>
+      <p>
+        两条路对比：丢事件 → 少一条通知，有计数、有告警、可诊断；
+        内联执行 → 界面卡住，没人知道为什么。
+        <strong>选择「可见的丢弃」而不是「隐蔽的降级」</strong>，是这个项目里最一致的一条成本观。
+        想知道丢了多少，读 <code>EventChannelStats</code> 的六个 <code>LongAdder</code>（<code>:20-35</code>）——
+        它们正是 <a href="15-observability.html">15 页</a>里那六个 <code>eventChannel.*</code> 指标的数据源。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>9. 本页坑点小结</h2>
+
+    <div class="callout pitfall">
+      <span class="callout-title">插件相关的坑</span>
+      <ul>
+        <li><strong>插件自带 <code>jellyfish-api</code> / <code>pf4j</code></strong> → 类型同一性破坏，现象是莫名 <code>ClassCastException</code>；
+            护栏<strong>只记 loadError</strong>，表现为「静默不启动」，必须看 WARN 日志。</li>
+        <li><strong><code>plugin.id</code> 含 <code>::</code> 被拒</strong>——分隔符留给子单元 owner。</li>
+        <li><strong><code>plugin.class</code> 缺失</strong> → 会回退成 <code>org.pf4j.Plugin</code> 默认值，报错信息极具误导性
+            （<code>JellyfishPluginDescriptorFinder.java:40-51</code>：只有存在且非空时才校验）。</li>
+        <li><strong>注册窗口是「存活期」不是「<code>start()</code> 内」</strong>，但 <code>stop()</code> 之后注册会当场抛错；
+            有注册线程的插件必须自己在 <code>stop()</code> 里先停线程。</li>
+        <li><strong><code>start()</code> 抛错时 PF4J 不保证调用 <code>stop()</code></strong>，
+            插件在 <code>start()</code> 里申请的资源要自己释放。</li>
+        <li><strong><code>"enabled": []</code> = 一个都不启用</strong>；而 <code>/reload</code> 会<strong>清空运行期开关</strong>。</li>
+        <li><strong><code>PluginRuntimeConfig.refresh</code> 必须早于 <code>bootstrap()</code></strong>，
+            否则插件按空配置启动。</li>
+        <li><strong>子上下文复用父的 <code>ContextLifecycle</code></strong>（<code>PluginContextImpl.java:51-52</code> 的注释、<code>:230</code> 的 <code>subContext()</code>），
+            回收按 <code>pluginId::*</code> 前缀一并清掉。</li>
+        <li><strong>插件作者写 <code>PluginContextImpl</code> 子类时的陷阱</strong>：覆写 <code>create*()</code> 时字段尚未赋值，
+            <code>statusProvider</code> 不能写在字段初始化器里（<code>JellyfishPluginManager.java:31-32</code> 的说明、<code>:63-67</code> 的字段）。</li>
+        <li><strong>换了 jar 必须重启进程</strong>，<code>/reload</code> 只管配置与名单。</li>
+      </ul>
+    </div>
+
+    <div class="conclusion">
+      <h2>关键结论</h2>
+      <ol>
+        <li>插件化的核心机制是「<strong>类型即地址 + 两个方向不同的边界</strong>」：同步的 <code>ExtensionRegistry</code>（不可丢）与异步的 <code>EventChannel</code>（可丢），判据是「能否丢弃」。</li>
+        <li>「无编译期依赖」靠三层共同保证：插件侧 <code>provided</code>、运行期 <code>PluginClasspathGuard</code> 护栏、类加载器 parent 指向内核。少任何一层都会出现类型同一性问题。</li>
+        <li>插件故障一律 <strong>fail-closed</strong>：<code>start()</code> 失败转 FAILED 并回收注册；<code>stop()</code> 之后任何注册当场失败。
+            这让「插件坏了」不会变成「权限悄悄放宽了」。</li>
+        <li><code>/reload</code> 用整段 <code>Map.equals</code> 判定变化，语义是「这一段的可见内容变了就重启插件」——
+            <strong>宁可多重启，不可漏重启</strong>。</li>
+        <li>「可配置」与「可被谁配置」是两件事：收紧安全边界的键只认全局级，因为项目级配置来自不可信目录。</li>
+      </ol>
+    </div>
+
+    <nav class="pager" aria-label="翻页">
+      <a class="prev" href="06-permissions.html"><span class="pager-dir">上一页</span>06 权限与审批系统</a>
+      <a class="next" href="08-session-context.html"><span class="pager-dir">下一页</span>08 会话持久化与上下文</a>
+    </nav>
+
+  </main>
+</div>
+
+<footer class="footer">
+  Jellyfish 源码深度解析 · 本页源码依据：<code>PF4JPluginManager.java</code>、<code>JellyfishPluginManager.java</code>、
+  <code>JellyfishPluginAdapter.java</code>、<code>JellyfishPluginFactory.java</code>、<code>JellyfishPluginDescriptorFinder.java</code>、
+  <code>PluginClasspathGuard.java</code>、<code>PluginContextFactory.java</code>、<code>PluginContextImpl.java</code>、
+  <code>PluginReloadReport.java</code>、<code>ConfigReloader.java</code>、<code>PluginsSettings.java</code>、
+  <code>ExtensionRegistry.java</code>、<code>EventChannel.java</code>、<code>ShellIngress.java</code>、<code>docs/constraints.md</code>。
+</footer>
+
+<!-- 资源按「本地 vendor 优先、CDN 兜底」引用：文件缺失时 assets/app.js 会自动回退到 CDN -->
+<script src="assets/vendor/highlight.min.js"></script>
+<script src="assets/vendor/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

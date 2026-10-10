@@ -1,0 +1,1477 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>17 命令系统 · Jellyfish 源码深度解析</title>
+<meta name="description" content="命令系统全解：无状态命令域、别名与命令名的冲突规则、sessionRequired 的两类降级、三态结果与 handoff 接力、11 条内置命令。">
+<link rel="stylesheet" href="assets/style.css">
+<!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
+</head>
+<body>
+
+<header class="topbar">
+  <button class="nav-toggle" id="navToggle" aria-label="切换导航" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">🐙 Jellyfish 源码深度解析</a>
+  <div class="topbar-tools">
+    <input id="navSearch" type="search" placeholder="搜索页面…" aria-label="搜索页面">
+  </div>
+</header>
+
+<div class="layout">
+
+  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <div class="sidebar-title">文档目录</div>
+    <ul class="nav-list">
+      <li><a href="index.html">首页 · 总览与导航</a></li>
+    </ul>
+    <div class="nav-group">入门</div>
+    <ul class="nav-list">
+      <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
+      <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
+      <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
+    </ul>
+    <div class="nav-group">内核重点</div>
+    <ul class="nav-list">
+      <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
+      <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
+      <li><a href="06-permissions.html">06 权限与审批系统</a></li>
+      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
+      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+    </ul>
+    <div class="nav-group">外壳与实战</div>
+    <ul class="nav-list">
+      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
+      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
+      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+    </ul>
+    <div class="nav-group">拓展</div>
+    <ul class="nav-list">
+      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
+      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
+      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
+      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
+      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+    </ul>
+    <div class="nav-group">子系统</div>
+    <ul class="nav-list">
+      <li><a href="17-commands.html" aria-current="page">17 命令系统</a></li>
+      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
+      <li><a href="19-config.html">19 配置体系</a></li>
+      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
+    </ul>
+    <div class="nav-group">插件详解</div>
+    <ul class="nav-list">
+      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
+      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
+      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
+      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
+      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
+      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
+      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <nav class="breadcrumb" aria-label="面包屑">
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>17 命令系统</span>
+    </nav>
+
+    <h1>17 命令系统</h1>
+    <p class="page-sub">
+      命令是唯一<strong>不经过模型</strong>的输入通道：用户敲下的 <code>/xxx</code> 被内核直接执行，回执直接贴屏。
+      这一页讲清它凭什么能同时服务 CLI、TUI 与 HTTP Server，以及「名字怎么找、找不到怎么办、谁能没有会话」这三件事。
+    </p>
+
+    <section class="goals">
+      <h2>学习目标</h2>
+      <ul>
+        <li>说清 <code>CommandManager</code> 为什么无状态、为什么对外壳中立，以及它依赖的注册表结构；</li>
+        <li>解释注册签名与 owner 的关系，以及 <code>removeAllUnder</code> 回收的匹配规则；</li>
+        <li>拿到别名与命令名碰撞时的判定优先级，并找到守着它的那条单元测试；</li>
+        <li>说清 <code>sessionRequired</code> 缺省 <code>true</code> 的理由，以及 <code>false</code> 的两类分别是什么；</li>
+        <li>解释 <code>shouldRunAsCommand(input, hasSession)</code> 为什么对「未注册名」与「语法错误」仍返回 <code>true</code>；</li>
+        <li>说清 <code>CommandResult</code> 三态、候选清单与 <code>handoff</code> 接力各自归谁消费；</li>
+        <li>划清三条边界：内核命令、输入指令（<code>!</code> / <code>@</code>）、外壳自有命令。</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================ -->
+    <h2>1. 命令域的位置与三个入口</h2>
+
+    <p>
+      命令域落在 <code>jellyfish-infra</code> 的 <code>zcd.jellyfish.infra.command</code> 包，一共四个类：
+      <code>CommandManager</code>（门面）、<code>CommandLineParser</code>（解析）、
+      <code>ParsedCommand</code>（解析结果，包私有）、<code>CommandInfo</code>（清单项投影）。
+      公开出去的值对象全部在 api 侧：<code>CommandDescriptor</code> / <code>CommandResult</code> /
+      <code>CommandChoice</code> / <code>CommandArguments</code> / <code>CommandOptions</code>。
+    </p>
+
+    <p>
+      门面有<strong>四个入口</strong>，服务三类调用方
+      （<code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/command/CommandManager.java:39-40</code>
+      的类注释写明了这个分工）：原文入口给输入框，结构化入口给「本来就有参数对象」的调用方，
+      结构化清单给「要自己排版」的外壳，只读候选入口给「选中即弹选择页」的外壳。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>入口</th><th>签名</th><th>谁在用</th><th>位置</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>原文入口</td>
+            <td><code>execute(String input, String sessionId)</code></td>
+            <td>CLI 单次模式、TUI 输入框、<code>POST /sessions/{id}/commands</code> 的原文形态</td>
+            <td><code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/command/CommandManager.java:226-235</code></td>
+          </tr>
+          <tr>
+            <td>结构化入口</td>
+            <td><code>execute(String commandName, CommandArguments arguments, String sessionId)</code></td>
+            <td>Web / TUI 菜单：参数已经是结构化数据，再拼成一行原文只会引入引号与转义的出错面</td>
+            <td><code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/command/CommandManager.java:248-253</code></td>
+          </tr>
+          <tr>
+            <td>结构化清单</td>
+            <td><code>commands()</code> / <code>renderHelp(boolean hasSession)</code></td>
+            <td>TUI 补全与菜单、Web 下拉、Server 的 RPC 返回值、文本外壳的 <code>/help</code></td>
+            <td><code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/command/CommandManager.java:137-161</code>、
+                <code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/command/CommandManager.java:275</code></td>
+          </tr>
+          <tr>
+            <td>只读候选入口</td>
+            <td><code>options(String nameOrAlias, String sessionId)</code></td>
+            <td>「选中命令就弹二级选择页」的外壳；<strong>不执行命令</strong></td>
+            <td><code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/command/CommandManager.java:177</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="mermaid">
+flowchart TD
+  IN["一段用户输入"] --> SYN{"以 / 开头且命令名非空"}
+  SYN -->|"否"| LLM["当普通文本：走对话"]
+  SYN -->|"是"| GATE{"shouldRunAsCommand<br/>input, hasSession"}
+  GATE -->|"true"| EXE["CommandManager.execute"]
+  GATE -->|"false"| LLM
+  EXE --> MATCH["match：命令名优先，其次别名"]
+  MATCH -->|"0 个"| UNK["CommandResult.UNKNOWN"]
+  MATCH -->|"多个"| AMB["CommandResult.ERROR 别名有歧义"]
+  MATCH -->|"1 个"| H["取唯一处理器并内联执行"]
+  H --> OK["OK / 带候选 / handoff"]
+  H --> ERR["ERROR 处理器抛错或返回错误"]
+  OK --> FIN["finish：广播 CommandExecutedEvent"]
+  ERR --> FIN
+  UNK --> FIN
+  AMB --> FIN
+    </div>
+    <p class="figure-cap">图 17-1　从一行输入到一次命令结果：解析 → 判定 → 匹配 → 分发 → 审计</p>
+
+    <!-- ============================================================ -->
+    <h2>2. 为什么 CommandManager 无状态、对外壳中立</h2>
+
+    <p>
+      先给结论：它<strong>只注入两个协作者</strong>（同步扩展点注册表 + 事件发布入口），
+      <strong>不注册任何处理器</strong>，<strong>不缓存索引</strong>，<strong>公共入口不抛异常</strong>。
+      这四条合起来才让「CLI / TUI / Web 共用同一份命令域」成立。
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/command/CommandManager.java:28-54（类注释：五条设计约束一次说清）</div>
+
+<pre><code class="language-java">/**
+ * 命令域服务：输入解析 / 别名解析 / 分发 / 结构化清单 / 帮助渲染。
+ * &lt;p&gt;
+ * &lt;b&gt;只注入 {@link ExtensionRegistry} 与通知入口&lt;/b&gt;：命令域不持有会话、不读配置——会话标识由调用方随
+ * 输入一起带进来，命令的副作用由处理器自己写回对应域服务。唯一外发的是分发结束后的
+ * {@link CommandExecutedEvent}（审计用，best-effort，发布失败不影响命令结果）。
+ * &lt;p&gt;
+ * &lt;b&gt;不注册任何处理器&lt;/b&gt;：系统命令与插件命令都经 {@code ExtensionRegistry.handle(...)} 落同一份注册表，
+ * 本类只做「按名字取出来执行」与「按类型取名字与名片」两件事。命令名即路由键，别名与用法来自随处理器
+ * 一起落表的 {@link CommandDescriptor}，因此不存在第二份命令清单。
+ * &lt;p&gt;
+ * &lt;b&gt;对外壳中立&lt;/b&gt;：原文入口服务输入框（CLI / TUI / Web 文本框），结构化入口服务直接调用
+ * （Web API / TUI 菜单），结构化清单服务自排版的外壳；本类不假设输出到哪里，也不假设谁在调。
+ * &lt;p&gt;
+ * &lt;b&gt;无索引无缓存&lt;/b&gt;：每次执行 / 渲染都从注册表现算，因此插件热部署后立刻可见；命令是人类节奏的调用，
+ * O(命令数) 的重建可以忽略。
+ * &lt;p&gt;
+ * &lt;b&gt;公共入口不抛异常&lt;/b&gt;：用户输入错误与插件缺陷都被翻译成 {@link CommandResult} 或清单 / 文案
+ * （另打 WARN 日志）。唯一的例外是 api 侧值对象的构造期校验——那是编程错误，立即抛。
+ * &lt;p&gt;
+ * &lt;b&gt;系统命令已落地&lt;/b&gt;：{@code /help} {@code /new} {@code /session} {@code /resume} {@code /model}
+ * {@code /agent} {@code /status} {@code /usage} {@code /delete} {@code /compact} {@code /reload} 由
+ * {@code core/command/SystemCommands} 以 owner = {@code "core"} 注册进同一份注册表（本类仍不注册任何处理器）；
+ * {@code /todo} 归 {@code jellyfish-plugin-todo}，与其它插件命令同源；{@code /exit} 归外壳。
+ *
+ * @author zcd
+ */
+</code></pre>
+
+    <p>
+      逐条读这段注释：
+    </p>
+
+    <ul>
+      <li><strong>「不持有会话」是硬约束，不是省略</strong>：会话标识由调用方<em>随输入一起</em>带进来
+          （<code>execute(input, sessionId)</code>）。一旦命令域自己去问「当前会话是谁」，
+          它就必须依赖会话域，也就再也不能被 Server 这种「会话由请求路径提供、根本没有当前会话概念」的外壳复用。</li>
+      <li><strong>「不注册任何处理器」把命令域和系统命令切开</strong>：系统命令落在
+          <code>jellyfish-core</code> 的 <code>SystemCommands</code>，因为它要读会话、模型、agent 三个域服务；
+          命令域只认注册表，因此它自己永远不需要那几个依赖。这也解释了为什么 <code>CommandManager</code> 能待在
+          <code>infra</code> 层而系统命令必须在 <code>core</code> 层。</li>
+      <li><strong>「无索引无缓存」是热部署的前提</strong>：每次 <code>commands()</code> / <code>match()</code>
+          都现读注册表，所以插件刚注册的命令下一行输入就能用、插件被卸载后立刻消失。
+          单元测试直接用两条用例守着它：见
+          <code>Jellyfish/jellyfish-infra/src/test/java/zcd/jellyfish/infra/command/CommandManagerTest.java:251-261</code> 与
+          <code>Jellyfish/jellyfish-infra/src/test/java/zcd/jellyfish/infra/command/CommandManagerTest.java:263-272</code>。</li>
+      <li><strong>「不抛异常」是外壳安全的前提</strong>：命令清单读不出来（插件注册了一个非
+          <code>CommandDescriptor</code> 的描述符）时，用户看到的是一条错误文案，而不是外壳崩掉。</li>
+    </ul>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：为什么把「命令名」做成路由键，而不是给每条命令一个 Java 类型</span>
+      <p>
+        <code>CommandRequest</code> 的类注释给了理由
+        （<code>Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/CommandRequest.java:11-12</code>）：
+        插件自定义的类跨 <code>ClassLoader</code> 传播会类型互不可见，内核也无法为「未知类型」提供调用点。
+        把命令名放进<strong>数据</strong>里，注册表就只需要
+        「请求类型 + 路由键」两个字符串级的事实，插件升级换实现不改变调用点。
+      </p>
+      <p>
+        代价是命令名成了用户可见契约，必须有别名与冲突规则——这就是第 5 节的内容。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>3. 解析层：前缀、命令名与引号</h2>
+
+    <p>
+      解析被单独放在 <code>CommandLineParser</code>，而且<strong>刻意不认识别名、不查注册表</strong>。
+      它只回答「这行输入在语法上是不是命令、命令名是什么、参数怎么切」。
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/command/CommandLineParser.java:8-24（切分口径全表）</div>
+
+<pre><code class="language-java">/**
+ * 命令行解析器：前缀判定 + 命令名提取 + 引号感知切分 + 原文提取。
+ * &lt;p&gt;
+ * 只认前缀与空白，不查注册表、不认识别名：别名属于注册表事实，由 {@link CommandManager} 解析。
+ * &lt;p&gt;
+ * 切分口径（刻意保持最小可用）：
+ * &lt;ul&gt;
+ *     &lt;li&gt;先去掉输入首尾空白，首字符不是 {@link CommandManager#COMMAND_PREFIX} 即为非命令；&lt;/li&gt;
+ *     &lt;li&gt;命令名 = 前缀之后到第一个空白为止，必须非空，大小写敏感；&lt;/li&gt;
+ *     &lt;li&gt;{@code raw} = 命令名之后的原文（仅去掉紧随命令名的那段空白），引号与内部空白原样保留；&lt;/li&gt;
+ *     &lt;li&gt;{@code tokens} 按空白切分，{@code "} 与 {@code '} 成对包裹，引号内空白不切分、引号字符本身不进入
+ *     token，{@code ""} 产出一个空 token；双引号内 {@code \"} 与 {@code \\} 转义；&lt;/li&gt;
+ *     &lt;li&gt;引号未闭合是解析错误：与其猜用户意图（读到行尾？丢掉引号？），不如当场报错。&lt;/li&gt;
+ * &lt;/ul&gt;
+ *
+ * @author zcd
+ */
+</code></pre>
+
+    <p>
+      三个细节值得单独记：
+    </p>
+
+    <ul>
+      <li><strong>「只有前缀、没有名字」不算命令</strong>：<code>parse</code> 在名字为空时返回
+          <code>ParsedCommand.notCommand()</code>，注释写着「这是『不是命令』，而不是『未知命令』」
+          （<code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/command/CommandLineParser.java:57-60</code>）。
+          于是单敲一个 <code>/</code> 会被当成普通文本，而不是报「未知命令 <code>/</code>」。</li>
+      <li><strong>大小写敏感</strong>：<code>/Help</code> 与 <code>/help</code> 是两条不同的名字，
+          前者会得到「未知命令」。</li>
+      <li><strong>切分结果有两种视图</strong>：<code>tokens</code> 给结构化命令，<code>raw</code> 给自由文本命令。
+          <code>CommandArguments</code> 的注释说明了为什么两个都要留
+          （<code>Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/CommandArguments.java:10-14</code>）：
+          只给 tokens 会逼处理器把参数重新拼回去，而拼接必然丢信息（连续空格、原引号形态）。</li>
+    </ul>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：参数里有引号时，处理器的「两种读法」会给出不同结果</span>
+      <p>
+        <strong>现象</strong>：<code>/note "记得 明天 改配置"</code> 这类命令，有的实现读
+        <code>getTokens()</code> 看到一条参数，有的读 <code>getRaw()</code> 看到带引号的原文。
+      </p>
+      <p>
+        <strong>根因</strong>：<code>raw</code> 的定义是「去掉命令名之后，引号与内部空白原样保留」，
+        引号<strong>不</strong>被剥掉；而 <code>tokens</code> 里引号字符本身不进入 token。
+        这不是 bug，是两个刻意设计的视图——但处理器只能选一个口径。
+      </p>
+      <p>
+        <strong>规避</strong>：结构化命令（<code>/agent coder</code>）读 <code>tokens</code> 并校验
+        <code>size()</code>；自由文本命令读 <code>raw</code>。不要混用，也不要自己再切一遍。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>4. 注册、owner 与回收</h2>
+
+    <p>
+      注册的动作永远发生在<strong>扩展点注册表</strong>上，签名是
+      <code>handle(请求类型, 路由键, 描述符, 处理器, 选项)</code>。
+      命令域只是「同一份注册表的另一个读法」：执行时按 <code>CommandRequest</code> + 命令名取处理器，
+      渲染清单时按 <code>CommandDescriptor</code> 取名字与名片。
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/command/SystemCommands.java:216-240（内核自己的两行封装：执行处理器与只读候选处理器）</div>
+
+<pre><code class="language-java">    /**
+     * 注册一条命令。
+     *
+     * @param name       命令名（路由键）
+     * @param descriptor 命令名片
+     * @param handler    处理器
+     * @return 注册句柄
+     */
+    private Subscription register(String name, CommandDescriptor descriptor,
+                                  ExtensionHandler&lt;CommandRequest, CommandResult&gt; handler) {
+        return extensions.handle(OWNER, CommandRequest.class, name, descriptor, handler, RegisterOptions.DEFAULT);
+    }
+
+    /**
+     * 注册一条命令的只读候选处理器。
+     * &lt;p&gt;
+     * 与执行处理器同路由键、异请求类型，因此互不覆盖；候选处理器没有名片（名片属于命令本身）。
+     *
+     * @param name    命令名（路由键）
+     * @param handler 候选处理器
+     * @return 注册句柄
+     */
+    private Subscription registerOptions(String name, ExtensionHandler&lt;CommandOptionRequest, CommandOptions&gt; handler) {
+        return extensions.handle(OWNER, CommandOptionRequest.class, name, null, handler, RegisterOptions.DEFAULT);
+    }
+</code></pre>
+
+    <p>
+      这段只有两行有效代码，但它确定了三条事实：
+    </p>
+
+    <ul>
+      <li><strong>owner 就是插件 id，内核固定是 <code>"core"</code></strong>
+          （<code>Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/command/SystemCommands.java:81</code>）。
+          owner 是回收的唯一依据，也是审计事件里 <code>CommandExecutedEvent.getSource()</code> 的来源——
+          所以 <code>dispatch</code> 取的是 <code>bindings</code> 而不是裸 <code>handler</code>（注释见
+          <code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/command/CommandManager.java:368</code>：
+          审计要记录「是哪个处理器响应的」）。</li>
+      <li><strong>同一条命令可以有「执行」与「候选」两个处理器</strong>，因为它们请求类型不同
+          （<code>CommandRequest</code> vs <code>CommandOptionRequest</code>），路由键相同也不冲突。
+          这是「选中即弹选择页」不用产生副作用的结构基础。</li>
+      <li><strong>候选处理器没有名片</strong>：名片属于命令本身，传 <code>null</code>。</li>
+    </ul>
+
+    <h3>回收：一条命令不会「永久消失」，但也不会「赖着不走」</h3>
+
+    <p>
+      插件停止时，框架只拿得到 <code>pluginId</code>，而插件可能给自己内部的多个子单元各分了 owner
+      （形如 <code>pluginId::子标识</code>，用来做可归因的诊断）。因此回收用的是
+      <strong>命名空间前缀匹配</strong>，而不是精确匹配：
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>问题</th><th>答案</th><th>位置</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>回收入口</td>
+            <td><code>registry.removeAllUnder(pluginId, PluginOwnerNamespace.SEPARATOR)</code></td>
+            <td><code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/PluginContextFactory.java:206</code></td>
+          </tr>
+          <tr>
+            <td>匹配规则</td>
+            <td>命中「命名空间自身」与「命名空间 + 分隔符前缀」；<strong>不是裸前缀</strong>——
+                回收 <code>x</code> 不会碰 <code>xy</code> 这个毫不相干的插件</td>
+            <td><code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/registry/TypeRegistry.java:250-262</code></td>
+          </tr>
+          <tr>
+            <td>回收范围</td>
+            <td>槽位里的<strong>全部</strong>登记（含被压住的层），依据是「这条登记属于谁」，
+                与它此刻是否生效无关</td>
+            <td><code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/registry/TypeRegistry.java:262</code> 起</td>
+          </tr>
+          <tr>
+            <td>被压住的层</td>
+            <td>回收后重算生效项，因此「插件用 <code>override</code> 顶掉了 <code>/help</code>」
+                在插件卸载后会<strong>自动回退</strong>到内核实现</td>
+            <td><code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/registry/TypeRegistry.java:232-235</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      于是<strong>会话不持有命令清单、外壳也不持有</strong>：任何一方缓存一份清单，都会在插件热部署后变成过期数据，
+      还会制造「谁负责失效」的第二份责任。清单每次现算，代价是 O(命令数) 的重建，
+      而命令是「人类节奏」的调用
+      （<code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/command/CommandManager.java:42-43</code> 原文），可以忽略。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>5. 别名解析与冲突规则</h2>
+
+    <p>
+      匹配只有一条规则，写在 <code>match</code> 里：<strong>先按命令名全表扫一遍，命中就立刻返回；
+      没命中才按别名收集</strong>。
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/command/CommandManager.java:425-449（匹配的两个循环）</div>
+
+<pre><code class="language-java">    /**
+     * 按名字匹配命令：命令名优先，其次别名。
+     *
+     * @param nameOrAlias 命令名或别名，可为 {@code null}
+     * @return 命中列表：0 个未命中、1 个唯一命中、多个表示别名有歧义；保证非 {@code null}
+     */
+    private List&lt;CommandInfo&gt; match(String nameOrAlias) {
+        if (nameOrAlias == null || nameOrAlias.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List&lt;CommandInfo&gt; infos = commands();
+        for (CommandInfo info : infos) {
+            if (info.getName().equals(nameOrAlias)) {
+                // 命令名优先：与命令名同名的别名因此静默不可达（文档已写明）
+                return Collections.singletonList(info);
+            }
+        }
+        List&lt;CommandInfo&gt; matched = new ArrayList&lt;CommandInfo&gt;();
+        for (CommandInfo info : infos) {
+            if (info.getAliases().contains(nameOrAlias)) {
+                matched.add(info);
+            }
+        }
+        return matched;
+    }
+</code></pre>
+
+    <p>
+      「命令名优先」这条规则最容易被写反，因此有一条专门的测试盯着它。
+      测试里 <code>mode</code> 既是命令名、又是 <code>model</code> 的别名，敲 <code>/mode</code> 必须执行
+      <code>mode</code>：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/test/java/zcd/jellyfish/infra/command/CommandManagerTest.java:235-248</div>
+
+<pre><code class="language-java">    @Test
+    void execute_should_prefer_command_name_over_alias() {
+        // Given："mode" 既是命令名，又是 "model" 的别名
+        register("plugin-a", "mode", new CommandDescriptor("切模式", null, null),
+                request -&gt; CommandResult.ok("mode"));
+        register("plugin-a", "model", new CommandDescriptor("切模型", null, Arrays.asList("mode")),
+                request -&gt; CommandResult.ok("model"));
+
+        // When
+        CommandResult result = manager.execute("/mode");
+
+        // Then：命令名优先，该别名静默不可达
+        assertEquals("mode", result.getOutput());
+    }
+</code></pre>
+
+    <p>
+      注意测试注释的最后一句：「该别名<strong>静默不可达</strong>」。内核不报错、不警告，
+      <code>/mode</code> 永远命中命令 <code>mode</code>，那条别名等于不存在。
+      这是有意选的：如果报错，就等于要求每条命令名都不能与任何别处声明的别名撞车，
+      而那是一个全局约束——插件作者根本无法在自己的代码里确认。
+    </p>
+
+    <p>
+      别名则有另一个方向的问题：<strong>两个不同命令声明了同一个别名</strong>。这时匹配结果是
+      「多个」，分发路径把它翻译成一条带候选列表的错误：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/command/CommandManager.java:344-365（分发的三段出口：清单失败 / 未命中 / 歧义）</div>
+
+<pre><code class="language-java">    private CommandResult dispatch(String name, CommandArguments arguments, String sessionId, String input) {
+        long startedAt = System.currentTimeMillis();
+        List&lt;CommandInfo&gt; matched;
+        try {
+            matched = match(name);
+        } catch (RuntimeException e) {
+            // 清单读不出来时不能报「未知命令」，否则会把插件注册缺陷伪装成用户拼错
+            LOG.warn("读取命令清单失败: command={}", name, e);
+            return finish(input, name, null, null,
+                    CommandResult.error("命令清单读取失败：" + e.getMessage()), startedAt, sessionId);
+        }
+        if (matched.isEmpty()) {
+            return finish(input, name, null, null,
+                    CommandResult.unknown("未知命令：" + COMMAND_PREFIX + name + "（输入 /help 查看可用命令）"),
+                    startedAt, sessionId);
+        }
+        if (matched.size() &gt; 1) {
+            LOG.warn("命令别名有歧义: alias={} candidates={}", name, plainNames(matched));
+            return finish(input, name, null, null,
+                    CommandResult.error("别名 " + COMMAND_PREFIX + name + " 有歧义，可能是 " + displayNames(matched)),
+                    startedAt, sessionId);
+        }
+</code></pre>
+
+    <p>
+      三种出口的语义差别不是文案问题，而是给调用方的<strong>可编程信号</strong>：
+      <code>ERROR</code> 表示「清单读不出来」，这是<em>插件缺陷</em>；
+      <code>UNKNOWN</code> 表示「没有这条命令」，这是<em>用户拼错</em>；
+      歧义也是 <code>ERROR</code> 且带上候选人，因为它是注册冲突、不是用户责任。
+      对应的用例在
+      <code>Jellyfish/jellyfish-infra/src/test/java/zcd/jellyfish/infra/command/CommandManagerTest.java:204-217</code>（描述符类型不匹配）与
+      <code>Jellyfish/jellyfish-infra/src/test/java/zcd/jellyfish/infra/command/CommandManagerTest.java:218-232</code>（别名歧义）。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>情形</th><th>判定</th><th>用户看到</th><th>位置</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>名字等于某命令名，同时是另一命令的别名</td>
+            <td><strong>命令名赢</strong>，别名静默不可达</td>
+            <td>正常执行那条同名的命令</td>
+            <td><code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/command/CommandManager.java:437-441</code></td>
+          </tr>
+          <tr>
+            <td>两个命令声明同一别名</td>
+            <td>命中多个 → <code>ERROR</code>，列出候选命令名</td>
+            <td>「别名 /m 有歧义，可能是 /model、/mode」</td>
+            <td><code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/command/CommandManager.java:360-365</code></td>
+          </tr>
+          <tr>
+            <td>同一命令重复声明自己的别名</td>
+            <td><strong>去重，不报错</strong>：别名索引里它仍指向同一条命令</td>
+            <td>无感</td>
+            <td><code>Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/CommandDescriptor.java:129-140</code></td>
+          </tr>
+          <tr>
+            <td>别名带 <code>/</code> 前缀、含空白或为空白</td>
+            <td><strong>构造期就抛</strong>：带了前缀是永不命中的死别名</td>
+            <td>插件启动失败（这是编程错误）</td>
+            <td><code>Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/CommandDescriptor.java:147-161</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：插件的别名会与内核命令名/别名撞车，而两边都看不见对方</span>
+      <p>
+        <strong>现象</strong>：插件给 <code>/note</code> 声明了别名 <code>n</code>，
+        用户敲 <code>/n</code> 却报「别名有歧义」，或敲 <code>/todo</code> 时命中了插件的别名而没命中命令。
+      </p>
+      <p>
+        <strong>根因</strong>：别名是全局扁平命名空间，同名的两个别名只能报歧义；而「命令名」优先级高于别名，
+        因此一个命令名能把别处的一条别名彻底压死，且<strong>没有任何提示</strong>。
+      </p>
+      <p>
+        <strong>规避</strong>：别名尽量用长一点的缩写并与命令名相关（内核自己的做法：<code>h</code>/<code>?</code>、
+        <code>sessions</code>、<code>a</code>、<code>cost</code>、<code>rm</code>）；
+        插件别名避开内核 11 条命令名与其别名（清单见第 11 节），也不要与其它插件的短名撞车。
+        真撞上了，<code>/help</code> 里会露出线索——重复的别名会同时挂在两条命令后面。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>6. CommandDescriptor：命令名片</h2>
+
+    <p>
+      名片是插件（或内核）<strong>和处理器一起写进注册表</strong>的那部分说明。
+      它刻意<strong>不含命令名</strong>——名字就是路由键，因此不存在「名片上的名字与路由键不一致」这本错账。
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/CommandDescriptor.java:38-60（sessionRequired 的语义，以及它为什么缺省 true）</div>
+
+<pre><code class="language-java">    /**
+     * 这条命令是否&lt;b&gt;必须&lt;/b&gt;有会话上下文才能工作。
+     * &lt;p&gt;
+     * &lt;b&gt;这是一个内核级、外壳中立的事实&lt;/b&gt;，不是「界面怎么显示」的开关：外壳各自决定
+     * 「没有会话时该拿它怎么办」（TUI 不列进补全、手敲当对话；CLI 启动期必建会话所以不受影响；
+     * Server 的会话由请求路径提供）。把「首页」这类界面概念写进 api，等于让插件去理解某一个外壳的结构。
+     * &lt;p&gt;
+     * &lt;b&gt;缺省 {@code true}（保守）&lt;/b&gt;：插件不声明就当作需要会话。反过来默认「不需要」会让
+     * 一条依赖会话的命令在无会话时被当对话发给模型，而作者根本没这么想过。
+     */
+    private final boolean sessionRequired;
+
+    /**
+     * 构造命令名片，按保守假设计为「需要会话」。
+     *
+     * @param summary 一句话说明，可为 {@code null}
+     * @param usage   用法片段，可为 {@code null}
+     * @param aliases 别名列表，可为 {@code null}
+     * @throws JellyfishException 别名为空白、含空白字符，或以命令前缀（{@code /}）开头时抛出
+     */
+    public CommandDescriptor(String summary, String usage, List&lt;String&gt; aliases) {
+        this(summary, usage, aliases, true);
+    }
+</code></pre>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>字段</th><th>含义</th><th>缺省</th><th>谁消费</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>summary</code></td>
+            <td>一句话用途说明</td>
+            <td><code>null</code>（渲染时显示「（未提供说明）」）</td>
+            <td><code>renderHelp</code>、TUI 菜单</td>
+          </tr>
+          <tr>
+            <td><code>usage</code></td>
+            <td>用法片段（如 <code>&lt;sessionId&gt;</code>），<strong>不含命令名本身</strong></td>
+            <td><code>null</code></td>
+            <td><code>renderHelp</code> 的左列</td>
+          </tr>
+          <tr>
+            <td><code>aliases</code></td>
+            <td>别名，不含前缀与命令名；构造期校验并去重</td>
+            <td>空列表</td>
+            <td><code>match</code>、帮助的「别名：/a」</td>
+          </tr>
+          <tr>
+            <td><code>sessionRequired</code></td>
+            <td>是否<strong>必须</strong>有会话才能工作</td>
+            <td><strong><code>true</code></strong></td>
+            <td><code>shouldRunAsCommand</code>、<code>renderHelp(hasSession)</code>、TUI 补全</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      名片缺省还有一个空安全层：<code>CommandInfo</code>（清单项）在名片为 <code>null</code> 时
+      仍要能回答同样的问题，所以它给出了下面这组投影。
+      「无名片当作需要会话」与 <code>CommandDescriptor</code> 的缺省是同一口径：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/command/CommandInfo.java:88-98</div>
+
+<pre><code class="language-java">    /**
+     * 判断这条命令是否必须有会话上下文才能工作。
+     * &lt;p&gt;
+     * &lt;b&gt;无名片当作需要会话&lt;/b&gt;：插件没声明就按保守处理，与
+     * {@link CommandDescriptor} 的缺省值同一个口径。
+     *
+     * @return 需要会话返回 {@code true}；无名片时为 {@code true}
+     */
+    public boolean isSessionRequired() {
+        return descriptor == null || descriptor.isSessionRequired();
+    }
+</code></pre>
+
+    <p>
+      这里有个容易忽略的连带效果：<strong>忘写名片的命令不会因此隐身</strong>。
+      <code>commands()</code> 明确要求「没有名片的命令也会出现在清单里（名片字段为 <code>null</code>）——
+      它一样可执行，漏掉会让菜单少一条命令」
+      （<code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/command/CommandManager.java:143-144</code>），
+      对应用例是
+      <code>Jellyfish/jellyfish-infra/src/test/java/zcd/jellyfish/infra/command/CommandManagerTest.java:337-353</code>。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>7. sessionRequired=false 的两类命令</h2>
+
+    <p>
+      把 <code>false</code> 声明成「不需要会话」的有两类，它们的性质完全不同，不能混为一谈：
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>类别</th><th>命令</th><th>为什么能没有会话</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>本来就不碰会话</strong></td>
+            <td><code>/help</code> <code>/new</code> <code>/session</code> <code>/resume</code>
+                <code>/delete</code> <code>/reload</code></td>
+            <td>它们操作的是「会话清单 / 配置 / 帮助文本」，没有「当前会话」也说得通：
+                <code>/new</code> 正是用来在首页造出第一个会话的</td>
+          </tr>
+          <tr>
+            <td><strong>降级</strong></td>
+            <td><code>/model</code> <code>/agent</code></td>
+            <td>有会话时改当前会话；没有会话时改<strong>进程级的「下次建会话用什么」</strong>
+                （<code>SessionDefaults</code>），用户留在首页</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      降级那一类的实现就在 <code>SystemCommands.model</code> 里，一个 <code>sessionId == null</code> 的分支决定了去向：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/command/SystemCommands.java:442-468（同一段代码里，「有会话」与「首页」两条去向）</div>
+
+<pre><code class="language-java">    private CommandResult model(CommandRequest request) {
+        if (request.getArguments().isEmpty()) {
+            return CommandResult.choices(renderModels(), modelChoices());
+        }
+        if (request.getArguments().size() != 1) {
+            return CommandResult.error("用法：/model [provider/model]");
+        }
+        String token = request.getArguments().getTokens().get(0);
+        ResolvedModel resolved;
+        try {
+            // 与 agent 偏好模型、会话默认值共用同一份「引用 → provider/model」解析，
+            // 否则「/model gpt-4o」与「model: gpt-4o」可能选到不同的 provider
+            resolved = modelManager.resolveReference(token);
+        } catch (JellyfishException e) {
+            return CommandResult.error("模型不存在：" + token);
+        }
+        String providerName = resolved.getProvider().getName();
+        String modelName = resolved.getModel().getName();
+        String sessionId = sessionIdOf(request);
+        if (sessionId == null) {
+            // 首页：改的是「下次建会话时用什么」，不建会话、留在首页
+            sessionDefaults.setModel(providerName, modelName);
+            return CommandResult.ok("已把下次会话的默认模型设为：" + providerName + "/" + modelName);
+        }
+        sessionManager.switchModel(sessionId, providerName, modelName);
+        return CommandResult.ok("已切换模型：" + providerName + "/" + modelName);
+    }
+</code></pre>
+
+    <p>
+      为什么要有这个降级分支？因为「在我还没开始对话时先定好用哪个模型」是最自然的操作，
+      而它的正确落点<strong>不是</strong>「建一个空会话再把模型设上去」——
+      那会凭空留下一个用户从没用过的会话文件。真正的落点是一个进程级默认值容器：
+    </p>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：首页上改的那几项落到 <code>SessionDefaults</code>，而不是配置文件</span>
+      <p>
+        <code>SessionDefaults</code> 的类注释把三个决定写得比概括更清楚
+        （<code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/session/SessionDefaults.java:10-25</code>）：
+        ① 首页那一敲写进内存里的「下次建会话的默认值」，建会话时再当缺省值填进去，
+        <strong>没有会话产生、用户留在首页</strong>；
+        ② <strong>纯内存，绝不写回任何配置文件</strong>——写配置是另一整层能力（写全局还是项目级？
+        项目级覆盖时写全局等于无效；格式保真；与 <code>/reload</code> 的顺序），
+        而 <code>-cli --model x</code> 今天也是进程级的，两者语义一致；
+        ③ <strong>不覆盖配置文件里的默认值，只盖在它上面</strong>：某字段为 <code>null</code>
+        表示「这一项继续跟随更下层的默认」，因此「设过模型但没设 agent」不会顺手把 agent 也钉死。
+      </p>
+      <p>
+        备选方案「直接改配置文件」为什么不选：它把「这一次」变成了「永久」，
+        而用户敲 <code>/model x</code> 的意图里并不包含「以后所有项目都用它」。
+      </p>
+    </div>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：声明 <code>sessionRequired=false</code> 却没做到「无会话也能执行完」</span>
+      <p>
+        <strong>现象</strong>：首页敲 <code>/xxx</code>，命令执行到一半报错（或抛异常被
+        <code>dispatch</code> 兜成「命令执行失败」），用户看到一条莫名其妙的错误。
+      </p>
+      <p>
+        <strong>根因</strong>：这个标志<strong>是内核与外壳共同信任的契约</strong>。
+        外壳据此决定「无会话时把它当命令执行」，<code>shouldRunAsCommand</code> 据此返回
+        <code>true</code>，于是这条命令<strong>真的会被执行</strong>。
+        一个说「我不需要会话」却在内部调 <code>sessionManager.current()</code> 的处理器，就是在说谎。
+      </p>
+      <p>
+        <strong>规避</strong>：写 <code>false</code> 之前先问「没有 <code>sessionId</code> 时这条命令的每一步还成立吗」。
+        内核对降级类的做法是「<code>sessionIdOf(request)</code> 为 <code>null</code> 就走另一条分支」
+        （<code>Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/command/SystemCommands.java:460-465</code>），
+        而不是「假设一定会有会话」。反例正是 <code>/status</code> 与 <code>/compact</code>：
+        它们<strong>明确声明 <code>true</code></strong>，并在无会话时回一句「当前没有会话，可用 <code>/new</code> 新建」
+        （<code>Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/command/SystemCommands.java:530-535</code>）。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>8. shouldRunAsCommand：一个刻意保守的判定</h2>
+
+    <p>
+      外壳手里的输入只有两个信息：原文，以及「现在有没有会话」。它需要的答案是
+      「这行该不该当命令执行」。这个判定就是 <code>shouldRunAsCommand</code>，一共 15 行：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/command/CommandManager.java:121-135</div>
+
+<pre><code class="language-java">    public boolean shouldRunAsCommand(String input, boolean hasSession) {
+        ParsedCommand parsed = CommandLineParser.parse(input);
+        if (!parsed.isCommand()) {
+            return false;
+        }
+        if (hasSession) {
+            return true;
+        }
+        List&lt;CommandInfo&gt; matched = match(parsed.name());
+        if (matched.size() != 1) {
+            // 未命中（未知命令）或有歧义：都交给命令域去回答，那里的文案比「当消息」有用
+            return true;
+        }
+        return !matched.get(0).isSessionRequired();
+    }
+</code></pre>
+
+    <p>
+      把这段逻辑摊平成一张表，可以看到它<strong>只在一种情形下返回 <code>false</code>（除了语法上不是命令）</strong>：
+      「有会话」时一切照旧；「没有会话」时只有<strong>唯一命中且明确声明需要会话</strong>的命令才被改道成对话。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>输入形态</th><th>hasSession</th><th>返回</th><th>后果</th><th>守着它的用例</th></tr></thead>
+        <tbody>
+          <tr><td>不以 <code>/</code> 开头</td><td>任意</td><td><code>false</code></td><td>交给 LLM</td>
+              <td><code>Jellyfish/jellyfish-infra/src/test/java/zcd/jellyfish/infra/command/CommandManagerTest.java:431-436</code></td></tr>
+          <tr><td>已注册、需要会话（如 <code>/status</code>）</td><td><code>true</code></td><td><code>true</code></td><td>执行命令</td>
+              <td><code>Jellyfish/jellyfish-infra/src/test/java/zcd/jellyfish/infra/command/CommandManagerTest.java:439-447</code></td></tr>
+          <tr><td>已注册、需要会话（如 <code>/compact</code>）</td><td><code>false</code></td><td><strong><code>false</code></strong></td>
+              <td>当对话发给模型</td>
+              <td><code>Jellyfish/jellyfish-infra/src/test/java/zcd/jellyfish/infra/command/CommandManagerTest.java:450-457</code></td></tr>
+          <tr><td>已注册、不需要会话（含别名 <code>/r</code>）</td><td><code>false</code></td><td><code>true</code></td>
+              <td>执行命令</td>
+              <td><code>Jellyfish/jellyfish-infra/src/test/java/zcd/jellyfish/infra/command/CommandManagerTest.java:460-468</code></td></tr>
+          <tr><td><strong>未注册的名字</strong>（<code>/ghost</code>）</td><td><code>false</code></td><td><strong><code>true</code></strong></td>
+              <td>命令域报「未知命令」</td>
+              <td><code>Jellyfish/jellyfish-infra/src/test/java/zcd/jellyfish/infra/command/CommandManagerTest.java:471-474</code></td></tr>
+          <tr><td>别名有歧义（<code>/m</code>）</td><td><code>false</code></td><td><strong><code>true</code></strong></td>
+              <td>命令域报「别名有歧义」</td>
+              <td><code>Jellyfish/jellyfish-infra/src/test/java/zcd/jellyfish/infra/command/CommandManagerTest.java:477-486</code></td></tr>
+          <tr><td><strong>语法错误</strong>（引号没闭合）</td><td><code>false</code></td><td><strong><code>true</code></strong></td>
+              <td>命令域报「引号未闭合」</td>
+              <td><code>Jellyfish/jellyfish-infra/src/test/java/zcd/jellyfish/infra/command/CommandManagerTest.java:489-492</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      最后三行是这页最值得记住的保守之处。<strong>为什么「未注册的名字」不返回 <code>false</code>？</strong>
+      因为 <code>false</code> 的语义是「这不是命令，请当作用户的话发给模型」。
+      用户少敲一个字母（<code>/hlep</code>）本该看到一条「未知命令，输入 <code>/help</code> 查看可用命令」，
+      若被判成 <code>false</code>，这句话就变成一条发给模型的提示词——而它可能被模型当作真实意图去执行工具。
+    </p>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：把「未注册名」和「语法错误」也改道给模型</span>
+      <p>
+        <strong>现象</strong>：打错命令名之后，模型开始回答一句无意义的「/hlep」；
+        或者参数引号写错，用户从头到尾没看到那条解析错误，只看到模型在猜他想干什么。
+      </p>
+      <p>
+        <strong>根因</strong>：<code>shouldRunAsCommand</code> 的返回值被外壳当成「这行是不是命令」来用，
+        而不是「这条命令能不能执行」。只有<strong>唯一命中且需要会话</strong>才是「现在不能执行」，
+        此时改道对话才合理（用户的意图确实是说话）。
+      </p>
+      <p>
+        <strong>规避</strong>：新增判定分支时保持「<code>matched.size() != 1</code> 直接返回 <code>true</code>」——
+        把「未知」与「歧义」交给命令域，它给出的文案比「当作消息」有用得多。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>9. CommandResult：三态、候选与接力</h2>
+
+    <p>
+      命令只有一个返回类型，它承载三件事：<strong>状态</strong>、<strong>给人看的文本</strong>、
+      以及两处结构化例外（候选值、接力文本）。
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/CommandResult.java:34-45（三态）</div>
+
+<pre><code class="language-java">    /** 结果三态。 */
+    public enum Kind {
+
+        /** 命令已执行。 */
+        OK,
+
+        /** 命令存在，但执行失败。 */
+        ERROR,
+
+        /** 没有这条命令（或输入在语法上不是命令）。 */
+        UNKNOWN
+    }
+</code></pre>
+
+    <p>
+      三态的关键是 <code>UNKNOWN</code> 与 <code>ERROR</code> 分开——前者是「没有这条命令」，
+      后者是「命令存在但这次没成」。类注释解释了为什么值得分成两个
+      （<code>Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/CommandResult.java:11-12</code>）：
+      前者外壳可以自行决定要不要把原输入交给 LLM（见上一节的保守判定），后者不行。
+    </p>
+
+    <p>
+      结果<strong>只承载给人看的文本</strong>，副作用落在对应的域服务里。唯一的例外是「接力」：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/CommandResult.java:100-122（handoff 的语义与工厂方法）</div>
+
+<pre><code class="language-java">     * &lt;b&gt;它只声明，不执行&lt;/b&gt;：命令处理器仍然碰不到模型，也起不了回合——接力文本会被交回
+     * {@code ConversationService} 的分流点，用它替换掉本次的用户输入，后面的输入改写、
+     * 输入指令解析、建会话与起回合&lt;b&gt;全部走与用户手敲时逐字段一致的那条路&lt;/b&gt;。
+     * 于是回合边界仍归外壳（是它发起的那一次提交里继续），而命令获得了一种
+     * 「替用户说一句话」的表达力。
+     * &lt;p&gt;
+     * &lt;b&gt;典型用法是「初始化」类命令&lt;/b&gt;：{@code /init} 把一份「阅读本仓库、写出约定文件」的指令
+     * 交给模型，随后的读写工具调用照旧过完整的权限与审批链——命令没有借此取得任何新权限。
+     * &lt;p&gt;
+     * &lt;b&gt;没有 output&lt;/b&gt;：这两个字段刻意互斥。接力之后屏幕上该出现的是「接力文本被当作你的输入」
+     * 与模型的回答，再叠一句命令自己的输出只会让人分不清哪句是模型说的、哪句是命令说的；
+     * 命令若确实想留一句反馈，走 {@code PluginContext.present}（那是内核为「回合之外说话」留的通道）。
+     *
+     * @param text 接力文本，不可为空白
+     * @return 接力结果，保证非 {@code null}
+     * @throws JellyfishException 文本为空白时抛出
+     */
+    public static CommandResult handoff(String text) {
+        if (text == null || text.trim().isEmpty()) {
+            throw new JellyfishException("command handoff text must not be blank");
+        }
+        return new CommandResult(Kind.OK, null, null, text);
+    }
+</code></pre>
+
+    <p>
+      接力的执行方只有一个：提交管线的分流点。它先做命令判定，只在「结果没有接力」时才把结果交给外壳；
+      有接力就把本次输入换掉，继续往下走：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/conversation/ConversationService.java:143-154（命令判定是分流顺序的第 1 步）</div>
+
+<pre><code class="language-java">        // 1) 命令判定先于输入改写：插件改不动用户显式敲下的命令
+        if (policy.isCommands() && commands.shouldRunAsCommand(input, hasSession)) {
+            CommandResult result = commands.execute(input, sessionId);
+            if (!result.hasHandoff()) {
+                return Submission.command(sessionId, result);
+            }
+            // 命令接力：命令只声明「把这段文本当用户输入」，替换之后照旧走 2)~6) 那条路。
+            // 回合因此仍然起在这一处、由这一次提交拥有——插件只是替用户说了一句话，
+            // 既没拿到起回合的能力，也没绕过后面任何一道闸门（改写、指令、权限都照走）
+            LOG.debug("命令接力，本次输入已替换为命令给出的文本: source={}", source);
+            input = result.getHandoffText();
+        }
+</code></pre>
+
+    <div class="mermaid">
+sequenceDiagram
+  participant U as 外壳提交
+  participant C as CommandManager
+  participant H as 命令处理器
+  participant CS as ConversationService
+  participant M as 模型
+  U->>C: shouldRunAsCommand + execute
+  C->>H: 执行命令，可能有副作用
+  H-->>C: CommandResult.handoff(text)
+  C-->>CS: 结果带接力文本
+  Note over CS: 不把结果交给外壳
+  CS->>CS: input 替换为 text
+  CS->>CS: 输入改写 → 输入指令 → 建会话
+  CS->>M: 起回合，模型回答照常呈现
+    </div>
+    <p class="figure-cap">图 17-2　接力链路：命令只声明，替换与起回合都由提交管线做</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>结果形态</th><th>工厂方法</th><th>谁消费</th><th>位置</th></tr></thead>
+        <tbody>
+          <tr><td>成功 + 文本</td><td><code>CommandResult.ok(output)</code></td><td>外壳渲染</td>
+              <td><code>Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/CommandResult.java:80</code></td></tr>
+          <tr><td>成功 + 候选</td><td><code>CommandResult.choices(output, choices)</code></td>
+              <td>不认识候选的外壳打印文本；TUI / Web 另开选择页</td>
+              <td><code>Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/CommandResult.java:93</code></td></tr>
+          <tr><td>接力</td><td><code>CommandResult.handoff(text)</code></td>
+              <td><strong>只有提交管线</strong>，外壳看不到这个字段</td>
+              <td><code>Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/CommandResult.java:117</code></td></tr>
+          <tr><td>失败</td><td><code>CommandResult.error(output)</code></td><td>外壳按错误样式渲染</td>
+              <td><code>Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/CommandResult.java:130</code></td></tr>
+          <tr><td>没这条命令</td><td><code>CommandResult.unknown(output)</code></td><td>外壳提示 <code>/help</code></td>
+              <td><code>Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/CommandResult.java:140</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      仓库里唯一用到接力的真实命令是项目插件的 <code>/init</code>：它把插件 jar 里的指令模板当成
+      「用户这一句话」交出去
+      （<code>Jellyfish-Plugins/jellyfish-plugin-project/src/main/java/zcd/jellyfish/plugin/project/InitCommand.java:90</code>），
+      注册时声明 <code>sessionRequired = true</code>
+      （<code>Jellyfish-Plugins/jellyfish-plugin-project/src/main/java/zcd/jellyfish/plugin/project/ProjectPlugin.java:54-55</code>）——
+      因为接力之后必然要起回合，而回合需要会话。
+    </p>
+
+    <div class="callout tip">
+      <span class="callout-title">HTTP 外壳只走半程，这一步必须由客户端补</span>
+      <p>
+        <code>POST /sessions/{id}/commands</code> 是纯 JSON，与 <code>/chat</code> 的 SSE 契约分开，
+        服务端<strong>刻意不在这里自己起回合</strong>
+        （<code>Jellyfish/jellyfish-server/src/main/java/zcd/jellyfish/server/handler/CommandHandlers.java:46-50</code>）。
+        因此 <code>CommandResultDto</code> 多一个 <code>handoff</code> 字段
+        （<code>Jellyfish/jellyfish-server/src/main/java/zcd/jellyfish/server/dto/CommandResultDto.java:17-18</code>），
+        客户端要拿它再 <code>POST /sessions/{id}/chat</code>。TUI 与 CLI 由内核一次做完，用户无感。
+      </p>
+    </div>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：外壳自己复制分流顺序，接力的那一格就漏了</span>
+      <p>
+        <strong>现象</strong>：TUI 里 <code>/init</code> 只打印了一句「命令已执行」，模型完全没有开始读仓库。
+      </p>
+      <p>
+        <strong>根因</strong>：接力文本<strong>不进界面</strong>（<code>handoff</code> 与 <code>output</code> 互斥，
+        接力时 <code>output</code> 是 <code>null</code>）。如果外壳自己排了「先判命令、
+        再改写、再起回合」这条顺序，那它多半是「拿到 <code>CommandResult</code> 就渲染并返回」，
+        接力这一格就没人处理。
+      </p>
+      <p>
+        <strong>规避</strong>：外壳只声明 <code>SubmissionPolicy</code>，交给
+        <code>ConversationService.submit</code> 统一排顺序，然后按返回的
+        <code>Submission.Kind</code> 呈现
+        （<code>Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/conversation/ConversationService.java:32-41</code>
+        把这条列成不变量）。顺序不需要、也不允许在外壳里出现第二份。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>10. 候选与二级选择页：「怎么显示」归外壳，「有哪些取值」归命令</h2>
+
+    <p>
+      候选（<code>CommandChoice</code>）回答的问题是：<code>/agent</code> 这类命令不带参数时，
+      究竟有哪些取值可以挑。这个集合<strong>只有命令自己知道</strong>——
+      命令域没有参数字典，外壳更无法替它猜。
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/CommandChoice.java:34-51（一个候选项：value 与 label 为什么必须分开）</div>
+
+<pre><code class="language-java">    /**
+     * 构造命令候选值。
+     *
+     * @param value       取值原文，不可为空白
+     * @param label       显示文本，可为 {@code null} 或空白（回退为 {@code value}）
+     * @param description 补充说明，可为 {@code null}
+     * @param current     是否为当前取值
+     * @throws JellyfishException {@code value} 为空白时抛出
+     */
+    public CommandChoice(String value, String label, String description, boolean current) {
+        if (value == null || value.trim().isEmpty()) {
+            throw new JellyfishException("command choice value must not be blank");
+        }
+        this.value = value;
+        this.label = label == null || label.isEmpty() ? value : label;
+        this.description = description;
+        this.current = current;
+    }
+</code></pre>
+
+    <p>
+      <code>value</code> 是「选中后要追加到命令名之后的参数原文」（如 <code>coder</code>、
+      <code>openai/gpt-4o</code>），<code>label</code> 是给人看的文本。两者通常相同但允许不同，
+      因此不能合并成一个字段
+      （<code>Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/CommandChoice.java:10-13</code>）。
+      <code>current</code> 让外壳能标出「当前取值」——<code>CommandChoicePicker</code> 打开页面时
+      默认把光标停在它上面
+      （<code>Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/CommandChoicePicker.java:136-143</code>）。
+    </p>
+
+    <p>
+      外壳侧的接收端是 TUI 的 <code>CommandChoicePicker</code>（纯状态）+ <code>CommandChoicePickerView</code>（纯渲染）。
+      状态类只保存「候选 + 选中下标 + 触发页面的命令原文」：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/CommandChoicePicker.java:37-52</div>
+
+<pre><code class="language-java">    /**
+     * 打开选择页。
+     * &lt;p&gt;
+     * 候选为空时不打开：命令已经给了文本输出，外壳照旧打印它即可，弹一个空页面毫无意义。
+     * 默认选中「当前取值」（若有），让用户打开页面就能看清自己在哪一档。
+     *
+     * @param baseCommand 触发选择页的命令原文（如 {@code /agent}），可为 {@code null}
+     * @param choices     候选清单，可为 {@code null} 或空（不打开）
+     */
+    public void open(String baseCommand, List&lt;CommandChoice&gt; choices) {
+        if (choices == null || choices.isEmpty()) {
+            return;
+        }
+        this.baseCommand = baseCommand == null ? "" : baseCommand;
+        this.choices = Collections.unmodifiableList(new ArrayList&lt;CommandChoice&gt;(choices));
+        this.selected = currentIndex();
+        this.active = true;
+    }
+</code></pre>
+
+    <p>
+      「候选为空就不弹页」这条判断把两类外壳统一了：CLI 不认识候选，照旧打印
+      <code>CommandResult.getOutput()</code>；TUI 认得候选才弹页。两边看到的是同一条命令的同一个结果。
+    </p>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：候选查询走一条独立的只读扩展点</span>
+      <p>
+        执行命令可能有副作用（<code>/new</code> 建会话、<code>/delete</code> 删会话），
+        而用户「刚选中命令、还没决定参数」时不该有任何副作用。因此候选查询不复用
+        <code>CommandRequest</code>，而是 <code>CommandOptionRequest</code>（返回
+        <code>CommandOptions</code>）——类注释写得很直白：
+        「用执行结果承载它，会把『查询』与『执行』混成一条语义，也让『选中即弹选择页』这条路径
+        看起来像发生过副作用。因此给它一个独立结果类型。」
+        （<code>Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/CommandOptions.java:12-14</code>）。
+      </p>
+      <p>
+        代价是每个有候选的命令要注册两个处理器
+        （<code>Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/command/SystemCommands.java:200-203</code>
+        给 <code>/resume</code> <code>/model</code> <code>/agent</code> <code>/delete</code>
+        各注册了一个只读候选）。这个代价换来的是「选中即弹页」这条路径<strong>结构上不可能有副作用</strong>。
+      </p>
+      <p>
+        查询失败也全部降级：未知名、清单读不出、候选处理器不唯一、处理器抛异常——四种都当作「没有候选」
+        返回空列表并打 WARN
+        （<code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/command/CommandManager.java:170-174</code>）。
+        候选只是输入辅助，不该影响用户继续输入。
+      </p>
+    </div>
+
+    <p>
+      还有一处值得单独记：<strong>补全面板的接受路必须先问外壳自有命令的候选入口</strong>。
+      <code>/ui</code> 不在命令域里，问命令域只会得到空清单，于是它会退化成「回填命令名、
+      下次发送才弹页」，与 <code>/resume</code> 的「选中即弹」行为不一致。
+      外壳侧的答复方是 <code>ShellCommand.options</code>，顺序与提交路径一致
+      （<code>Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiApp.java:809-817</code>）。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>11. 内核内置系统命令清单</h2>
+
+    <p>
+      这一批命令由 <code>SystemCommands.register()</code> 以 <code>owner = "core"</code> 注册，
+      与插件命令同源、同表。下面是逐条抄下来的分类表（末尾那个布尔就是 <code>sessionRequired</code>）：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/command/SystemCommands.java:175-204（11 条命令 + 4 条只读候选处理器）</div>
+
+<pre><code class="language-java">        // 末尾的布尔是 sessionRequired：无会话时「还需不需要当前会话」。
+        // 逐条显式写出（即使等于缺省值）是为了让这张分类表在代码里一眼可读，
+        // 而不是要去翻 CommandDescriptor 的缺省值才知道哪几条是有意为之。
+        subscriptions.add(register("help", new CommandDescriptor("显示命令帮助", "[命令]", aliases("h", "?"), false),
+                this::help));
+        subscriptions.add(register("new", new CommandDescriptor("新建会话并切换为当前", null, null, false),
+                this::newSession));
+        subscriptions.add(register("session", new CommandDescriptor("列出全部会话", null, aliases("sessions"), false),
+                this::listSessions));
+        subscriptions.add(register("resume", new CommandDescriptor("切换到已有会话", "&lt;sessionId&gt;", null, false),
+                this::resume));
+        subscriptions.add(register("model", new CommandDescriptor("查看或切换模型", "[provider/model]", null, false),
+                this::model));
+        subscriptions.add(register("agent", new CommandDescriptor("查看或切换 agent", "[agentId]", aliases("a"), false),
+                this::agent));
+        subscriptions.add(register("status", new CommandDescriptor("显示当前会话概要", null, null, true), this::status));
+        subscriptions.add(register("usage", new CommandDescriptor("显示当前会话 token 用量", null,
+                aliases("cost"), true), this::usage));
+        subscriptions.add(register("delete", new CommandDescriptor("删除会话（含持久化文件）", "&lt;sessionId&gt;",
+                aliases("rm"), false), this::deleteSession));
+        subscriptions.add(register("compact", new CommandDescriptor("把更早的对话压成摘要",
+                "[preview]", null, true), this::compact));
+        subscriptions.add(register("reload", new CommandDescriptor("重新加载配置（模型 / agent / 插件）",
+                null, null, false), this::reload));
+        // 只读候选查询：与执行处理器平行，外壳「选中命令就弹选择页」时走这条路径，不产生任何副作用
+        subscriptions.add(registerOptions("resume", this::resumeOptions));
+        subscriptions.add(registerOptions("model", this::modelOptions));
+        subscriptions.add(registerOptions("agent", this::agentOptions));
+        subscriptions.add(registerOptions("delete", this::deleteOptions));
+    }
+</code></pre>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>命令</th><th>别名</th><th>usage</th><th><code>sessionRequired</code></th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td><code>/help</code></td><td><code>h</code>、<code>?</code></td><td><code>[命令]</code></td><td><code>false</code></td><td>显示命令帮助；带参数时查单条</td></tr>
+          <tr><td><code>/new</code></td><td>—</td><td>—</td><td><code>false</code></td><td>新建会话并切换为当前</td></tr>
+          <tr><td><code>/session</code></td><td><code>sessions</code></td><td>—</td><td><code>false</code></td><td>列出全部会话，当前会话带 <code>*</code></td></tr>
+          <tr><td><code>/resume</code></td><td>—</td><td><code>&lt;sessionId&gt;</code></td><td><code>false</code></td><td>切换到已有会话（<strong>有候选</strong>）</td></tr>
+          <tr><td><code>/model</code></td><td>—</td><td><code>[provider/model]</code></td><td><code>false</code></td><td>查看或切换模型（<strong>有候选</strong>；首页降级）</td></tr>
+          <tr><td><code>/agent</code></td><td><code>a</code></td><td><code>[agentId]</code></td><td><code>false</code></td><td>查看或切换 agent（<strong>有候选</strong>；首页降级）</td></tr>
+          <tr><td><code>/status</code></td><td>—</td><td>—</td><td><code>true</code></td><td>显示当前会话概要</td></tr>
+          <tr><td><code>/usage</code></td><td><code>cost</code></td><td>—</td><td><code>true</code></td><td>显示当前会话 token 用量</td></tr>
+          <tr><td><code>/delete</code></td><td><code>rm</code></td><td><code>&lt;sessionId&gt;</code></td><td><code>false</code></td><td>删除会话（含持久化文件）（<strong>有候选</strong>）</td></tr>
+          <tr><td><code>/compact</code></td><td>—</td><td><code>[preview]</code></td><td><code>true</code></td><td>把更早的对话压成摘要（需压缩策略插件）</td></tr>
+          <tr><td><code>/reload</code></td><td>—</td><td>—</td><td><code>false</code></td><td>重新加载配置（模型 / agent / 插件）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      三个容易看漏的点：
+    </p>
+
+    <ul>
+      <li><strong><code>/help</code> 直接复用命令域渲染，不维护第二份帮助文案</strong>：无会话时它只列「当下真能用」的那几条
+          （<code>Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/command/SystemCommands.java:288-296</code>）。
+          这与 <code>renderHelp(hasSession)</code> 的口径一致。</li>
+      <li><strong><code>/compact</code> 只起头、不等结果</strong>：它派发给 <code>ConversationCompactor</code> 后立刻返回，
+          真正结果由外壳轮询压缩状态呈现
+          （<code>Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/command/SystemCommands.java:68-70</code>）。
+          在渲染线程上同步等一次完整的模型调用等于把界面冻住。</li>
+      <li><strong><code>/reload</code> 反而同步等结果</strong>：它不发起模型调用，只做文件读取与索引重建，
+          耗时在毫秒级
+          （<code>Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/command/SystemCommands.java:689-690</code>）。
+          「要不要同步」的判据是<strong>会不会等模型</strong>，不是「命令是不是很慢」。</li>
+    </ul>
+
+    <p>
+      插件会带来更多命令，全部出现在同一份 <code>/help</code> 里：<code>/todo</code>
+      （<code>Jellyfish-Plugins/jellyfish-plugin-todo/src/main/java/zcd/jellyfish/plugin/todo/TodoPlugin.java:69</code>）、
+      <code>/skills</code>（<code>Jellyfish-Plugins/jellyfish-plugin-skills/src/main/java/zcd/jellyfish/plugin/skills/SkillsPlugin.java:62</code>）、
+      <code>/mcp</code>（<code>Jellyfish-Plugins/jellyfish-plugin-mcp/src/main/java/zcd/jellyfish/plugin/mcp/McpPlugin.java:178</code>）、
+      <code>/plan</code>（<code>Jellyfish-Plugins/jellyfish-plugin-plan/src/main/java/zcd/jellyfish/plugin/plan/PlanPlugin.java:54</code>）、
+      <code>/init</code>（<code>Jellyfish-Plugins/jellyfish-plugin-project/src/main/java/zcd/jellyfish/plugin/project/ProjectPlugin.java:54</code>）等。
+      它们和内核命令走的是同一条注册与分发路径。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>12. 三条边界：内核命令 / 输入指令 / 外壳自有命令</h2>
+
+    <p>
+      「以 <code>/</code> 开头」只是一条<strong>语法</strong>边界，不是能力边界。
+      内核里同时存在三种「用户敲什么、系统做什么」的约定，它们各有各的落点：
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>形态</th><th>例子</th><th>谁处理</th><th>是否进内核注册表</th><th>是否过模型</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>内核命令</td>
+            <td><code>/help</code>、<code>/agent</code></td>
+            <td><code>CommandManager</code> → 注册表里的处理器</td>
+            <td><strong>是</strong>（<code>owner = "core"</code> 或插件 id）</td>
+            <td>分发本身不过；<code>handoff</code> 与 <code>/compact</code> 的副作用会</td>
+          </tr>
+          <tr>
+            <td>插件命令</td>
+            <td><code>/todo</code>、<code>/init</code></td>
+            <td>同上（同一份注册表，owner 是插件 id）</td>
+            <td><strong>是</strong></td>
+            <td>同上</td>
+          </tr>
+          <tr>
+            <td>输入指令</td>
+            <td><code>!</code> 开头的 shell 行、<code>@</code> 文件引用</td>
+            <td><code>InputDirectives</code>（走 <code>ToolExecutor</code> 与权限链）</td>
+            <td>否（另一个扩展点：<code>InputDirectiveRequest</code>）</td>
+            <td>否</td>
+          </tr>
+          <tr>
+            <td>外壳自有命令</td>
+            <td><code>/exit</code>、<code>/ui</code>、<code>/thinking</code>、<code>/toolargs</code>、<code>/mouse</code></td>
+            <td>TUI 自己（<code>ShellCommand</code>），在进入提交管线<strong>之前</strong>截胡</td>
+            <td><strong>否</strong></td>
+            <td>否</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      外壳自有命令为什么只有这五条？<code>ShellCommand</code> 的类注释给的理由是「内核根本不知道
+      有没有界面、没有区域与折叠这个概念，也不知道鼠标是被应用捕获还是被终端管着」，
+      注册进内核会让 <code>/help</code> 里出现对 <code>-cli</code> 模式毫无意义的条目：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/ShellCommand.java:9-25（外壳自有命令的边界与判定时机）</div>
+
+<pre><code class="language-java">/**
+ * 外壳自有命令：用户与外壳之间的约定，不进内核的命令注册表。
+ * &lt;p&gt;
+ * &lt;b&gt;为什么只有 {@code /exit}、{@code /ui}、{@code /thinking}、{@code /toolargs} 与 {@code /mouse}&lt;/b&gt;：{@code /help}、{@code /new}、{@code /model} 这些属于内核命令域，
+ * 由 {@code CommandManager} 统一解析与分发，外壳只负责把结果贴到屏幕上。而「退出界面」、「切换插件界面贡献」、
+ * 「折叠思考过程」、「折叠工具调用参数」与「交还 / 收回鼠标」是外壳自己的事——内核根本不知道有没有界面、没有区域与折叠这个概念，
+ * 也不知道鼠标是被应用捕获还是被终端管着，把它们注册成命令会让 {@code /help} 里出现对 {@code -cli} 模式毫无意义的条目。
+ * 这与 {@code core/command/SystemCommands} 里「{@code /exit} 属外壳职责，不进注册表」的口径一致。
+ * &lt;p&gt;
+ * &lt;b&gt;判定必须早于 {@code CommandManager.execute}&lt;/b&gt;：一旦把它们交给命令域，就会以
+ * {@code UNKNOWN} 的形式回到屏幕上，用户看到的是「没有这条命令」——而实际上外壳完全听得懂。
+ * &lt;p&gt;
+ * &lt;b&gt;本类也是这些命令的候选入口&lt;/b&gt;（见 {@link #options}）：补全面板选中一条命令时，
+ * 命令域答不出外壳自有命令的可选值，这一处是外壳侧唯一的答复方。
+ *
+ * @author zcd
+ */
+</code></pre>
+
+    <p>
+      落地时这条截胡的<strong>顺序</strong>也被写成了纯函数，就是为了能被直接断言：外壳自有命令的判定
+      必须排在「回合进行中拒收」之前，否则同一个动作（<code>Ctrl+T</code> 折叠思考）在回合里生效、
+      而 <code>/thinking</code> 不生效。
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiApp.java:898-921（分流判定：外壳命令优先于「回合进行中」）</div>
+
+<pre><code class="language-java">    /**
+     * 提交入口的分流判定。
+     * &lt;p&gt;
+     * &lt;b&gt;为什么单独抽出来&lt;/b&gt;：这条判定里唯一容易写反的就是「外壳自有命令与回合进行中谁先判」，
+     * 而它决定了「回合中能不能敲 {@code /exit}」。抽成纯函数后这条顺序可以被直接断言，
+     * 不必去驱动一个真实界面。
+     * &lt;p&gt;
+     * &lt;b&gt;为什么外壳命令要在检查之前&lt;/b&gt;：那些命令不写会话，与 {@code Ctrl+T} 等键位是同一个动作，
+     * 键位在回合进行中照常生效，命令也就必须照常生效——否则同一个动作有两条语义。
+     *
+     * @param input       输入原文，可为 {@code null}
+     * @param turnRunning 当前是否有回合或输入指令在跑
+     * @return 处置方式，保证非 {@code null}
+     */
+    static SubmitRoute routeOf(String input, boolean turnRunning) {
+        if (input == null || input.trim().isEmpty()) {
+            return SubmitRoute.IGNORED;
+        }
+        // 首词判定与分派共用 ShellCommand 这一处，不在这里另立一套
+        if (ShellCommand.isShellCommand(input)) {
+            return SubmitRoute.SHELL_COMMAND;
+        }
+        return turnRunning ? SubmitRoute.REJECTED : SubmitRoute.SUBMIT;
+    }
+</code></pre>
+
+    <p>
+      三条边界合起来还有一条「顺序契约」：<strong>命令判定 → 输入改写 → 输入指令 → 起回合</strong>。
+      命令排第一，意味着<strong>插件改不动用户显式敲下的命令</strong>；而输入指令排在命令之后、
+      对话之前，且一律先建会话（结果要落进历史）。外壳只声明自己的 <code>SubmissionPolicy</code>，
+      不得复制这套顺序（<code>docs/constraints.md</code> 的「工具执行、输入指令与命令域」一章）。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>13. Server 侧的命令门：哪些命令在 HTTP 外壳被禁</h2>
+
+    <p>
+      Server 也是「同一份命令域」的使用者，但它按会话 id 寻址，<strong>没有「当前会话」这个概念</strong>。
+      于是有一批命令在这里语义不成立，或者会改进程级状态，必须被拒：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-server/src/main/java/zcd/jellyfish/server/handler/ServerCommandGate.java:15-35（这道闸门存在的理由）</div>
+
+<pre><code class="language-java">/**
+ * 命令端点的闸门：拒绝「在按 id 寻址的服务化外壳里没有意义、或会改进程级状态」的命令。
+ * &lt;p&gt;
+ * &lt;b&gt;为什么服务模式也需要这道闸门&lt;/b&gt;：{@code POST /sessions/{id}/commands} 原本可以把任何命令
+ * 跑起来——包括 {@code /new}（改进程级「当前会话」指针）、{@code /resume}（切当前会话）、
+ * {@code /reload}（重载进程配置：模型 / agent / 插件）、{@code /session}（列出全部会话）、
+ * {@code /delete}（删的是&lt;b&gt;参数里那个&lt;/b&gt;会话，参数不受本层的按 id 寻址保护）。这些命令在 TUI/CLI
+ * 上都有意义，在服务化外壳里没有：客户端本来就按 id 寻址，不需要「当前会话」这个概念。
+ * &lt;p&gt;
+ * &lt;b&gt;名单是常量，不开放配置&lt;/b&gt;：它是「这七条命令的语义与本外壳的寻址方式不兼容」，不是随场景调整的策略。
+ * 多租户下需要可配的闸门在 Spring starter 的 {@code CommandGate} 里（那份名单可按租户调）。
+ * &lt;p&gt;
+ * &lt;b&gt;只做「拒绝」不做事后过滤&lt;/b&gt;：拒绝的理由直接回给调用方，它知道该换哪条路（建会话用
+ * {@code POST /sessions}，删会话用 {@code DELETE /sessions/{id}}，改配置就重启或走运维入口）。
+ * &lt;p&gt;
+ * &lt;b&gt;命令名从原始文本里取&lt;/b&gt;：刻意不引用 {@code CommandManager} 的解析结果——把「要判定的东西」
+ * 交给「被判定的一方」去解析（它认识别名、也认补全），判定就不再是独立的。取不到名字时放行，
+ * 让内核自己去报「未知命令」。
+ *
+ * @author zcd
+ */
+</code></pre>
+
+    <div class="src-block">Jellyfish/jellyfish-server/src/main/java/zcd/jellyfish/server/handler/ServerCommandGate.java:42-43（拒绝名单里同时写进了别名）</div>
+
+<pre><code class="language-java">    private static final Set&lt;String&gt; DENIED = Collections.unmodifiableSet(new LinkedHashSet&lt;String&gt;(
+            Arrays.asList("new", "resume", "reload", "session", "sessions", "delete", "rm")));
+</code></pre>
+
+    <p>
+      名单里的 <code>sessions</code> 与 <code>rm</code> 是 <code>/session</code> 和 <code>/delete</code> 的别名。
+      这就是「别名必须一起进拒绝名单」的原因：只写命令名，用户换个别名敲进来就绕过去了。
+      <code>check</code> 的判定与抛出在
+      <code>Jellyfish/jellyfish-server/src/main/java/zcd/jellyfish/server/handler/ServerCommandGate.java:57-67</code>；
+      注意它的命令名解析<strong>自己写了一份</strong>（<code>nameOf</code>，
+      <code>Jellyfish/jellyfish-server/src/main/java/zcd/jellyfish/server/handler/ServerCommandGate.java:75</code> 起），
+      不调用 <code>CommandManager</code>——被判定的一方不该负责解析判定依据。
+    </p>
+
+    <div class="callout warn">
+      <span class="callout-title">注意：命令域与对话域同权，密钥泄露等于整机权限泄露</span>
+      <p>
+        <code>POST /sessions/{id}/commands</code> 能执行 <code>/reload</code> 这类会改进程状态的内核命令，
+        因此命令端点的鉴权与 <code>/chat</code> 是同一档（<code>docs/constraints.md</code> 的 HTTP 安全一章）。
+        另外命令端点<strong>先校验会话存在</strong>（不存在回 404，
+        <code>Jellyfish/jellyfish-server/src/main/java/zcd/jellyfish/server/handler/CommandHandlers.java:143-151</code>）：
+        不校验的话幽灵会话 id 也能把命令跑起来、回 <code>200 + kind=ERROR</code>，
+        调用方就分不清「会话不存在」与「命令这次失败」。
+      </p>
+      <p>
+        <code>DENIED</code> 名单只保护「进程级状态」这一类风险；它<strong>不是</strong>权限系统。
+        真正的权限与审批链在工具调用上（见 <a href="06-permissions.html">06 页</a>），命令不经过它。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>14. 坑点清单</h2>
+
+    <h3>P1. 打错命令名被当成提示词发给模型</h3>
+    <p><strong>现象</strong>：敲 <code>/hlep</code>，模型开始回答一个不存在的命令。</p>
+    <p><strong>根因</strong>：外壳把 <code>shouldRunAsCommand</code> 返回的 <code>false</code> 理解成「这不是命令」，
+      而保留 <code>true</code> 的场景里包含「未注册的名字」与「语法错误」——它们只该被命令域回一条明确文案。</p>
+    <p><strong>规避</strong>：见第 8 节。判定表与用例一一对应，改代码前先看那 7 条用例。</p>
+
+    <h3>P2. 别名与命令名碰撞，别名「静默消失」</h3>
+    <p><strong>现象</strong>：插件的别名怎么敲都不生效，也没有任何报错。</p>
+    <p><strong>根因</strong>：命令名优先于别名，且判定<strong>不提示</strong>
+      （<code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/command/CommandManager.java:437-441</code> 的注释明说「文档已写明」）。</p>
+    <p><strong>规避</strong>：别名命名避开内核 11 条命令名与其别名清单（第 11 节表格）；同一插件内也不要让别名与自己的命令名相同。</p>
+
+    <h3>P3. 以为「命令不过 LLM」就等于「命令不花 token」</h3>
+    <p><strong>现象</strong>：调 <code>/compact</code> 或 <code>/init</code>，账单上出现了模型调用。</p>
+    <p><strong>根因</strong>：<strong>分发</strong>不过模型（<code>CommandManager</code> 只调处理器），
+      但命令的<strong>副作用</strong>可以调用模型：<code>/compact</code> 派发给压缩器
+      （<code>Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/command/SystemCommands.java:550</code>），
+      <code>handoff</code> 会起一个完整回合
+      （<code>Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/conversation/ConversationService.java:143-154</code>）。</p>
+    <p><strong>规避</strong>：把「命令不消耗 token」精确表述为「命令分发本身不消耗 token」。
+      想只看不发，用 <code>/compact preview</code>
+      （<code>Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/command/SystemCommands.java:564</code> 起只回报计划）。</p>
+
+    <h3>P4. 外壳自己复制分流顺序，接力的那一格漏掉</h3>
+    <p><strong>现象</strong>：<code>/init</code> 只回一句「已执行」，模型没动。</p>
+    <p><strong>根因</strong>：<code>handoff</code> 与 <code>output</code> 互斥，接力文本不进界面；
+      只有 <code>ConversationService.submit</code> 会用它替换输入。</p>
+    <p><strong>规避</strong>：外壳只声明 <code>SubmissionPolicy</code>，按 <code>Submission.Kind</code> 呈现，不自己排顺序。</p>
+
+    <h3>P5. 把「清单读不出来」报成「未知命令」</h3>
+    <p><strong>现象</strong>：插件注册了一个坏描述符，之后用户敲 <code>/help</code> 得到「未知命令 /help」，
+      看起来像内核没实现 <code>/help</code>。</p>
+    <p><strong>根因</strong>：<code>match</code> 抛异常时若被当成「没命中」，插件缺陷就伪装成了用户拼错。</p>
+    <p><strong>规避</strong>：内核已经在 <code>dispatch</code> 里把这种情形翻成
+      <code>ERROR</code> + 「命令清单读取失败：…」
+      （<code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/command/CommandManager.java:349-354</code>），
+      并用
+      <code>Jellyfish/jellyfish-infra/src/test/java/zcd/jellyfish/infra/command/CommandManagerTest.java:204-217</code>
+      守住。自己写清单派生逻辑时保持同一口径。</p>
+
+    <div class="conclusion">
+      <h2>关键结论</h2>
+      <ol>
+        <li><code>CommandManager</code> 的全部能力来自「一份注册表的两种读法」：按 <code>CommandRequest</code> + 名字取处理器执行，
+            按 <code>CommandDescriptor</code> 取名字与名片渲染清单。它不注册处理器、不持有会话、不缓存索引，
+            因此 CLI / TUI / Web 能共用，插件热部署立刻可见。</li>
+        <li>命令名即路由键，owner 即插件 id；回收用 <code>removeAllUnder(pluginId, "::")</code> 做<strong>命名空间前缀</strong>匹配，
+            把「插件已停、命令还能用」的幽灵注册一次收干净，并让被它压住的内核实现自动回退。</li>
+        <li>别名与命令名碰撞时<strong>命令名优先且不提示</strong>；两条命令撞同名别名则报
+            <code>ERROR</code> 并列出候选人。这两条规则都有单元测试守着。</li>
+        <li><code>sessionRequired</code> 缺省 <code>true</code>（保守）；声明 <code>false</code> 分两类——
+            本来不碰会话的 6 条与降级的 2 条（<code>/model</code> <code>/agent</code> 改
+            <code>SessionDefaults</code>）。<strong>降级类必须真的做到「无会话也能执行完」</strong>，
+            否则这个标志就是在说谎。</li>
+        <li><code>shouldRunAsCommand</code> 只在「有会话」或「唯一命中且不需要会话」时执行，
+            但<strong>未注册名与语法错误仍返回 <code>true</code></strong>——把「未知」交给命令域回答，
+            比把打错的命令名当提示词发给模型安全得多。</li>
+        <li><code>CommandResult</code> 三态 + 两处结构化例外：候选（<code>CommandChoice</code>）归外壳渲染，
+            接力（<code>handoff</code>）归提交管线消费。<strong>接力是「只声明、不执行」</strong>：
+            命令没获得起回合的能力，接力文本与用户手敲逐字段一致地过改写、指令、权限链。</li>
+      </ol>
+    </div>
+
+    <nav class="pager" aria-label="翻页">
+      <a class="prev" href="16-testing.html"><span class="pager-dir">上一页</span>16 测试体系与构建</a>
+      <a class="next" href="18-tools-io.html"><span class="pager-dir">下一页</span>18 工具系统与输入输出</a>
+    </nav>
+
+  </main>
+</div>
+
+<footer class="footer">
+  Jellyfish 源码深度解析 · 本页源码依据：<code>CommandManager.java</code>、<code>CommandLineParser.java</code>、<code>ParsedCommand.java</code>、<code>CommandInfo.java</code>、<code>CommandDescriptor.java</code>、<code>CommandResult.java</code>、<code>CommandChoice.java</code>、<code>CommandRequest.java</code>、<code>CommandOptionRequest.java</code>、<code>CommandOptions.java</code>、<code>CommandArguments.java</code>、<code>SystemCommands.java</code>、<code>ConversationService.java</code>、<code>ServerCommandGate.java</code>、<code>CommandHandlers.java</code>、<code>CommandResultDto.java</code>、<code>CommandChoicePicker.java</code>、<code>CommandChoicePickerView.java</code>、<code>ShellCommand.java</code>、<code>TuiApp.java</code>、<code>SessionDefaults.java</code>、<code>TypeRegistry.java</code>、<code>PluginContextFactory.java</code>、<code>CommandManagerTest.java</code>、<code>docs/constraints.md</code>。
+</footer>
+
+<!-- 资源按「本地 vendor 优先、CDN 兜底」引用：文件缺失时 assets/app.js 会自动回退到 CDN -->
+<script src="assets/vendor/highlight.min.js"></script>
+<script src="assets/vendor/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

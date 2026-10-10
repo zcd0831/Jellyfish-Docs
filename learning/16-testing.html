@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>16 测试体系与构建 · Jellyfish 源码深度解析</title>
+<meta name="description" content="Jellyfish 的测试与构建：294 个内核测试 + 183 个插件测试、JUnit5/Mockito/JaCoCo 技术栈、实测覆盖率、四个端到端 profile、JellyfishAssemblerTest 的双装配等价性、shade 打包与依赖版本清单。">
+<link rel="stylesheet" href="assets/style.css">
+<!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
+</head>
+<body>
+
+<header class="topbar">
+  <button class="nav-toggle" id="navToggle" aria-label="切换导航" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">🐙 Jellyfish 源码深度解析</a>
+  <div class="topbar-tools">
+    <input id="navSearch" type="search" placeholder="搜索页面…" aria-label="搜索页面">
+  </div>
+</header>
+
+<div class="layout">
+
+  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <div class="sidebar-title">文档目录</div>
+    <ul class="nav-list">
+      <li><a href="index.html">首页 · 总览与导航</a></li>
+    </ul>
+    <div class="nav-group">入门</div>
+    <ul class="nav-list">
+      <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
+      <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
+      <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
+    </ul>
+    <div class="nav-group">内核重点</div>
+    <ul class="nav-list">
+      <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
+      <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
+      <li><a href="06-permissions.html">06 权限与审批系统</a></li>
+      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
+      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+    </ul>
+    <div class="nav-group">外壳与实战</div>
+    <ul class="nav-list">
+      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
+      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
+      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+    </ul>
+    <div class="nav-group">拓展</div>
+    <ul class="nav-list">
+      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
+      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
+      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
+      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
+      <li><a href="16-testing.html" aria-current="page">16 测试体系与构建</a></li>
+    </ul>
+    <div class="nav-group">子系统</div>
+    <ul class="nav-list">
+      <li><a href="17-commands.html">17 命令系统</a></li>
+      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
+      <li><a href="19-config.html">19 配置体系</a></li>
+      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
+    </ul>
+    <div class="nav-group">插件详解</div>
+    <ul class="nav-list">
+      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
+      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
+      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
+      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
+      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
+      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
+      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <nav class="breadcrumb" aria-label="面包屑">
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>16 测试体系与构建</span>
+    </nav>
+
+    <h1>16 测试体系与构建</h1>
+    <p class="page-sub">
+      一个项目「敢不敢改」取决于测试。这一页把 Jellyfish 的测试规模、技术栈、覆盖率、端到端策略与打包方式
+      全部量化——数字都是本次实测的，不是估计。
+    </p>
+
+    <section class="goals">
+      <h2>学习目标</h2>
+      <ul>
+        <li>知道测试与主源码的规模比例，以及哪些模块测得最厚、哪些最薄；</li>
+        <li>说清测试技术栈的三个事实（版本、<strong>没有覆盖率门禁</strong>、<strong>规范提到但未引入 AssertJ</strong>）；</li>
+        <li>理解为什么单测与端到端测试要用四个独立 profile 隔开；</li>
+        <li>读懂 <code>JellyfishAssemblerTest</code>——它是全仓最重要的一个测试，因为它守的是「两套装法等价」；</li>
+        <li>能自己算出一个新模块该写多少测试（对照现有比例）；</li>
+        <li>看懂 fat jar 是怎么拼出来的，以及构建里最脆的一环在哪。</li>
+      </ul>
+    </section>
+
+    <div class="callout warn">
+      <span class="callout-title">数字口径说明</span>
+      <p>
+        本页所有数量（测试类数、主类数、jar 体积）都是本次在工作区用 <code>find</code> / <code>grep -c</code> / <code>ls</code>
+        实测的结果。<strong>覆盖率数字来自各模块 <code>target/site/jacoco/index.html</code></strong>，
+        也就是说它是<strong>上一次构建的快照</strong>，不等于你当前代码的即时覆盖率。
+        重新跑一次 <code>mvn test</code> 再 <code>mvn jacoco:report</code> 才能得到当次结果。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>1. 规模：294 + 183</h2>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>模块</th><th>主源码类</th><th>测试类</th><th>测试/主源</th><th>点评</th></tr></thead>
+        <tbody>
+          <tr><td><code>jellyfish-api</code></td><td>144</td><td><strong>65</strong></td><td>0.45</td><td>契约类也要测——因为快照类型的「唯一可见构造器」等约束靠测试守</td></tr>
+          <tr><td><code>jellyfish-infra</code></td><td>136</td><td><strong>111</strong></td><td>0.82</td><td>测得最厚的一块；配置、会话、权限、插件的复杂逻辑都在这</td></tr>
+          <tr><td><code>jellyfish-core</code></td><td>65</td><td><strong>38</strong></td><td>0.58</td><td>循环与组装逻辑，多数靠 mock 协作方来测</td></tr>
+          <tr><td><code>jellyfish-tui</code></td><td>42</td><td><strong>38</strong></td><td>0.90</td><td>接近 1:1；渲染与投影是有确定输入输出的，可测性好</td></tr>
+          <tr><td><code>jellyfish-server</code></td><td>61</td><td><strong>23</strong></td><td>0.38</td><td>DTO 多、逻辑少，靠一个端到端 IT 补</td></tr>
+          <tr><td><code>jellyfish-di</code></td><td>13</td><td><strong>5</strong></td><td>0.38</td><td>类少但关键——含双装配等价性测试</td></tr>
+          <tr><td><code>jellyfish-cli</code></td><td>14</td><td><strong>14</strong></td><td>1.00</td><td>参数解析边界多，测得正好</td></tr>
+          <tr><td><strong>内核合计</strong></td><td><strong>475</strong></td><td><strong>294</strong></td><td>0.62</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>官方插件仓库（<code>Jellyfish-Plugins</code>）另有 <strong>183</strong> 个测试类，分布如下：</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>插件</th><th>测试类</th><th>插件</th><th>测试类</th><th>插件</th><th>测试类</th></tr></thead>
+        <tbody>
+          <tr><td><code>jellyfish-script</code></td><td>50</td><td><code>jellyfish-tools</code></td><td>16</td><td><code>jellyfish-resmon</code></td><td>12</td></tr>
+          <tr><td><code>jellyfish-todo</code></td><td>21</td><td><code>jellyfish-mcp</code></td><td>16</td><td><code>jellyfish-skills</code></td><td>10</td></tr>
+          <tr><td><code>jellyfish-shell</code></td><td>13</td><td><code>jellyfish-plan</code></td><td>9</td><td><code>jellyfish-project</code></td><td>8</td></tr>
+          <tr><td><code>jellyfish-workflow</code></td><td>7</td><td><code>jellyfish-session-file</code></td><td>7</td><td><code>jellyfish-node</code></td><td>5</td></tr>
+          <tr><td><code>jellyfish-python</code></td><td>5</td><td><code>jellyfish-compact</code></td><td>4</td><td>—</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout design">
+      <span class="callout-title">一个可复用的经验值</span>
+      <p>
+        测试类/主源类 ≈ <strong>0.6</strong>（内核），复杂模块（infra / tui / cli）会到 0.8–1.0。
+        这个比例背后其实是「<strong>一个类至少有一种值得独立验证的行为</strong>」：
+        纯数据类（DTO、事件、枚举）贡献了分母却不产生测试，所以被动测（DTO）多的模块比例天然低
+        （server 只有 0.38，正是因为它有 33 个 DTO）。
+      </p>
+      <p>
+        反过来说：<strong>看到某个模块比例异常低，先看它是不是 DTO 多，再看是不是漏测</strong>。
+        直接拿比例当质量指标会误判。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>2. 技术栈：三个必须知道的事实</h2>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>项</th><th>版本 / 坐标</th><th>声明位置</th></tr></thead>
+        <tbody>
+          <tr><td>JUnit</td><td><code>5.10.2</code>（<code>org.junit:junit-bom</code> import）</td><td><code>pom.xml:104</code>（属性）、<code>:220-222</code>（import）</td></tr>
+          <tr><td>Mockito</td><td><code>4.11.0</code>（<code>org.mockito:mockito-bom</code> import）</td><td><code>pom.xml:105</code>、<code>:227-229</code></td></tr>
+          <tr><td>JaCoCo</td><td><code>0.8.12</code></td><td><code>pom.xml:108</code>、<code>:268-270</code></td></tr>
+          <tr><td>surefire</td><td><strong>未声明版本</strong>，随 Maven 父 POM</td><td>仅 <code>jellyfish-cli/pom.xml:147, 151</code> 覆写 include</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>事实一：JaCoCo 没有覆盖率门禁</h3>
+
+    <div class="src-block">Jellyfish/pom.xml:273-294</div>
+
+<pre><code class="language-xml">&lt;!-- 排除生成代码：Dagger 的产物不该算进覆盖率分母 --&gt;
+&lt;excludes&gt;
+  &lt;exclude&gt;**/Dagger*&lt;/exclude&gt;
+  &lt;exclude&gt;**/*_Factory.*&lt;/exclude&gt;
+  &lt;exclude&gt;**/*_MembersInjector.*&lt;/exclude&gt;
+  &lt;exclude&gt;**/package-info.*&lt;/exclude&gt;
+&lt;/excludes&gt;
+&lt;!-- :283-286 prepare-agent / :290-294 report（绑 test 阶段） --&gt;</code></pre>
+
+    <p>
+      <strong>只有 <code>prepare-agent</code> 与 <code>report</code> 两个 goal，没有 <code>check</code></strong>。
+      也就是说：覆盖率会被<strong>计算并生成报告</strong>，但<strong>不设阈值、不会让构建失败</strong>。
+    </p>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：没有门禁是疏漏还是选择？</span>
+      <p>
+        从 <code>AGENTS.md</code> 的规范看（下面第 6 节），它的单元测试纪律写得相当细——所以「没有门禁」
+        更像是<strong>刻意不设</strong>而不是忘了。理由通常有两个：
+      </p>
+      <ul>
+        <li><strong>覆盖率门禁会制造坏激励。</strong>一旦设了 80%，最省事的达法就是给 getter 写无意义断言。
+            对「契约类多」的项目（api 144 个类）尤其容易跑偏。</li>
+        <li><strong>它用另一种门禁替代了覆盖率</strong>：<strong>不变量清单</strong>（<code>AGENTS.md</code> 的「关键不变量」一节，
+            12 条）+ 强制双跑的 <code>JellyfishAssemblerTest</code>。这比一个百分比更贴近「改坏了会静默出错」的地方。</li>
+      </ul>
+      <p>
+        代价也很实在：<strong>贡献者无法靠「跑一下」发现漏测</strong>，只能靠评审。
+        如果你要在自己的分支上加门禁，建议按模块设差异化的阈值（api 可以低、infra 应该高）。
+      </p>
+    </div>
+
+    <h3>事实二：规范提到 AssertJ，但全仓没有这个依赖</h3>
+
+    <p>
+      <code>AGENTS.md</code> 的测试规范里写着「断言用 JUnit5 <code>Assertions</code> <strong>或 AssertJ</strong>，异常用 <code>assertThrows</code>」。
+      但全仓搜 <code>assertj</code> 只命中规范正文本身，<strong>没有任何 pom 声明这个依赖</strong>。
+    </p>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：照着规范写会编译失败</span>
+      <p>
+        如果你看到那条规范就去写 <code>assertThat(x).isEqualTo(y)</code>，会得到一个「找不到符号」的编译错误——
+        因为既没引入 <code>assertj-core</code> 依赖，也没 import。
+      </p>
+      <p>
+        <strong>实际可用的只有 JUnit5 的 <code>Assertions</code></strong>（<code>assertEquals</code> / <code>assertTrue</code> /
+        <code>assertThrows</code> 等）。想用 AssertJ 得先加依赖——但那属于改构建配置，按 <code>AGENTS.md</code> 要先跟维护者确认。
+        这属于「规范与依赖不一致」的文档缺陷，本页如实记录。
+      </p>
+    </div>
+
+    <h3>事实三：TamboUI 是 SNAPSHOT 依赖</h3>
+
+    <p>
+      <code>dev.tamboui:tamboui-bom 0.5.0-SNAPSHOT</code>（<code>pom.xml:142-144</code>，import 方式），
+      实际构件 <code>tamboui-toolkit</code> / <code>tamboui-jline3-backend</code> 不带版本（<code>jellyfish-tui/pom.xml:38-49</code>）。
+    </p>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：SNAPSHOT 依赖会让「同一个 commit 构建出不同结果」</span>
+      <p>
+        <code>SNAPSHOT</code> 意味着该版本的内容<strong>可以被远程仓库覆盖</strong>。
+        所以两个人在同一份代码上跑 <code>mvn package</code>，可能拿到行为不同的 TUI 实现；
+        而 <code>mvn -o</code>（离线）在本地没有该快照时会直接失败。
+      </p>
+      <p>
+        这是本页所有事实里<strong>对构建可复现性影响最大的一条</strong>。要做生产构建，
+        建议先把该快照落到本地仓库并固定，或等它发正式版。
+        另外 <code>jellyfish-tui/pom.xml:48-55</code> 排除了 TamboUI 传递来的 <code>jline 3.25.1</code>，
+        自己显式声明 <code>jline 3.30.17</code>（<code>:58-60</code>）——这种「排除传递版本、自己钉一个」的做法值得学，
+        因为它把版本冲突的处理显式化了。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>3. 覆盖率实测</h2>
+
+    <p>下面两张表读的是各模块 <code>target/site/jacoco/index.html</code> 的 Total 行（指令 / 分支）：</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>内核模块</th><th>指令覆盖</th><th>分支覆盖</th><th>备注</th></tr></thead>
+        <tbody>
+          <tr><td><code>jellyfish-di</code></td><td><strong>92%</strong></td><td><strong>50%</strong></td><td>指令极高但分支仅一半——因为装配代码大量是「直线式构造」，分支少而断言覆盖到即使其占比低</td></tr>
+          <tr><td><code>jellyfish-infra</code></td><td><strong>92%</strong></td><td>83%</td><td>量与质都最好的一块</td></tr>
+          <tr><td><code>jellyfish-cli</code></td><td>90%</td><td>86%</td><td>参数解析的边界覆盖得好</td></tr>
+          <tr><td><code>jellyfish-core</code></td><td>89%</td><td>80%</td><td>—</td></tr>
+          <tr><td><code>jellyfish-server</code></td><td>81%</td><td>79%</td><td>DTO 拉高了分母</td></tr>
+          <tr><td><code>jellyfish-tui</code></td><td>78%</td><td>69%</td><td>渲染分支多，属于合理范围</td></tr>
+          <tr><td><code>jellyfish-api</code></td><td><strong>66%</strong></td><td>66%</td><td>契约类型多、可执行逻辑少；低在这里相对无害</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      插件侧整体更高：<code>node</code> 98%、<code>plan</code> 96%、<code>project</code> 93%、
+      <code>resmon</code> / <code>todo</code> / <code>workflow</code> 92%、<code>python</code> 91%、
+      <code>skills</code> 89%、<code>shell</code> 88%、<code>tools</code> 87%、<code>compact</code> 85%、
+      <code>script</code> 84%、<code>mcp</code> 82%、<code>session-file</code> 80%（分支 72–100%）。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>4. 单测与端到端：四个 profile</h2>
+
+    <p>
+      <code>mvn test</code> <strong>不会</strong>跑任何端到端测试。端到端被收在四个独立 profile 里，
+      靠 surefire 的 include 模式隔离：
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>profile</th><th>在哪</th><th>跑什么</th><th>依赖什么真实资源</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>server-it</code></td>
+            <td><code>jellyfish-cli/pom.xml:142</code>（<code>&lt;id&gt;server-it&lt;/id&gt;</code>；surefire 在 <code>:147</code>，include 在 <code>:149</code>）</td>
+            <td><code>ServerEndToEndIT</code>（308 行，2 个测试）</td>
+            <td><strong>真 Undertow + 真内核</strong>（Dagger 装配），走本机回环，<strong>端口用 0 让系统分配</strong></td>
+          </tr>
+          <tr>
+            <td><code>shell-it</code></td>
+            <td><code>jellyfish-plugin-shell/pom.xml:116</code></td>
+            <td><code>ShellIT</code></td>
+            <td>真的 <code>/bin/sh</code></td>
+          </tr>
+          <tr>
+            <td><code>mcp-it</code></td>
+            <td><code>jellyfish-plugin-mcp/pom.xml:118</code></td>
+            <td><code>McpStdioTransportIT</code></td>
+            <td>真 fork 一个 echo server</td>
+          </tr>
+          <tr>
+            <td><code>script-it</code></td>
+            <td><code>jellyfish-plugin-python/pom.xml:126</code>、<code>jellyfish-plugin-node/pom.xml:127</code></td>
+            <td><code>PythonScriptIT</code> / <code>NodeScriptIT</code></td>
+            <td>真的 <code>python3</code> / <code>node</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      <code>Jellyfish-Plugins/AGENTS.md:26-28</code> 说明了这三个插件 profile 的性质，
+      <code>:46</code> 明确<strong>「<code>mvn test</code> / <code>package</code> 不跑 <code>*IT</code>」</strong>。
+    </p>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：为什么端到端不进默认构建？</span>
+      <p>
+        因为它们<strong>依赖真实外部资源</strong>：真实 shell、真实 python3/node、真实端口、真 fork 子进程。
+        而 <code>AGENTS.md</code> 的测试规范里有两条硬要求——<strong>「测试独立、可重复、无外部依赖」</strong>
+        与<strong>「单测不访问数据库、网络等真实外部资源」</strong>。
+      </p>
+      <p>
+        于是一个测试<strong>要么</strong>无外部依赖（进默认 <code>mvn test</code>）<strong>要么</strong>有（进 <code>-P&lt;x&gt;-it</code>），
+        两者不能混。这个划分让「日常开发跑得动、发布前单独验」两件事都成立。
+        相比之下把端到端塞进默认构建，最常见的后果是开发者开始习惯性加 <code>-DskipTests</code>——
+        那时连单测也不跑了，得不偿失。
+      </p>
+    </div>
+
+    <p>
+      <code>ServerEndToEndIT</code> 的类注释（<code>:26-37</code>）还解释了一个设计：它放在
+      <code>jellyfish-cli</code> 而不是 <code>jellyfish-server</code>，<strong>因为只有这里有 composition root</strong>
+      （能装配出完整内核）。两个测试方法的名字本身就是验收标准：
+      <code>server_should_expose_sessions_commands_health_and_stream_over_http</code> 与
+      <code>server_should_require_api_key_when_configured</code>。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>5. 最重要的一个测试：<code>JellyfishAssemblerTest</code></h2>
+
+    <p>
+      <code>jellyfish-di/src/test/java/zcd/jellyfish/di/JellyfishAssemblerTest.java</code>（283 行，9 个测试）。
+      它存在的唯一理由，是守住 <a href="03-architecture.html">03 页</a>讲过的那条约束：
+      <strong>两种装法必须交付行为等价的对象图。</strong>
+    </p>
+
+    <div class="src-block">JellyfishAssemblerTest.java:37-50（类注释）与 :245-255（双跑机制）</div>
+
+<pre><code class="language-java">// 类注释 :37-50 的要点（原文摘意）：
+//   测手工装配（JellyfishAssembler）与 Dagger 装配（JellyfishComponent）的「行为等价性」，
+//   防「本该唯一的实例被建第二份」；用行为断言，而不是比较对象引用。
+
+// 实现思路（:245 起）：把两种装配放进同一个列表，然后逐一遍历断言
+private void forEachRuntime(Consumer&lt;JellyfishRuntime&gt; assertion) {
+    List&lt;JellyfishRuntime&gt; runtimes = Arrays.asList(
+            DaggerJellyfishComponent.builder().appConfig(appConfig).build(),
+            JellyfishAssembler.create(appConfig));
+    for (JellyfishRuntime runtime : runtimes) {
+        assertion.accept(runtime);   // :249-255  同一段断言，对两种装配各跑一遍
+    }
+}</code></pre>
+
+    <ul>
+      <li><strong>断言写在回调里、由 <code>forEachRuntime</code> 双跑</strong>——这是「一处断言、两种实现」的最省写法。
+          新增一个断言不需要写两遍，也就不会出现「只在一种装配上验过」的漏洞。</li>
+      <li><strong>用行为断言而不是引用比较</strong>：因为它的目标是「两个 runtime 的行为一样」，
+          而不是「两个 runtime 内部是同一个对象」。后者其实是实现细节——
+          虽然「同一实例」约束（如 <code>EventPublisher</code> 必须是那个 <code>EventChannel</code>）
+          确实可以靠引用比较表达，但作者选择验证可观察行为，这样重构内部结构时测试不会失效。</li>
+      <li><strong>它守的是「静默故障」</strong>：<a href="03-architecture.html">03 页</a>讲过，
+          漏一行 <code>EventPublisher publisher = eventChannel;</code> 的后果是「配置告警发进没人订阅的通道」——
+          <strong>没有任何异常，只是什么都不会发生</strong>。这类 bug 只能靠专门的测试抓。</li>
+    </ul>
+
+    <div class="callout tip">
+      <span class="callout-title">可复用的做法：为「两套实现」写一个双跑 harness</span>
+      <p>
+        凡是同一契约有多个实现的场景（多厂商客户端、两种装配、新旧算法），都可以照这个模式：
+        <strong>把实现放进一个集合 + 一条断言双跑</strong>。它比「写两份测试」更不容易漏，
+        也比「运行时二选一」更能发现差异。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>6. 测试规范（原文）</h2>
+
+    <p>以下逐字引自 <code>Jellyfish/AGENTS.md:113-123</code>，这是写测试前该对齐的唯一标准：</p>
+
+    <div class="src-block">Jellyfish/AGENTS.md:113-123</div>
+
+    <pre><code class="language-text">## 单元测试规范
+
+- JUnit5 + Mockito，JaCoCo 收集覆盖率。
+- 测试类包路径与被测类一致；命名 `{被测试类名}Test`。
+- 方法名 `{被测试方法}_should_{预期结果}_when_{条件}`；一个方法只验一个行为；测试独立、可重复、无外部依赖。
+- 结构遵循 Given/When/Then 或 Arrange/Act/Assert。
+- 只 mock 外部依赖或协作者，不 mock 被测类、POJO、DTO。
+- 用 `@ExtendWith(MockitoExtension.class)`，统一 JUnit5 API，不混用 JUnit4。
+- 断言用 JUnit5 `Assertions` 或 AssertJ，异常用 `assertThrows`。
+- 多组输入用 `@ParameterizedTest`，覆盖正常、边界、异常场景。
+- 单测不启动 Spring 容器，不访问数据库、网络等真实外部资源。</code></pre>
+
+    <p>
+      这套规范的辨识度很高，三个点值得单独看：
+    </p>
+
+    <ul>
+      <li><strong>方法名模板带条件后缀</strong>（<code>..._should_..._when_...</code>）：好处是测试名本身长成一个句子，
+          失败时报告直接可读（<code>decide_should_deny_when_no_approver</code>）。
+          这比 <code>testDecide2()</code> 的信息密度高得多，也是 <code>ShellIT</code> 命名（
+          <code>server_should_require_api_key_when_configured</code>）的来源。</li>
+      <li><strong>「不 mock 被测类、POJO、DTO」</strong>：mock DTO 会让断言变成「我 mock 的东西等于我 mock 的东西」，
+          测不出任何东西。这条规范把常见的「为了凑覆盖率而 mock」堵掉了。</li>
+      <li><strong>「不启动 Spring 容器」</strong>：这条在 <code>Jellyfish-Spring-Boot-Starter</code> 存在的前提下尤其重要——
+          内核的测试不该依赖 Spring，否则内核就被间接绑上了 Spring 的启动开销与配置。</li>
+    </ul>
+
+    <!-- ============================================================ -->
+    <h2>7. 构建与产物</h2>
+
+    <h3>fat jar 怎么拼出来</h3>
+
+    <div class="src-block">Jellyfish/jellyfish-cli/pom.xml:100-124（shade 配置要点）</div>
+
+<pre><code class="language-xml">&lt;createDependencyReducedPom&gt;true&lt;/createDependencyReducedPom&gt;   &lt;!-- :100 --&gt;
+&lt;transformer implementation="...ManifestResourceTransformer"&gt;   &lt;!-- :104 --&gt;
+  &lt;mainClass&gt;zcd.jellyfish.cli.JellyfishApplication&lt;/mainClass&gt; &lt;!-- :105 --&gt;
+  ...
+  &lt;manifestEntries&gt;
+    &lt;Implementation-Version&gt;...&lt;/Implementation-Version&gt;       &lt;!-- :109 版本号写进 manifest --&gt;
+&lt;transformer implementation="...ServicesResourceTransformer"/&gt;     &lt;!-- :113 合并 META-INF/services --&gt;
+&lt;filters&gt;
+  &lt;filter&gt;&lt;excludes&gt;
+    &lt;exclude&gt;META-INF/*.SF&lt;/exclude&gt;&lt;exclude&gt;META-INF/*.DSA&lt;/exclude&gt;&lt;exclude&gt;META-INF/*.RSA&lt;/exclude&gt;
+  &lt;/excludes&gt;&lt;/filter&gt;                                              &lt;!-- :116-124 去掉签名文件 --&gt;</code></pre>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>配置</th><th>为什么必须有</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>ServicesResourceTransformer</code></td>
+            <td><strong>合并 <code>META-INF/services/</code> 而不是覆盖</strong>。PF4J、Jackson、SLF4J 都靠 SPI 文件发现实现；
+                如果 shade 只保留其中一个 jar 的 <code>services</code> 目录，运行时会「少掉一些实现」且没有报错</td>
+          </tr>
+          <tr>
+            <td>排除 <code>*.SF</code> / <code>*.DSA</code> / <code>*.RSA</code></td>
+            <td>依赖 jar 的签名文件在合并后会失效，留着会让 JVM 抛 <code>SecurityException</code>（签名不匹配）</td>
+          </tr>
+          <tr>
+            <td><code>ManifestResourceTransformer</code> + <code>Implementation-Version</code></td>
+            <td>让 fat jar 的 manifest 带回版本号，<code>-V</code> / <code>--version</code> 与日志才能报出正确版本
+                （否则合并后 manifest 的版本信息会丢失或错乱）</td>
+          </tr>
+          <tr>
+            <td><code>createDependencyReducedPom</code></td>
+            <td>生成一份「去掉已打进去的依赖」的 POM，避免下游引用时重复拉依赖</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>产物体积</h3>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>模块</th><th>jar</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td><code>jellyfish-cli</code></td><td><strong>16,400,210 B（≈15.6 MiB）</strong></td><td>fat jar，三种模式的唯一起点；另有 <code>original-</code> 50,462 B 的瘦 jar</td></tr>
+          <tr><td><code>jellyfish-infra</code></td><td>403,657 B</td><td>最大的普通模块 jar</td></tr>
+          <tr><td><code>jellyfish-core</code></td><td>257,920 B</td><td>—</td></tr>
+          <tr><td><code>jellyfish-api</code></td><td>173,321 B</td><td>插件作者依赖的就是它</td></tr>
+          <tr><td><code>jellyfish-tui</code></td><td>158,970 B</td><td>不含 TamboUI 本体（那在 fat jar 里）</td></tr>
+          <tr><td><code>jellyfish-server</code></td><td>92,105 B</td><td>不含 Undertow</td></tr>
+          <tr><td><code>jellyfish-di</code></td><td>58,495 B</td><td>最小——它只装配，不带资源</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      16 MB 的构成主要是第三方库：Undertow、OkHttp、Jackson、Log4j2、PF4J、TamboUI + JLine、CommonMark、
+      Dagger 生成代码。这也是 <a href="01-overview.html">01 页</a>说的「桌面级 Java 应用正常体量」。
+    </p>
+
+    <h3>依赖版本清单</h3>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>坐标</th><th>版本</th><th>声明行</th><th>用途</th></tr></thead>
+        <tbody>
+          <tr><td><code>com.google.dagger:dagger</code></td><td>2.16</td><td><code>pom.xml:128-130</code></td><td>编译期 DI，生成 <code>Dagger*</code></td></tr>
+          <tr><td><code>javax.inject:javax.inject</code></td><td>1</td><td><code>:135-137</code></td><td><code>@Inject</code> 注解</td></tr>
+          <tr><td><code>dev.tamboui:tamboui-bom</code></td><td><strong>0.5.0-SNAPSHOT</strong></td><td><code>:142-144</code></td><td>TUI 框架（见第 2 节的事实三）</td></tr>
+          <tr><td><code>io.undertow:undertow-core</code></td><td>2.2.40.Final</td><td><code>:151-153</code></td><td>HTTP 服务与 SSE</td></tr>
+          <tr><td><code>com.squareup.okhttp3:okhttp</code></td><td>4.12.0</td><td><code>:158-160</code></td><td>模型调用与插件传输的 HTTP 客户端</td></tr>
+          <tr><td><code>com.fasterxml.jackson.core:jackson-databind</code></td><td>2.21.6</td><td><code>:165-167</code></td><td>JSON（统一经 <code>ObjectMapperWrapper</code>）</td></tr>
+          <tr><td><code>org.pf4j:pf4j</code></td><td>3.14.1</td><td><code>:172-174</code></td><td>插件框架</td></tr>
+          <tr><td><code>org.slf4j:slf4j-api</code></td><td>1.7.36</td><td><code>:179-181</code></td><td>日志门面</td></tr>
+          <tr><td><code>org.apache.logging.log4j:*</code></td><td>2.25.4</td><td><code>:184-191</code></td><td>日志实现（含 <code>log4j-slf4j-impl</code>）</td></tr>
+          <tr><td><code>org.apache.commons:commons-lang3</code></td><td>3.18.0</td><td><code>:196-198</code></td><td>字符串工具</td></tr>
+          <tr><td><code>org.commonmark:commonmark</code> + <code>-ext-gfm-tables</code> + <code>-ext-gfm-strikethrough</code></td><td>0.21.0</td><td><code>:203-215</code></td><td>TUI 的 markdown 渲染（见 <a href="09-tui.html">09 页</a>）</td></tr>
+          <tr><td><code>org.jline:jline</code></td><td>3.30.17</td><td><code>jellyfish-tui/pom.xml:58-60</code></td><td>终端行编辑（显式覆盖 TamboUI 传递的 3.25.1，<code>:48-55</code> 排除）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>8. 本页坑点小结</h2>
+
+    <div class="callout pitfall">
+      <span class="callout-title">测试与构建的坑</span>
+      <ul>
+        <li><strong>没有覆盖率门禁</strong>：漏测不会被构建拦住，只能靠评审。别以为 <code>mvn test</code> 绿了就安全。</li>
+        <li><strong>规范说可以用 AssertJ，但仓库没有这个依赖</strong>：照抄规范会编译失败，只能用 JUnit5 的 <code>Assertions</code>。</li>
+        <li><strong>覆盖率数字要看构建时间</strong>：<code>target/site/jacoco/</code> 是上一次构建的快照，改了代码不会自动更新。</li>
+        <li><strong>TamboUI 是 <code>0.5.0-SNAPSHOT</code></strong>：同一 commit 可能构建出不同结果；<code>mvn -o</code> 在本地无该快照时直接失败。
+            这是构建可复现性上最脆的一环。</li>
+        <li><strong><code>mvn test</code> 不跑任何端到端</strong>：要跑得加 <code>-Pserver-it</code> / <code>-Pshell-it</code> /
+            <code>-Pmcp-it</code> / <code>-Pscript-it</code>，且它们需要真实的 shell、python3、node、端口与子进程能力。</li>
+        <li><strong><code>ServicesResourceTransformer</code> 不能省</strong>：少了它，SPI 文件会被覆盖而不是合并，
+            现象是「插件/实现莫名少了几个」且无报错。</li>
+        <li><strong>签名文件必须排除</strong>：不排会让运行时抛 <code>SecurityException</code>。</li>
+        <li><strong><code>server-it</code> 用端口 0</strong>（系统分配）正是为了「可重复、不抢端口」——
+            自己写端到端测试时照这个来。</li>
+        <li><strong>Dagger 生成物被排除在覆盖率之外</strong>：所以 <code>di</code> 的 92% 指的是「人写的装配代码」，
+            不要把它与别的模块的原始数字直接对比。</li>
+      </ul>
+    </div>
+
+    <div class="conclusion">
+      <h2>关键结论</h2>
+      <ol>
+        <li>测试规模是<strong>内核 294 类测 475 个主类（≈0.62）</strong>，插件另有 183 个；
+            <code>infra</code> 与 <code>tui</code> 测得最厚，<code>server</code>（DTO 多）比例最低但合理。</li>
+        <li>技术栈是 <strong>JUnit5 5.10.2 + Mockito 4.11.0 + JaCoCo 0.8.12</strong>；
+            <strong>没有覆盖率门禁、没有 AssertJ 依赖</strong>——前者是选择，后者是文档与依赖的不一致。</li>
+        <li>端到端被刻意隔离在四个 profile 里，判据是「是否需要真实外部资源」。
+            这条分界线让 <code>mvn test</code> 永远可重复，也让端到端测试能放心用真环境。</li>
+        <li><code>JellyfishAssemblerTest</code> 是这套测试体系里最有代表性的一环：
+            它不为覆盖率存在，只为守住「两套装法行为等价」这条<strong>错了不会报错的约束</strong>。
+            它示范的「一份断言双跑多种实现」值得直接搬去别处用。</li>
+        <li>构建上最值得警惕的是 <strong>TamboUI 的 SNAPSHOT 依赖</strong>；
+            除此之外 shade 的四个配置项（合并 services、排签名、写版本、减依赖 POM）每一项都对应一个具体故障，不可省。</li>
+      </ol>
+    </div>
+
+    <nav class="pager" aria-label="翻页">
+      <a class="prev" href="15-observability.html"><span class="pager-dir">上一页</span>15 可观测性与运行观测</a>
+      <a class="next" href="17-commands.html"><span class="pager-dir">下一页</span>17 命令系统</a>
+    </nav>
+
+  </main>
+</div>
+
+<footer class="footer">
+  Jellyfish 源码深度解析 · 本页源码依据：<code>pom.xml</code>（根与各模块）、<code>JellyfishAssemblerTest.java</code>、
+  <code>ServerEndToEndIT.java</code>、<code>AGENTS.md</code>（测试规范）、各模块 <code>target/site/jacoco/index.html</code>（覆盖率快照）。
+  数量与体积均为本次实测。
+</footer>
+
+<!-- 资源按「本地 vendor 优先、CDN 兜底」引用：文件缺失时 assets/app.js 会自动回退到 CDN -->
+<script src="assets/vendor/highlight.min.js"></script>
+<script src="assets/vendor/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

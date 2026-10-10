@@ -1,0 +1,2032 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>27 跨语言脚本插件 · Jellyfish 源码深度解析</title>
+<meta name="description" content="用 Python / Node 写 Jellyfish 插件的完整机制：三层架构与进程边界、一行一个 JSON 的线协议、24 个扩展点编解码器、静态清单驱动的注册、事件回传、熔断与孤儿回收，以及为什么选子进程而不是嵌 JS 引擎。">
+<link rel="stylesheet" href="assets/style.css">
+<!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
+</head>
+<body>
+
+<header class="topbar">
+  <button class="nav-toggle" id="navToggle" aria-label="切换导航" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">🐙 Jellyfish 源码深度解析</a>
+  <div class="topbar-tools">
+    <input id="navSearch" type="search" placeholder="搜索页面…" aria-label="搜索页面">
+  </div>
+</header>
+
+<div class="layout">
+
+  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <div class="sidebar-title">文档目录</div>
+    <ul class="nav-list">
+      <li><a href="index.html">首页 · 总览与导航</a></li>
+    </ul>
+    <div class="nav-group">入门</div>
+    <ul class="nav-list">
+      <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
+      <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
+      <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
+    </ul>
+    <div class="nav-group">内核重点</div>
+    <ul class="nav-list">
+      <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
+      <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
+      <li><a href="06-permissions.html">06 权限与审批系统</a></li>
+      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
+      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+    </ul>
+    <div class="nav-group">外壳与实战</div>
+    <ul class="nav-list">
+      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
+      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
+      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+    </ul>
+    <div class="nav-group">拓展</div>
+    <ul class="nav-list">
+      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
+      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
+      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
+      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
+      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+    </ul>
+    <div class="nav-group">子系统</div>
+    <ul class="nav-list">
+      <li><a href="17-commands.html">17 命令系统</a></li>
+      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
+      <li><a href="19-config.html">19 配置体系</a></li>
+      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
+    </ul>
+    <div class="nav-group">插件详解</div>
+    <ul class="nav-list">
+      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
+      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
+      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
+      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
+      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
+      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
+      <li><a href="27-plugin-script.html" aria-current="page">27 跨语言脚本插件</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <nav class="breadcrumb" aria-label="面包屑">
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>27 跨语言脚本插件</span>
+    </nav>
+
+    <h1>27 跨语言脚本插件</h1>
+    <p class="page-sub">
+      让 Python / Node 写的插件在内核眼里与 Java 插件同构：这是全项目里跨语言程度最高、也最容易被误解的一块。
+      本页按源码把「三层架构 → 进程模型 → 线协议 → 扩展点编解码 → 声明式注册 → 事件 → 熔断」读一遍，
+      并说清每一个设计取舍的代价。
+    </p>
+
+    <section class="goals">
+      <h2>学习目标</h2>
+      <ul>
+        <li>说清脚本插件要解决的核心矛盾——扩展点是 Java 接口，而脚本语言不认识它们——以及三层架构怎么把它拆开；</li>
+        <li>拿到进程模型的确切事实：谁是谁的父进程、worker 怎么起、PID 文件管什么、僵尸与孤儿分别靠什么兜住；</li>
+        <li>解释线协议的帧格式与那条「宿主单行上限必须严格大于脚本出帧上限」的硬关系，以及违反它的现场表现；</li>
+        <li>理解 24 个扩展点编解码器的组织方式、类型映射规则与「热路径点」这一执行策略；</li>
+        <li>知道注册为什么只依赖静态清单，以及 <code>dump_manifest</code> 与严格校验怎样把清单漂移变成启动期错误；</li>
+        <li>说清熔断、台账、超时与取消这一层稳定性设计各自拒绝计入什么，以及为什么拒绝计入比计入更难；</li>
+        <li>判断「加一门新语言」的真实成本，并理解为什么选「子进程 + 线协议」而不是嵌 JS 引擎或 JNI。</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================ -->
+    <h2>1. 问题与边界：扩展点在 Java 里，脚本在进程外</h2>
+
+    <p>
+      内核的扩展边界由三条硬性质定义，全部发生在 JVM 内：插件身份（注册表的 <code>owner</code>）来自 PF4J 描述符；
+      注册只能在插件存活期内发生（<code>stop()</code> 之后一切注册当场失败）；能力只能从 <code>PluginContext</code>
+      的几个方法拿到。脚本进程是 JVM 外的东西，既没有 PF4J 身份，也拿不到 <code>PluginContext</code>——那是 JVM 对象，
+      跨不过进程边界。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/ScriptBridgePlugin.java:26-45（类注释：为什么必须有一个 JVM 内的代理人）</div>
+
+    <p>
+      于是矛盾变成这样一句话：<strong>扩展点是 Java 接口，而脚本语言不认识它们</strong>。
+      桥接方案必须同时满足两个看起来冲突的要求——内核侧完全不知道有脚本这回事（脚本与 Java 插件同构），
+      脚本侧完全不需要写 Java（用户在 <code>scripts/python/&lt;id&gt;/</code> 下放一个目录就能变成插件）。
+      解法是引入一个 JVM 内的代理人：它在 <code>start()</code> 里替脚本调用
+      <code>handle</code> / <code>contribute</code> / <code>observe</code> / <code>emit</code>，
+      而处理器背后不是本地代码，是一次进程往返。
+    </p>
+
+    <h3>能力边界：是一份「能力档」，不是全部扩展点</h3>
+
+    <p>
+      脚本<b>不是</b>「与 Java 插件同权」。具体支持哪些扩展点写在
+      <code>jellyfish-script</code> 的资源里，且被单测守着：内核新增扩展点而没有在这里分档，构建会失败。
+      三段语义不同，不能合并——<code>in</code> 是已打通，<code>planned</code> 是已决定要做但还没做，
+      <code>excluded</code> 是明确不做。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/resources/script/extension-points.json:1-8（能力档头部与已打通段的前四项）</div>
+
+<pre><code class="language-json">{
+  "_comment": "脚本桥接的扩展点能力档：这是「脚本能用哪些扩展点」的唯一真源。三段的语义不同，不要合并——'in' 是已打通，'planned' 是已决定要做但还没做，'excluded' 是明确不做。内核新增扩展点时，ExtensionPointCoverageTest 会因为「有扩展点没被分类」而失败，逼迫在这里做一次决策。'args' / 'shape' 是两种语言各自的实参构造与结果整形函数的键名（见 jellyfish_sdk.py / jellyfish_sdk.js 的 ARGS / SHAPES 表）。'hotPath: true' 表示「每次组装请求都会被问到」的点：桥接层不为其冷启动、并给 2 秒短截止（见 HotPathPoints）。",
+
+  "in": [
+    { "class": "ToolCallRequest",              "type": "tool",                "routeKey": true,  "args": "tool",                "shape": "tool" },
+    { "class": "CommandRequest",               "type": "command",             "routeKey": true,  "args": "command",             "shape": "command" }
+  ],
+</code></pre>
+
+    <p>
+      （本页为篇幅计只贴出前两项，源码里 <code>in</code> 段共 24 项，与 <code>ExtensionCodecs</code> 里注册的 24 个
+      编解码器一一对应。逐项的 <code>args</code> / <code>shape</code> 见第 6 节的表。）
+    </p>
+
+    <p>
+      四条被明确排除的扩展点，理由都很具体，值得逐条读——它们划出的正是「跨进程调用做不到什么」：
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>被排除的扩展点</th><th>不做的理由（能力档原文要旨）</th></tr></thead>
+        <tbody>
+          <tr><td><code>ProviderRegistrationRequest</code></td><td>结构上做不到：它要返回一个 <code>LlmTransport</code> Java 对象（带流式回调），不是数据载荷——过不了 JSON 这道门。</td></tr>
+          <tr><td><code>ToolRenderHintRequest</code></td><td>渲染线程内联执行，注释明确「渲染线程一卡，整个界面都不动」；脚本一次进程往返（含冷启动）不可接受。</td></tr>
+          <tr><td><code>InputReferenceRequest</code></td><td>输入框补全，慢实现会直接卡住整个界面；理由同 <code>ToolRenderHint</code>。</td></tr>
+          <tr><td><code>ShortcutContributionRequest</code></td><td>外壳收集键位表是启动期动作，与「<code>start()</code> 期零进程」的纪律直接冲突。</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：能力档为什么硬编码在仓库里，而不做成插件可声明的配置？</span>
+      <p>
+        这份档案是「脚本能用哪些扩展点」<strong>唯一</strong>的真源，同时被三处需要：注册时按清单声明的扩展点找 codec、
+        清单校验时判断 <code>contributions</code> 取值是否合法、调用路由时解析 <code>invoke</code> 的
+        <code>params.type</code>。三处各写一份名单，迟早出现「清单里能声明、调用时找不到」这种静默失效。
+        配套的守卫是 <code>ExtensionPointCoverageTest</code>：内核新加一个扩展点而没人给它分档，测试直接失败——
+        把「决策」变成了不得不做的一件事，而不是可选项。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>2. 三层架构与进程边界</h2>
+
+    <p>
+      三种角色的代码规模差了两个数量级，这本身就是设计结论：语言侧只提供「语言适配」，机制全在桥接侧。
+      扫一遍目录能直接看出分工（数字为本页实测的文件数）：
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>层</th><th>模块</th><th>Java 侧</th><th>脚本侧资源</th><th>职责</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>语言侧</td>
+            <td><code>jellyfish-plugin-python</code></td>
+            <td>2 个类：<code>PythonBridgePlugin.java</code>（2164 字节）、<code>PythonLanguage.java</code>（6768 字节）</td>
+            <td>5 个文件：<code>gateway.py</code> / <code>worker.py</code> / <code>script_wire.py</code> / <code>jellyfish_sdk.py</code> / <code>dump_manifest.py</code></td>
+            <td>只回答「Python 怎么被宿主」</td>
+          </tr>
+          <tr>
+            <td>语言侧</td>
+            <td><code>jellyfish-plugin-node</code></td>
+            <td>2 个类：<code>NodeBridgePlugin.java</code>（2354 字节）、<code>NodeLanguage.java</code>（7116 字节）</td>
+            <td>5 个文件：<code>gateway.js</code> / <code>worker.js</code> / <code>script_wire.js</code> / <code>jellyfish_sdk.js</code> / <code>dump_manifest.js</code></td>
+            <td>与 Python 同构，零第三方依赖</td>
+          </tr>
+          <tr>
+            <td>桥接侧</td>
+            <td><code>jellyfish-script</code></td>
+            <td>68 个 <code>.java</code>：顶层 28 + <code>codec/</code> 29 + <code>event/</code> 5 + <code>protocol/</code> 6</td>
+            <td><code>extension-points.json</code>（能力档，被两种语言共享）</td>
+            <td>网关、协议、编解码、事件桥、熔断、台账、周期任务</td>
+          </tr>
+          <tr>
+            <td>内核侧</td>
+            <td><code>jellyfish-core</code> / <code>jellyfish-infra</code></td>
+            <td>—（本方案不要求内核改一行）</td>
+            <td>—</td>
+            <td>只看到普通的扩展点注册</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="mermaid">
+flowchart TB
+  subgraph KL["内核 JVM"]
+    EXT["扩展点注册表<br/>ExtensionRegistry（owner = pluginId 或 pluginId::脚本 id）"]
+    CALL["调用点：工具派发 / 提示词组装 / 权限拦截 / 事件通道"]
+    CALL --> EXT
+  end
+
+  subgraph BR["桥接插件 jar（机制层被 shade 进来）"]
+    BP["PythonBridgePlugin / NodeBridgePlugin<br/>只回答：解释器配置键、默认值、怎么造语言适配"]
+    SCAN["ScriptPluginScanner → ScriptPlugin"]
+    REG["ScriptRegistrar → ExtensionHandler 闭包"]
+    CB["CircuitBreakingScriptCaller（装饰器）"]
+    GW["ScriptGateway：懒启动 / 初始化 / 超时 / 收尾"]
+    FW["FrameWriter：专属写线程，队列 256 帧"]
+    RPC["ScriptRpc：id 配对，唯一有状态处"]
+    EB["ScriptEventBridge：推送线程 + 队列 256"]
+    SCH["ScriptScheduler：每脚本一条守护线程"]
+    BP --> SCAN --> REG
+    REG --> CB --> GW
+    GW --> FW --> RPC
+    EB --> GW
+    SCH --> CB
+  end
+
+  subgraph SP["脚本侧进程（宿主之外的进程）"]
+    GWY["gateway.py / gateway.js<br/>单线程控制面，从不 import 业务脚本"]
+    W1["worker.py / worker.js：脚本 A"]
+    W2["worker.py / worker.js：脚本 B"]
+  end
+
+  M["scripts/python/&lt;id&gt;/manifest.json"] --> SCAN
+  EXT -->|"内核按普通扩展点查表"| REG
+  RPC -->|"一行 JSON：initialize / invoke / event / kill_worker"| GWY
+  GWY -->|"fork 或 spawn"| W1
+  GWY --> W2
+  W1 -->|"一行 JSON：应答 / ready / 日志"| GWY
+  W2 --> GWY
+  GWY -->|"stderr 带脚本前缀"| LOG["内核日志"]
+  START["脚本根目录 scripts/python 或 scripts/node"] --> SCAN
+    </div>
+    <p class="figure-cap">图 27-1　三层架构与进程边界：内核侧只看到扩展点注册，进程边界只被桥接层跨越</p>
+
+    <p>
+      这张图里最值得注意的是<strong>虚线之外的两件事</strong>：注册（<code>Scanner → Registrar</code>）与进程
+      （<code>Gateway → worker</code>）之间没有任何箭头相连。清单在磁盘上，注册期只读文件；进程在第一次真正调用时才出现。
+      这条解耦是本方案的立足点，下一节展开。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-python/src/main/java/zcd/jellyfish/plugin/python/PythonLanguage.java:48-56（环境变量白名单与强制项）</div>
+
+<pre><code class="language-java">    static final List&lt;String&gt; ENV_WHITELIST = Collections.unmodifiableList(Arrays.asList(
+            "PATH", "HOME", "LANG", "PYTHONPATH", "VIRTUAL_ENV"));
+
+    /** 透传的环境变量名前缀（区域设置有多套键，逐个列会漏）。 */
+    private static final String ENV_WHITELIST_PREFIX = "LC_";
+
+    /** 强制关闭 stdout 缓冲的变量名。 */
+    static final String ENV_UNBUFFERED = "PYTHONUNBUFFERED";
+</code></pre>
+
+    <p>
+      解释：子进程的环境是<strong>白名单，不是空环境</strong>——清空之后连解释器自己都找不到（<code>PATH</code> 缺失）。
+      但白名单里刻意不含两个键：<code>PYTHONHOME</code>（换掉整个标准库位置，于是「用哪个解释器」这件事被环境变量夺走，
+      而 <code>pythonPath</code> 明明已经是显式路径）与 Node 侧的 <code>NODE_OPTIONS</code>
+      （<code>--require</code> 能在网关脚本之前加载任意模块，等于绕过「这个脚本在不在清单里」这条约束）。
+      换来的代价写在文档里、写在配置说明里：<strong>密钥不能靠环境变量传给脚本</strong>，只能走
+      <code>scripts.&lt;脚本 id&gt;</code> 配置段 + <code>${ENV}</code> 插值这条与 Java 插件同款的通道。
+    </p>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：脚本直接 <code>print</code> 会污染协议流，而且现象离原因很远</span>
+      <p>
+        <strong>现象</strong>：某次调用返回了「别人的结果」，或者调用一直等到超时。日志里既没有异常也没有错误码。<br>
+        <strong>根因</strong>：输出通道的分工是「stdout 只有协议、stderr 只有日志」。标准输出一旦多出一行，
+        它就是一行无法解析的协议帧——按设计被宽容丢弃，但如果这一行恰好长得像一条应答，更坏的事会发生：
+        网关侧有一条 id 检查专门挡这个（见第 12 节）。<br>
+        <strong>规避</strong>：Python 侧用 <code>sys.stderr</code>，Node 侧 SDK 与协议都走同步写；
+        子进程的 fd 1/2 在 <code>fork</code> 后都指向日志管道，网关给每个 worker 的 stdout 加脚本前缀转进内核日志，
+        因此脚本的日志<strong>能看见</strong>，只是不能往协议流里写。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>3. 进程模型：一个常驻网关 + 每脚本一个 worker</h2>
+
+    <p>
+      先给结论，六条，全部来自源码：
+    </p>
+
+    <ol>
+      <li><strong>脚本侧有两个层级</strong>：每门语言一个常驻<b>网关</b>进程（控制面），每个脚本一个 <b>worker</b> 进程（数据面）。
+        网关只与宿主说话、只做路由，<strong>从不 import 任何业务脚本</strong>——因此「脚本把网关拖垮」这条路径不存在。</li>
+      <li><strong>网关是单线程的</strong>，全部并发由一次 <code>select</code> 多路复用解决。Python 侧坚持单线程的
+        直接理由是 <code>fork</code> 在多线程进程里不安全：只要网关自己不存在线程，「worker 在没有任何线程时被 fork」这条约束就恒真。</li>
+      <li><strong>worker 由网关 fork</strong>（Node 侧是 <code>spawn</code> + 一帧 <code>init</code>），
+        子进程不通过命令行接收参数。Node 没有 <code>fork</code> 的内存继承，所以用 <code>init</code> 帧把脚本目录、
+        入口与清单送过去——这样也不会让清单出现在进程列表里。</li>
+      <li><strong>启动是懒的</strong>：<code>initialize</code> 之后还没有任何进程；第一次真正调用才抽取网关资源、起进程、下发清单。
+        因此内核启动不需要解释器、不需要写文件、不占内存。</li>
+      <li><strong>进程退出后不自动重启</strong>：下一次调用会重新走一遍懒启动。自动重启只会把「脚本一启动就崩」
+        变成一段安静的无限重启循环，而调用方拿到的是超时——现场离原因更远。</li>
+      <li><strong>PID 文件只报告、不处置</strong>：正常路径上没有任何东西读它。它的全部价值在
+        「JVM 被 <code>kill -9</code>、网关也一起失联」之后，是唯一还留着的线索。</li>
+    </ol>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-python/src/main/resources/script/gateway.py:925-950（worker 的拉起：socketpair + fork + 直接调用 serve）</div>
+
+<pre><code class="language-python">    def _spawn(self, state):
+        """fork 一个 worker。
+
+        **``os.fork()`` 在这里永远安全**，因为本进程没有任何线程：这是「网关单线程」
+        这个选择买到的东西——包括 worker 空闲自毁之后重新拉起，也不再需要第二条拉起路径。
+        """
+        if state.worker is not None or state.refusal is not None:
+            return
+        spec = state.spec
+        parent_sock, child_sock = socket.socketpair()
+        log_r, log_w = os.pipe()
+        pid = os.fork()
+        if pid == 0:
+            # 子进程：只留自己的通信与日志描述符，其余全部关掉。
+            # 尤其必须关掉网关与宿主之间的 stdio，否则脚本一次误 print 就会
+            # 往协议流里插一行，而宿主看到的是一帧无法识别的消息
+            parent_sock.close()
+            os.close(log_r)
+            exit_code = 1
+            try:
+                self._child_setup(child_sock.fileno(), log_w)
+                exit_code = worker.serve(child_sock, spec["id"], spec["directory"],
+                                         os.path.basename(spec["entry"]),
+                                         state.manifest,
+</code></pre>
+
+    <p>
+      解读：worker 与网关之间是 <code>socketpair</code>（不是管道），日志走另一根管道。
+      子进程的 fd 整理在 <code>_child_setup</code> 里：<code>0</code> 指向 <code>/dev/null</code>，
+      <code>1</code> / <code>2</code> 指向日志管道，其余全部 <code>close</code>。
+      这里有两个非显然之处：一是<strong>必须手工关闭继承来的 fd</strong>——<code>fork</code> 不执行 exec，
+      <code>FD_CLOEXEC</code> 毫无作用，残留的描述符会让「宿主死了」这件事在 worker 一侧永远等不到 EOF；
+      二是要摘掉继承来的信号唤醒管道（<code>set_wakeup_fd(-1)</code>），否则 worker 每收到一个信号
+      （孤儿看门狗的 <code>SIGALRM</code>、网关的 <code>SIGTERM</code>）都会往一个已关闭的 fd 写一次，
+      往 stderr 吐一段四行的 <code>Exception ignored ...</code>——<strong>每两秒一次</strong>，恰好把有用的那几行淹没。
+    </p>
+
+    <h3>僵尸与孤儿：三层兜底，缺一层都会漏</h3>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>危险</th><th>谁来兜</th><th>源码位置</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>worker 退出后不被回收 → 累积僵尸</td>
+            <td>网关在自己的事件循环里 <code>waitpid(-1, WNOHANG)</code> 循环收割；
+              被隔离的那一代按 <strong>pid</strong> 从收割名单上摘（按句柄找找不到——那时句柄可能已经属于新一代）</td>
+            <td><code>gateway.py:516-535</code></td>
+          </tr>
+          <tr>
+            <td>JVM 正常退出 → 网关与 worker 残留</td>
+            <td>网关进程用 <code>ShutdownHookProcessDestroyer</code> 注册了 JVM 退出钩子；关闭走两段式</td>
+            <td><code>Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/CommonsExecScriptProcess.java:150-179</code></td>
+          </tr>
+          <tr>
+            <td>JVM 被 <code>kill -9</code> → 网关也失联，worker 变孤儿</td>
+            <td>worker 侧三重保险：Linux 上请内核代发 <code>PR_SET_PDEATHSIG</code>；<code>getppid()==1</code> 检查；
+              以及用 <code>setitimer</code> + 信号处理器做的孤儿看门狗（不依赖主循环回到事件循环）</td>
+            <td><code>worker.py:70-83</code>、<code>worker.py:114-132</code></td>
+          </tr>
+          <tr>
+            <td>脚本卡在 <code>time.sleep(600)</code> 里 → 连看门狗都轮不到</td>
+            <td><code>_die_now</code>：收到终止信号<strong>立刻 <code>os._exit(0)</code></strong>，不置标志后返回
+              ——CPython 会在信号处理器返回后<strong>恢复</strong>被中断的系统调用，只翻标志等于永远轮不到主循环</td>
+            <td><code>worker.py:70-83</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-python/src/main/resources/script/worker.py:70-83（终止信号：立刻退出，不等主循环）</div>
+
+<pre><code class="language-python">def _die_now(script_id, which):
+    """收到终止信号：立刻退出，不等主循环。
+
+    **只置一个标志位是不够的**，这一点是实测出来的：脚本可能正卡在自己的代码里
+    （``time.sleep(600)`` 之类），而 CPython 在信号处理函数返回后会**恢复**那个被中断的
+    系统调用。于是主循环永远轮不到，「父进程没了」也永远查不到——现场是
+    gateway 早已退出、这个 worker 却要等到用户代码自己醒来才消失（十分钟量级），
+    而日志里没有任何一条指向它。
+
+    发出信号的一方（网关：超时隔离 / 空闲自毁 / 关闭 / 拒绝服务）已经判定不需要
+    这个 worker 的任何输出，因此这里直接退出；半行协议帧由网关的脏行容忍吃掉。
+    """
+    print("[%s] 收到 %s，立即退出" % (script_id, which), file=sys.stderr, flush=True)
+    os._exit(0)
+</code></pre>
+
+    <p>
+      这段注释里「这一点是实测出来的」是值得照着学的一句：卡住的脚本正是最该被清理的情形（它已经让宿主超时过一次），
+      而它恰恰是「只翻标志」方案收不掉的那一种。代价是可能留下半行协议帧——由网关的脏行容忍吃掉，这也是那条
+      「脏行只丢不失败」的宽容口径为什么是必需的。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-node/src/main/resources/script/gateway.js:918-940（Node 侧的差异：spawn + NODE_PATH，退出由 libuv 自动回收）</div>
+
+<pre><code class="language-javascript">    spawn(state) {
+        if (state.worker || state.refusal !== null) {
+            return false;
+        }
+        const spec = state.spec;
+        // NODE_PATH 指到网关目录：脚本用 `require('jellyfish_sdk')` 就能拿到 SDK，
+        // 而不必知道它被抽取到了哪里。用户自己的 NODE_PATH 保留在后面
+        const nodePath = [HERE, process.env.NODE_PATH].filter(Boolean).join(path.delimiter);
+        const child = spawn(process.execPath, [path.join(HERE, 'worker.js')], {
+            stdio: ['pipe', 'pipe', 'pipe'],
+            env: Object.assign({}, process.env, { NODE_PATH: nodePath }),
+        });
+        const worker = new Worker(child.pid, child);
+        state.worker = worker;
+        state.lastSpawn = Date.now();
+        // worker 已经死掉时往它的 stdin 写会拿到 EPIPE；不挂这个处理，
+        // 那个 error 事件会直接把网关整个带走——「写一帧失败」变成「所有脚本不可用」
+        child.stdin.on('error', (error) => {
+            this.log(`[${spec.id}] 写入 worker 失败: ${error.message}`);
+        });
+        child.stdout.on('data', (chunk) => this.readWorker(state, chunk));
+        child.stderr.on('data', (chunk) => this.readWorkerLog(state, chunk));
+</code></pre>
+
+    <p>
+      Node 版白拿两条性质：子进程不继承网关与宿主之间的 stdio（Python 要靠 <code>dup2</code> 手工保证）、
+      退出由 libuv 自动回收（Python 要手工 <code>waitpid</code>，不然攒一地僵尸）。
+      失去的一条是「卡在同步 JS 里的 worker 连自己的看门狗都不会响」——定时器排在事件循环上，
+      所以 Node 侧「卡死的 worker 谁来收」的答案是<strong>网关的 SIGKILL</strong>（内核送达，不需要 worker 配合），
+      worker 自己的孤儿检查只是兜底。
+    </p>
+
+    <h3>网关资源的落盘：为什么必须抽出到文件系统</h3>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/GatewayResources.java:104-121（按语言 + 内容摘要分目录，已抽取即复用）</div>
+
+<pre><code class="language-java">    public Path materialize(ScriptLanguage language, List&lt;String&gt; resourceNames) {
+        List&lt;String&gt; names = new ArrayList&lt;String&gt;(resourceNames);
+        if (names.isEmpty()) {
+            throw new JellyfishException("语言 " + language.id() + " 没有声明任何网关资源");
+        }
+        List&lt;Resource&gt; resources = new ArrayList&lt;Resource&gt;();
+        for (String name : names) {
+            resources.add(new Resource(name, loader.load(language, name)));
+        }
+        Path directory = baseDirectory.resolve(language.id()).resolve(digestOf(resources));
+        if (isComplete(directory, resources)) {
+            LOG.debug("复用已抽取的网关资源: {}", directory);
+            return directory;
+        }
+        write(directory, resources);
+        LOG.info("已抽取 {} 网关资源到 {}", language.id(), directory);
+        return directory;
+    }
+</code></pre>
+
+    <p>
+      解释器只能执行文件系统上的文件，读不了 jar 条目，所以网关脚本必须先落盘。三个细节都有代价上的考虑：
+      <strong>目录名带内容摘要</strong>——「资源变了」自动得到一个新目录，绝不会出现「上一版网关文件还在被复用」，
+      那类问题在开发期表现为「改了网关代码却没生效」；<strong>旧目录不清理</strong>——它们很小，留着才能在事后确认
+      「当时到底跑的哪一份」；<strong>写入先在临时目录落盘再整体改名</strong>——目录一旦出现就代表内容完整，
+      否则并发启动两个 JVM 时，另一个进程可能读到只写了一半的网关文件，报出来的是「网关语法错误」。
+    </p>
+
+    <div class="callout warn">
+      <span class="callout-title">注意：抽出目录默认在用户主目录下，不在临时目录也不在工作目录</span>
+      <p>
+        默认是 <code>~/.jellyfish/gateway</code>（<code>Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/GatewayResources.java:80-91</code>
+        的 <code>defaultBaseDirectory()</code>）。不选临时目录，是因为临时目录会被系统或用户清理，
+        清理掉正在运行的网关文件在 POSIX 上无害（文件已打开）但在别的平台上会变成「脚本中途消失」；
+        不选进程工作目录，否则每个项目都会各存一份完全相同的网关。PID 文件目录则<strong>刻意与抽取目录同级</strong>
+        （<code>~/.jellyfish/pids</code>）而不是它的子目录——子目录名带摘要、改一个字节就换目录，
+        而 PID 文件的全部价值就在「被下一次启动看见」。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>4. 线协议：一行一个 JSON（JSON-RPC 2.0 over stdio）</h2>
+
+    <p>
+      宿主与网关之间是 stdio 上的 JSON-RPC 2.0，<strong>每行一个 JSON 对象</strong>。
+      不是长度前缀——这条选择有一份很直白的理由，写在协议类的类注释里。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/protocol/ScriptProtocol.java:33-58（版本号、下行/上行方法与两端共用的错误码）</div>
+
+<pre><code class="language-java">    /** 协议版本号。 */
+    public static final String VERSION = "2.0";
+
+    /** 下行方法：启动期下发脚本清单与设置。 */
+    public static final String METHOD_INITIALIZE = "initialize";
+
+    /** 下行方法：执行一次扩展点调用。 */
+    public static final String METHOD_INVOKE = "invoke";
+
+    /** 下行方法（通知）：推送内核事件。 */
+    public static final String METHOD_EVENT = "event";
+
+    /** 下行方法：杀某个脚本的 worker。 */
+    public static final String METHOD_KILL_WORKER = "kill_worker";
+
+    /** 下行方法：查询脚本状态。 */
+    public static final String METHOD_STATUS = "status";
+
+    /** 下行方法：优雅关闭。 */
+    public static final String METHOD_SHUTDOWN = "shutdown";
+
+    /** 上行方法：脚本发布通知。 */
+    public static final String METHOD_EMIT_EVENT = "emit_event";
+
+    /** 上行方法（通知）：网关上报 worker 状态变化。 */
+    public static final String METHOD_WORKER_STATE = "worker_state";
+</code></pre>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/protocol/ScriptProtocol.java:60-78（错误码：两侧逐字一致，脚本侧的常量是手写对齐的）</div>
+
+<pre><code class="language-java">    /** 错误码：脚本业务失败（脚本内异常）。 */
+    public static final int CODE_SCRIPT_FAILURE = -32000;
+
+    /** 错误码：脚本处于熔断中（Java 侧本地产生，不派发）。 */
+    public static final int CODE_CIRCUIT_OPEN = -32001;
+
+    /** 错误码：脚本不存在或未在清单中声明。 */
+    public static final int CODE_UNKNOWN_SCRIPT = -32002;
+
+    /** 错误码：结果超过传输上限。 */
+    public static final int CODE_RESULT_TOO_LARGE = -32003;
+
+    /** 错误码：清单与实现不一致（严格校验失败）。 */
+    public static final int CODE_MANIFEST_MISMATCH = -32004;
+
+    /** 错误码：方法不存在。 */
+    public static final int CODE_METHOD_NOT_FOUND = -32601;
+
+    /** 错误码：参数非法。 */
+    public static final int CODE_INVALID_PARAMS = -32602;
+
+    /** 错误码：网关内部错误。 */
+    public static final int CODE_INTERNAL = -32603;
+</code></pre>
+
+    <p>
+      两张清单在三种语言里各有一份，靠注释与端到端测试对齐：Python 的 <code>gateway.py</code> /
+      <code>worker.py</code> 与 Node 的 <code>gateway.js</code> / <code>worker.js</code> 都写着
+      「与宿主侧 <code>ScriptProtocol</code> 的取值逐字一致」。这是一处<strong>有意的重复</strong>：
+      跨进程的常量无法互相引用，所以把「必须一致」变成一个被测试盯着的断言，而不是一个靠人记住的约定。
+    </p>
+
+    <h3>帧格式与那条硬不等式</h3>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/protocol/ScriptProtocol.java:83-98（宿主单行上限：必须严格大于脚本侧出帧上限）</div>
+
+<pre><code class="language-java">    /**
+     * 协议单行的最大字节数（宿主侧按行读，这是它给「一行」留的缓冲）。
+     * &lt;p&gt;
+     * &lt;b&gt;它必须严格大于脚本侧的出帧上限&lt;/b&gt;（Node 的 {@code script/gateway.js} 所在目录里的
+     * {@code script_wire.js}、Python 的 {@code script_wire.py}，两侧都是 10 MB）。
+     * 这两个数字是硬关系，而它们分处两种语言、无法互相引用：
+     * &lt;ul&gt;
+     *   &lt;li&gt;宿主这张更小 → 落在中间的帧被宿主**就地切成两条非法行**丢掉，现场表现是
+     *       「调用一直等到超时」，而脚本侧那条 {@link #CODE_RESULT_TOO_LARGE} 永远不会触发
+     *       （它压根没觉得自己超限）；&lt;/li&gt;
+     *   &lt;li&gt;留出余量而不是取相等 → 本类的判定发生在**看到换行之前**
+     *       （缓冲一满就按一行截断输出），因此「恰好等于上限」的那一帧也会被判成超限。&lt;/li&gt;
+     * &lt;/ul&gt;
+     * Node 与 Python 的端到端测试各有一条守卫用例把这条不等式钉死（从脚本侧源码里读那个数来比）。
+     */
+    public static final int MAX_LINE_BYTES = 10 * 1024 * 1024 + 64 * 1024;
+</code></pre>
+
+    <p>
+      实测的两个数字：宿主侧 <code>MAX_LINE_BYTES = 10 * 1024 * 1024 + 64 * 1024</code>（10 MB + 64 KiB），
+      脚本侧 <code>MAX_FRAME_BYTES = 10 * 1024 * 1024</code>（10 MB，Python 与 Node 都是这个数）。
+      两边的端到端测试各有一条守卫用例，从脚本侧源码里读那个数来比大小——把「两个语言里的两个数字」
+      变成一条会被构建拦截的不等式。注释里还留了一段历史：这两个数曾经是 10 MB 与 64 KiB，
+      而 64 KiB 与 10 MB 之间的结果会被宿主<strong>就地切成两条非法行丢掉</strong>，
+      现场表现是「调用一直等到超时」，脚本侧那条「结果超过传输上限」永远不会触发。
+    </p>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：为什么帧格式是「一行一个 JSON」而不是长度前缀？</span>
+      <p>
+        脚本语言的调试手段几乎都是「打印一行看看」。长度前缀会让任何一次误打印把后续所有帧错位、恢复无从下手；
+        行分隔则是「错一行、丢一行、继续」，与解析函数的宽容口径一致。代价是 JSON 里不能有裸换行——
+        由 JSON 转义保证，协议层不存在多行帧。与之配套的三条：
+        <strong>脏行返回 <code>null</code> 而不是抛异常</strong>（<code>Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/protocol/ScriptProtocol.java:297-326</code>）、
+        <strong>脏行不进任何失败账目</strong>（否则「脚本里多打了一行日志」会演变成「工具被隔离」）、
+        <strong>告警要限流</strong>（一个循环打印的脚本会把内核日志刷满，让真正的错误淹没其中）。
+      </p>
+    </div>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/protocol/ScriptProtocol.java:297-326（宽容解析：空白行、非 JSON、非对象全部返回 null）</div>
+
+<pre><code class="language-java">    public static Message parse(String line) {
+        if (line == null || line.trim().isEmpty()) {
+            return null;
+        }
+        JsonNode root;
+        try {
+            root = ScriptJson.tree(line);
+        } catch (JellyfishException e) {
+            return null;
+        }
+        if (root == null || !root.isObject()) {
+            return null;
+        }
+        Long id = idOf(root.get(FIELD_ID));
+        String method = textOf(root.get(FIELD_METHOD));
+        JsonNode params = root.get(FIELD_PARAMS);
+        if (method != null) {
+            return Message.incoming(id, method, params);
+        }
+        if (id == null) {
+            return null;
+        }
+        JsonNode error = root.get(FIELD_ERROR);
+        if (error != null && error.isObject()) {
+            return Message.failure(id, codeOf(error.get(FIELD_ERROR_CODE)), textOf(error.get(FIELD_ERROR_MESSAGE)));
+        }
+        return Message.success(id, root.get(FIELD_RESULT));
+    }
+</code></pre>
+
+    <p>
+      三种消息形状由「有无方法名 / 有无 id」区分，而不是靠三个子类型：应答（有 id、无方法名）、
+      通知（有方法名、无 id，不需要应答）、上行请求（有方法名、有 id）。合成一个 <code>Message</code> 类，
+      是因为接收方处理它们时用的是同一段代码，拆成三个类型只会让那段代码退化成 <code>instanceof</code> 链。
+      另外协议<strong>不校验 <code>jsonrpc</code> 字段</strong>——它是常量，校验它只能拒绝掉手写的测试桩与将来的其它语言实现，
+      而换不来任何真实保障。
+    </p>
+
+    <h3>与脚本侧分帧代码的对应关系</h3>
+
+    <p>
+      <code>script_wire.py</code> / <code>script_wire.js</code> 是两侧共用的分帧约定，两侧的实现必须逐字节等价，
+      否则会出现「宿主能发、worker 读不出」——那类问题的现场表现是「脚本毫无反应」，既看不到异常也看不到错误码。
+      两个函数对得上：<code>encode</code>（对象 → 带换行的一帧字节）、<code>feed</code>（缓冲 + 新字节 → 帧数组 + 丢弃计数）。
+      日志方向另有一个 <code>take_lines</code>，它<strong>不要求是 JSON</strong>，但必须能把多字节字符完整还原——
+      脚本里的中文日志恰恰是最需要看清的部分。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-python/src/main/resources/script/script_wire.py:26（脚本侧的出帧上限）与 :38-46（feed 的契约）</div>
+
+<pre><code class="language-python">MAX_FRAME_BYTES = 10 * 1024 * 1024
+</code></pre>
+
+<pre><code class="language-python">def feed(buffer, chunk):
+    """把新到的字节并入缓冲区并切出完整的帧。
+
+    返回 ``(剩余缓冲, [帧, ...], 丢弃行数)``。无法解析的行（脚本误打印、解释器警告）直接丢弃：
+    它不该让一次调用失败，也不该被计入任何失败账目。
+
+    但**丢弃必须留痕**：一条被丢掉的行如果正好是某个请求的应答，现场就是「请求悬到超时」——
+    而那时两侧日志里一条线索都没有，排查只能靠猜。因此这里既计数（回给调用方）、
+    也往 stderr 写一条（两侧的 stderr 都会进宿主日志），并对逐条告警限流。
+    """
+</code></pre>
+
+    <p>
+      Node 侧的 <code>script_wire.js</code> 还有一段 Python 侧没有的代码：<code>writeAll</code>。
+      它是这个文件里唯一需要文件描述符的地方，而同步写的两个坑都在这里。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-node/src/main/resources/script/script_wire.js:106-133（同步写到底：短写与 EAGAIN）</div>
+
+<pre><code class="language-javascript">function writeAll(fd, data) {
+    let offset = 0;
+    while (offset &lt; data.length) {
+        try {
+            const written = fs.writeSync(fd, data, offset, data.length - offset);
+            if (written &lt;= 0) {
+                throw new Error(`写描述符 ${fd} 没有进展（已写 ${offset}/${data.length} 字节）`);
+            }
+            offset += written;
+        } catch (error) {
+            if (error.code !== 'EAGAIN' &amp;&amp; error.code !== 'EINTR') {
+                throw error;
+            }
+            sleepSync(PIPE_RETRY_MS);
+        }
+    }
+}
+</code></pre>
+
+    <p>
+      解读：<code>fs.writeSync</code> 只是<strong>一次</strong> <code>write(2)</code>。
+      一是<strong>短写</strong>：写到管道时，超过 <code>PIPE_BUF</code> 的写入允许部分完成，返回值被忽略的话一帧就在中间断掉，
+      而半帧比丢帧更糟——它与下一帧粘在一起时，对端报的是「JSON 解析失败」而不是「写不下」。
+      二是 <strong>EAGAIN</strong>：子进程的 stdio 管道在 Node 里是非阻塞的（libuv 建的，注释里写明「实测确认」），
+      管道一满（macOS 上是 64 KiB）<code>write</code> 直接返回「写不下，你等会儿再来」；注释还记下了实测边界：
+      「40 KB 过、70 KB 必丢，边界正好是管道容量」。等待用 <code>Atomics.wait</code> 做同步睡眠——
+      因为调用方是完全同步的 worker，没有事件循环可以等。
+    </p>
+
+    <div class="callout tip">
+      <span class="callout-title">小技巧：Python 侧为什么不需要 <code>writeAll</code>？</span>
+      <p>
+        Python 的 <code>os.write</code> 同样可能短写，因此 <code>Jellyfish-Plugins/jellyfish-plugin-python/src/main/resources/script/gateway.py:1194-1203</code>
+        里那个 <code>_write_all</code> 就是同一件事的 Python 版：拿 <code>memoryview</code> 循环写，
+        直到 <code>view</code> 为空。而 Python 不需要 <code>Atomics.wait</code> 那套——
+        它的阻塞式 <code>os.write</code> 在管道满时会自然地阻塞等待，不像 Node 会返回 EAGAIN。
+        两个语言实现同一份契约、但踩的坑不同，这正是「分帧约定要各写一份」的代价所在。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>5. 一次跨语言扩展点调用的完整时序</h2>
+
+    <p>
+      把前面几节拼起来看一次工具调用。注意三个分界点：<strong>熔断在最外层</strong>（
+      <code>CircuitBreakingScriptCaller</code> 装饰 <code>ScriptGateway</code>）、
+      <strong>懒启动在网关里</strong>（<code>ensureStarted</code>）、
+      <strong>写帧不在调用线程上</strong>（<code>FrameWriter</code> 有自己的写线程）。
+    </p>
+
+    <div class="mermaid">
+sequenceDiagram
+  autonumber
+  participant K as 内核调用点<br/>ToolExecutor
+  participant C as CircuitBreakingScriptCaller
+  participant G as ScriptGateway
+  participant F as FrameWriter<br/>专属写线程
+  participant Y as gateway.py<br/>单线程控制面
+  participant W as worker.py<br/>脚本
+
+  K->>C: call(plugin, "tool", request)
+  C->>C: breaker.admit() 熔断检查
+  alt 熔断打开
+    C-->>K: ScriptCallException -32001（带剩余秒数，不派发）
+  end
+  C->>G: delegate.call(...)
+  G->>G: HotPathPoints.contains 判断热路径
+  G->>G: ensureStarted 懒启动（首次才抽资源 / 起进程 / initialize）
+  G->>F: send(initialize)。入队即返回
+  F->>Y: 一行 JSON
+  Y->>Y: 记 PID 文件、为每个脚本 fork worker
+  Y->>W: fork 后直接调用 serve
+  W->>W: 加载入口、compare_with 校验清单
+  W-->>Y: {id:0, ready:true}
+  Y-->>G: initialize 应答（逐脚本 ok/error + pidFile）
+  G->>F: send(invoke)
+  F->>Y: {"id":n,"method":"invoke","type":"tool","request":{...}}
+  Y->>Y: 排队 / 派发（每 worker 同时只有一个在途）
+  Y->>W: 转发
+  W->>W: sdk.invoke 按类型分发、整形结果
+  W-->>Y: {"id":n,"result":{...}}
+  Y->>Y: 校验 id 是不是在途请求的 seq
+  Y-->>G: 应答
+  G-->>C: JsonNode 结果
+  C->>C: breaker.recordSuccess()
+  C-->>K: 结果
+  Note over G,Y: 超时：宿主发 kill_worker 指令，杀的动作由网关做<br/>（回收与 PID 表都在有父子关系的一侧）
+    </div>
+    <p class="figure-cap">图 27-2　一次跨语言工具调用的时序：熔断在最外、懒启动在网关、写帧在专属线程</p>
+
+    <p>
+      四个值得单独记住的点：
+    </p>
+
+    <ul>
+      <li><strong>写帧不阻塞调用线程</strong>：子进程的 stdin 是一根有界的管道，网关执行一次
+        <code>invoke</code> 期间不读 stdin，管道写满时 <code>write</code> 会阻塞到网关回到读循环为止；
+        那个阻塞发生在 <code>ScriptRpc</code> 进入等待之前，<strong>调用超时对它完全无效</strong>。
+        <code>FrameWriter</code> 存在的全部理由就是让「写不进去」退化成「这次调用超时失败」。</li>
+      <li><strong>超时处置链是「宿主只发指令，杀的动作由网关做」</strong>：worker 是网关的子进程，
+        回收（<code>waitpid</code>）与 PID 表都在网关一侧；宿主越过去杀，就得自己维护一张必然漂移的 PID 表，
+        而漂移的表现是「某个进程谁也杀不掉」。</li>
+      <li><strong>每个 worker 同时只有一个在途请求</strong>，因此 worker 内部可以完全是同步的，
+        脚本作者不必考虑并发；代价是同一脚本的并发调用排队，而排队比「脚本里到处是竞态」便宜得多。</li>
+      <li><strong>截止时间从「派发」起算，而不是「到达」起算</strong>：排队等待不是脚本的错，
+        而超时的语义是「脚本执行太久」。真要排太久的队，前一个请求的超时会把整个 worker 杀掉，
+        队列里的人也一起拿到明确失败。</li>
+    </ul>
+
+    <!-- ============================================================ -->
+    <h2>6. 扩展点怎么跨语言：24 个编解码器</h2>
+
+    <p>
+      本节是这一页的技术核心。扩展点在 Java 侧由一个请求类型与一个结果类型定义，在协议侧由一对 JSON 形状定义，
+      <code>ExtensionCodec</code> 就是这两者之间唯一的对应关系。因此<strong>新增一个扩展点 = 新增一个 codec</strong>，
+      不动协议、不动进程模型。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/codec/ExtensionCodec.java:93-97（默认实现：先编码、再调用、后解码；取消令牌默认 NONE）</div>
+
+<pre><code class="language-java">    default ExtensionHandler&lt;C, R&gt; handlerTo(ScriptInvoker invoker) {
+        return request -&gt; decodeResult(
+                invoker.invoke(typeName(), encodeRequest(request), CancellationToken.NONE),
+                request.getRouteKey());
+    }
+</code></pre>
+
+    <p>
+      五个方法构成接口的全部：<code>typeName()</code>（协议里的类型名）、<code>requestType()</code>
+      （注册用，内核按「类型 + 路由键」找处理器）、<code>isTypeLevel()</code>、
+      <code>encodeRequest()</code>、<code>decodeResult()</code>。两个编解码方法都是纯函数：不碰进程、不碰注册表、
+      不打日志，因此可以完全离线单测——这是「全部扩展点都真的打通了」能被验证的前提。
+      <code>handlerTo</code> 的顺序有意固定为「先编码、再调用、后解码」：编码失败就不该发起一次无意义的进程往返。
+    </p>
+
+    <h3>注册表：名单只出现一次</h3>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/codec/ExtensionCodecs.java:128-153（唯一真源：24 个 codec 的声明顺序即诊断输出顺序）</div>
+
+<pre><code class="language-java">    private static List&lt;ExtensionCodec&lt;?, ?&gt;&gt; defaults() {
+        return new ArrayList&lt;ExtensionCodec&lt;?, ?&gt;&gt;(Arrays.&lt;ExtensionCodec&lt;?, ?&gt;&gt;asList(
+                // 带路由键：一个名字一个实现
+                new ToolCodec(),
+                new CommandCodec(),
+                new CommandOptionsCodec(),
+                new ModelCatalogCodec(),
+                new InputDirectiveCodec(),
+                // 类型级：同一类型允许多个贡献
+                new PromptCodec(),
+                new StatusLineCodec(),
+                new PanelCodec(),
+                new PermissionCodec(),
+                new SessionPersistCodec(),
+                new SessionRestoreCodec(),
+                new SessionDeleteCodec(),
+                new CompactionCodec(),
+                // 二期打通：数据进出、不在渲染线程/启动期的扩展点
+                new ToolResultPostCodec(),
+                new ToolArgumentPreCodec(),
+                new TurnContextCodec(),
+                new SessionBeforeCloseCodec(),
+                new SessionBeforeForkCodec(),
+                new CompactionPreCodec(),
+                // 热路径：不冷启动 + 更短的截止时间（见 HotPathPoints）
+                new ToolActivationCodec(),
+                new RequestTuningCodec(),
+                new AgingStrategyCodec(),
+                new InputTransformCodec(),
+                new TurnBeforeCodec()));
+    }
+</code></pre>
+
+    <p>
+      这份名单同时被三处需要：注册（按清单声明找 codec）、清单校验（<code>contributions</code> 只能取类型级扩展点的名字）、
+      调用路由（<code>invoke</code> 的 <code>params.type</code>）。三处各写一份名单，迟早会出现「清单里能声明、调用时找不到」
+      或反过来的组合。因此名单只在 <code>defaults()</code> 里出现一次。
+      注意类注释里那句自我提醒：<strong>不写死数量</strong>——「它以前写着 11 个，而当时已经是 24 个」。
+    </p>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：为什么每个扩展点都要一个 codec，而不能用一套通用映射？</span>
+      <p>
+        备选方案是「反射 + 通用 POJO ↔ JSON 映射」。它被否掉的理由是<strong>语义</strong>而不是性能：
+        每个扩展点的结果都有一层不属于「数据搬运」的规则，通用映射表达不了。三个例子：
+        <code>ToolCodec</code> 的 <code>output</code> 必须把节点还原成「字符串就是字符串、对象就是 Map」的形态
+        （与内核 <code>ReActLooper.serializeOutput</code> 对齐），否则脚本返回结构化数据时会被二次转义；
+        <code>PermissionCodec</code> 遇到的未知取值要<strong>报错</strong>而不是静默当 <code>ABSTAIN</code>
+        （多写一个字母就让一道本该有人看的调用直接放行）；
+        <code>PromptCodec</code> 的缺省是「本轮没有说话」而不是空字符串。
+        这些规则各自属于那个扩展点的领域，收在 codec 里，就能整页离线单测。
+      </p>
+    </div>
+
+    <h3>类型级 vs 带路由键，以及 <code>Payloads</code> 这层小工具</h3>
+
+    <p>
+      <code>isTypeLevel()</code> 的返回值不是 codec 自己选的，而是内核调用点决定的查询方式：
+      类型级（<code>true</code>）落点是 <code>PluginContext.contribute</code>，同键唯一（<code>false</code>）落点是
+      <code>handle</code>。全部 24 项里 5 项带路由键，19 项是类型级。而「从节点里安全取值」这件事
+      被收在 <code>Payloads</code> 里（包私有），因为脚本侧给的是外部输入，缺字段、类型不对、多层嵌套都会真实发生，
+      逐处写 <code>isTextual()</code> 判断会把 codec 淹在样板里，写漏一处就是一次 <code>NullPointerException</code>——
+      而它出现在同步派发路径上，表现是「插件抛异常」而不是「参数没给对」，排查方向完全被带偏。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/codec/PermissionCodec.java:75-93（三态裁定：未知取值报错，且类型上就没有「放行」）</div>
+
+<pre><code class="language-java">    @Override
+    public PermissionVerdict decodeResult(JsonNode result, String routeKey) {
+        String verdict = Payloads.text(result, FIELD_VERDICT);
+        if (verdict == null) {
+            // 缺字段按「无异议」：脚本可以不表态，这是常态而非错误
+            return PermissionVerdict.abstain();
+        }
+        String reason = Payloads.text(result, FIELD_REASON);
+        switch (verdict.trim().toUpperCase(java.util.Locale.ROOT)) {
+            case "ABSTAIN":
+                return PermissionVerdict.abstain();
+            case "ASK":
+                return PermissionVerdict.ask(reason);
+            case "DENY":
+                return PermissionVerdict.deny(reason);
+            default:
+                throw new JellyfishException("权限拦截裁定非法: " + verdict + "（tool=" + routeKey + "）");
+        }
+    }
+</code></pre>
+
+    <p>
+      这段代码最该抄走的是那条 fail-closed 取舍：脚本多写一个字母（<code>"askk"</code>）时，静默按「无异议」处理
+      会让一道本该有人看的调用直接放行，而调用者完全不知道自己的拼写错了。抛出的异常会被
+      <code>PermissionManager.intercept</code> 记 WARN 并<strong>按拒绝处理</strong>——宁可这次调用被拒（可见、可诊断），
+      也不要让一道按模式收窄的授权静默消失。而 <code>PermissionVerdict</code> 里没有 ALLOW 这一态、脚本也拿不到审批通道，
+      所以「插件只能收紧、不能放宽」不是靠文档约定的纪律，是类型上就做不到。
+    </p>
+
+    <h3>热路径点：一份执行策略，而不是一份扩展点清单</h3>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/codec/HotPathPoints.java:37-41（名单只有两项）</div>
+
+<pre><code class="language-java">    /** 每次组装请求都会被问到的扩展点。 */
+    private static final Set&lt;String&gt; TYPES = Collections.unmodifiableSet(
+            new LinkedHashSet&lt;String&gt;(Arrays.asList(
+                    RequestTuningCodec.TYPE_NAME,
+                    AgingStrategyCodec.TYPE_NAME)));
+</code></pre>
+
+    <p>
+      <code>request_tuning</code> 与 <code>aging_strategy</code> 是「每次组装请求都会被问到」的两个点。
+      脚本调用是一次进程往返，而网关懒启动要抽资源、fork 解释器、等全部 worker 就绪，几百毫秒起——
+      那笔开销放在「每个回合一次」上可接受，放在「每次发给厂商之前」上不可接受（一个长任务跑 20 轮就是 20 次）。
+      因此桥接层对这两个点做两件事：<strong>不冷启动</strong>（worker 没热着就抛 <code>ScriptNotHandledException</code>）
+      与<strong>更短的截止时间</strong>（2 秒）。两条边界必须写进文档：一是「只提供热路径贡献的脚本不会被拉起」，
+      二是「这类脚本也不会因此被熔断」——它的可观测点是 <code>/&lt;语言&gt;</code> 台账里的「未启动」。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/ScriptGateway.java:208-228（热路径不冷启动：抛「不表态」而不是返回 null）</div>
+
+<pre><code class="language-java">    public JsonNode call(ScriptPlugin plugin, String typeName, JsonNode request, CancellationToken token) {
+        if (token.isCancelled()) {
+            // 已经取消就不该再起一次进程往返
+            throw new ScriptCancelledException("脚本调用已被取消: " + typeName);
+        }
+        boolean hotPath = HotPathPoints.contains(typeName);
+        if (hotPath &amp;&amp; !isRunning()) {
+            // 热路径上的点不冷启动：一次进程冷启动（几百毫秒起）不该落在「每次发给厂商之前」
+            // 那条路径上。这里显式「不表态」（而不是返回 null）——null 在调用契约里是
+            // 「脚本没有结果载荷」，那是一类成功，混用会让熔断把「没打的电话」记成打成了
+            LOG.debug("{} 热路径扩展点 {} 按「不表态」处理（worker 未热，不冷启动）",
+                    language.id(), typeName);
+            throw new ScriptNotHandledException(
+                    "热路径扩展点 " + typeName + " 不表态（" + language.displayName()
+                            + " 网关未运行，按约定不为其冷启动）");
+        }
+        ScriptRpc current = ensureStarted();
+        Map&lt;String, Object&gt; params = new LinkedHashMap&lt;String, Object&gt;();
+        params.put(ScriptProtocol.PARAM_SCRIPT, plugin.id());
+        params.put(ScriptProtocol.PARAM_TYPE, typeName);
+        params.put(ScriptProtocol.PARAM_REQUEST, request);
+</code></pre>
+
+    <p>
+      「抛异常而不是返回 <code>null</code>」这件事看着啰嗦，理由却非常具体：
+      <code>null</code> 在调用契约里的含义是「脚本没有结果载荷」，那是一类<strong>成功</strong>
+      （会话落盘、删除这类扩展点本来就没有返回值）。两者都表现为 <code>null</code> 时，熔断器就只能把
+      「没打的电话」记成「打成了」——正常态下它会清零连续失败计数（「失败—不表态—失败」交替的脚本永远到不了阈值），
+      半开态下它会把一次没打的探测判成「已恢复」，于是坏脚本看起来已经好了。
+    </p>
+
+    <h3>路由键从哪来</h3>
+
+    <p>
+      宿主只下发 <code>type</code> 与 <code>request</code>，因此带路由键的扩展点，名字只能从请求载荷里读。
+      这一小段逻辑在两侧脚本里都写着，且必须一致（<code>worker.py:308-329</code> 与
+      <code>worker.js:128</code> 起的 <code>routeKey</code>）：
+      <code>tool</code> 取 <code>payload["tool"]</code>、<code>command</code> / <code>command_options</code> 取
+      <code>payload["command"]</code>、<code>model_catalog</code> 取 provider 名、<code>input_directive</code> 取标记本身
+      （<code>!</code> / <code>@</code>）、<code>periodic</code> 取任务名，其余类型级扩展点的路由键就是类型名自身。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>7. 声明式注册：清单是唯一来源</h2>
+
+    <p>
+      脚本如何声明「我实现了哪些扩展点」？答案是<strong>一份静态文件</strong>：
+      <code>scripts/&lt;语言&gt;/&lt;脚本标识&gt;/manifest.json</code>。而这份文件通常不是手写的——
+      它由 SDK 从代码里的声明生成。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/ScriptManifest.java:75-85（顶层允许的键与两个时间常量）</div>
+
+<pre><code class="language-java">    private static final Set&lt;String&gt; TOP_KEYS = keys("id", "entry", "tools", "commands", "commandOptions",
+            "contributions", "events", "handlers", "schedules");
+
+    /** 周期任务条目允许的键。 */
+    private static final Set&lt;String&gt; SCHEDULE_KEYS = keys("name", "intervalSeconds");
+
+    /** 周期任务的缺省间隔（秒）：声明里不写 {@code intervalSeconds} 时用它。 */
+    public static final int DEFAULT_INTERVAL_SECONDS = 5;
+
+    /** 周期任务的间隔下限（秒）：与外壳的显示粒度一致，再快只是重复问同一个数字。 */
+    public static final int MIN_INTERVAL_SECONDS = 1;
+</code></pre>
+
+    <p>
+      实测的顶层键共 9 个：<code>id</code>（缺省取目录名）、<code>entry</code>、
+      <code>tools</code>、<code>commands</code>、<code>commandOptions</code>、<code>contributions</code>、
+      <code>events</code>、<code>handlers</code>、<code>schedules</code>。
+      解析是<strong>零容忍</strong>的：未知键一律报错，并把允许的键名列在错误里。理由不是洁癖——
+      <code>commands</code> 写成 <code>command</code> 的后果是「命令静默消失、没有任何报错」。
+      清单文件另有 1 MiB 上限（<code>Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/ScriptManifest.java:53-60</code>）：扫描发生在插件启动期，
+      一份荒唐大小的清单不该把内核启动拖垮。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/ScriptManifest.java:173-188（解析入口：先拒未知键，再逐项解析并校验）</div>
+
+<pre><code class="language-java">    public static ScriptManifest parse(String json, String fallbackId, ExtensionCodecs codecs) {
+        JsonNode root = ScriptJson.tree(json);
+        if (root == null || !root.isObject()) {
+            throw new JellyfishException("清单必须是 JSON 对象");
+        }
+        rejectUnknownKeys(root, "清单", TOP_KEYS);
+        String id = resolveId(text(root, "id"), fallbackId);
+        String entry = requireText(root, "entry");
+        validateEntry(entry);
+        List&lt;Tool&gt; tools = parseTools(root.get("tools"));
+        List&lt;Command&gt; commands = parseCommands(root.get("commands"));
+        return new ScriptManifest(id, entry, tools, commands,
+                parseCommandOptions(root.get("commandOptions"), commands), parseContributions(root, codecs),
+                parseEvents(root.get("events")), parseHandlers(root.get("handlers"), codecs),
+                parseSchedules(root.get("schedules")));
+    }
+</code></pre>
+
+    <p>
+      注意 <code>validateEntry</code> 那一行：它只看<strong>形状</strong>——必须是相对路径、规范化后不能跑到上一级去。
+      因为清单是<strong>随仓库分发</strong>的东西，一个 <code>git clone</code> 下来的脚本目录若写着
+      <code>../../../.ssh/id_rsa</code> 或 <code>/etc/shadow</code>，校验一旦只到「文件存在」，
+      内核就会把脚本目录外的任意文件当脚本执行。目录内的符号链接指向外面这一条在这里看不到真实位置，
+      由扫描器用 <code>toRealPath</code> 复核（下一段）。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/ScriptPluginScanner.java:92-125（扫描：逐目录读清单，问题逐条记录并继续）</div>
+
+<pre><code class="language-java">    private void loadScript(Path directory, Set&lt;String&gt; seenIds, List&lt;ScriptPlugin&gt; plugins,
+                            List&lt;ScriptIssue&gt; issues) {
+        String name = directory.getFileName().toString();
+        Path manifestFile = directory.resolve(ScriptManifest.FILE_NAME);
+        if (!Files.isRegularFile(manifestFile)) {
+            issues.add(new ScriptIssue(name, "缺少 " + ScriptManifest.FILE_NAME));
+            return;
+        }
+        ScriptManifest manifest;
+        try {
+            manifest = ScriptManifest.parse(read(manifestFile), name, codecs);
+        } catch (RuntimeException e) {
+            // 清单问题是「该脚本不可用」，不是「内核出故障」：逐条记录下来继续下一个目录
+            issues.add(new ScriptIssue(name, messageOf(e)));
+            return;
+        }
+        if (!seenIds.add(manifest.id())) {
+            issues.add(new ScriptIssue(name, "脚本标识重复: " + manifest.id()));
+            return;
+        }
+        ScriptPlugin plugin = new ScriptPlugin(manifest.id(), directory, manifest);
+        if (!Files.isRegularFile(plugin.entryFile())) {
+            issues.add(new ScriptIssue(name, "入口文件不存在: " + manifest.entry()));
+            return;
+        }
+        if (!insideDirectory(plugin.entryFile(), directory)) {
+            issues.add(new ScriptIssue(name, "入口文件超出脚本目录: " + manifest.entry()));
+            return;
+        }
+        plugins.add(plugin);
+    }
+</code></pre>
+
+    <p>
+      发现规则里每一条都对应一种真实会发生的写法错误：根目录<strong>不存在</strong>等于空结果（正常的冷启动状态），
+      存在但不是目录或不可读才抛异常（全局故障，没有脚本能加载）；只扫子目录，每个子目录要求有
+      <code>manifest.json</code>；两个目录声明同一个 <code>id</code> 时后者被跳过（否则两者的注册会在同一个 owner 下互相覆盖，
+      而覆盖顺序取决于目录遍历顺序）；<code>entry</code> 必须存在且<strong>解析后仍落在脚本目录内</strong>。
+      子目录按名字排序遍历，保证「谁被跳过」在任何机器上都一致。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/ScriptRegistrar.java:74-100（把清单变成一组转发处理器）</div>
+
+<pre><code class="language-java">    public ScriptRegistration register(PluginContext context, ScriptPlugin plugin) {
+        ScriptManifest manifest = plugin.manifest();
+        List&lt;Subscription&gt; subscriptions = new ArrayList&lt;Subscription&gt;();
+        List&lt;ScriptIssue&gt; issues = new ArrayList&lt;ScriptIssue&gt;();
+        String source = plugin.id();
+        for (ScriptManifest.Tool tool : manifest.tools()) {
+            registerTool(context, plugin, tool, subscriptions, issues);
+        }
+        for (ScriptManifest.Command command : manifest.commands()) {
+            registerCommand(context, plugin, command, subscriptions, issues);
+            if (command.hasOptions()) {
+                registerCommandOptions(context, plugin, command.name(), subscriptions, issues);
+            }
+        }
+        for (String command : manifest.commandOptions()) {
+            registerCommandOptions(context, plugin, command, subscriptions, issues);
+        }
+        for (String typeName : manifest.contributions()) {
+            registerContribution(context, plugin, source, typeName, subscriptions, issues);
+        }
+        for (ScriptManifest.Handler handler : manifest.handlers()) {
+            registerHandler(context, plugin, source, handler, subscriptions, issues);
+        }
+        return new ScriptRegistration(source, subscriptions, issues);
+    }
+</code></pre>
+
+    <p>
+      注册本身是普通的内核注册：<strong>脚本与 Java 插件同构</strong>这句话真正落地就在这里。
+      两个细节值得抄：一是<strong>逐条隔离</strong>——内核的「同键唯一」语义会在重名时抛异常（比如两个插件的工具名撞了），
+      若让它冒泡，后果是桥接插件 <code>start()</code> 失败、整门语言的所有脚本一起失效，用一个人的错误惩罚所有人，
+      所以这里逐条捕获并收敛成 <code>ScriptIssue</code>；二是<strong>每个脚本一个 owner</strong>——
+      注册走 <code>context.subContext(plugin.id())</code>，落在 <code>&lt;pluginId&gt;::&lt;脚本标识&gt;</code> 下，
+      诊断输出因此能指出「这个工具是哪个脚本提供的」。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/ScriptBridgePlugin.java:121-133（start 期做完三件事，但不拉起任何进程）</div>
+
+<pre><code class="language-java">    @Override
+    public final void start(PluginContext context) {
+        config = resolveConfig(context.configuration());
+        language = createLanguage(config);
+        probeInterpreter();
+        ledger = loadScripts(context);
+        registerStatusCommand(context);
+        LOG.info("{} 桥接插件已启动: pluginId={} scriptsRoot={} {}", language.displayName(),
+                context.pluginId(), config.scriptsRoot(), ledger.summary());
+        for (String issue : ledger.issues()) {
+            LOG.error("脚本问题: {}", issue);
+        }
+    }
+</code></pre>
+
+    <p>
+      <code>start()</code> 的顺序是：解析配置 → 造语言适配 → 探测解释器（<strong>失败只告警</strong>）→
+      扫描并注册 → 注册 <code>/&lt;语言&gt;</code> 状态命令。它<strong>不做</strong>三件事：不拉起解释器进程、
+      不 import 用户脚本、不读脚本正文。这三件事都会把「这门语言的环境是否健全」变成内核能否启动的前提，
+      而本方案刻意让它们解耦——解释器缺失的后果是「这次调用报错」，不是「插件加载失败、工具从清单里消失」。
+      最后一条对 <code>stop()</code> 的顺序要求写在 <code>Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/ScriptBridgePlugin.java:135-165</code>
+      的注释里，也很值得记住：先关事件桥、再停周期任务、最后关网关。事件桥排在前面是因为它唯一的出口就是网关；
+      周期任务必须排在网关之前，否则每一次触发都会变成一条「调用失败」的噪声日志。
+    </p>
+
+    <h3>让清单不必手写：<code>dump_manifest</code> 与严格校验</h3>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-python/src/main/resources/script/jellyfish_sdk.py:542-553（declarations：把装饰器注册表交出去）</div>
+
+<pre><code class="language-python">def declarations():
+    """返回全部声明，供 worker 做清单校验与 ``--dump-manifest`` 使用。"""
+    return {
+        "tools": _TOOLS,
+        "commands": _COMMANDS,
+        "commandOptions": _COMMAND_OPTIONS,
+        "contributions": sorted(_CONTRIBUTION_TYPES),
+        "events": list(_SUBSCRIPTIONS),
+        "handlers": [dict(item) for item in _HANDLERS_DECL],
+        "schedules": [dict(item) for item in _SCHEDULES],
+    }
+</code></pre>
+
+    <p>
+      SDK 的定位是三件事：<strong>声明</strong>（把 <code>@tool</code> 等装饰器的参数记进注册表）、
+      <strong>分发</strong>（按扩展点类型把请求交给对应函数并整形返回值）、<strong>生成清单</strong>。
+      它刻意不感知协议细节。装饰器有：<code>tool</code>（<code>jellyfish_sdk.py:240-268</code>）、
+      <code>command</code>、<code>command_options</code>、<code>contributes</code>、<code>subscribe</code>、
+      <code>periodic</code>、<code>handler</code>。重复声明一律当场拒绝——<code>subscribe</code> 的注释写得很直白：
+      事件到处理器是一对一映射，后一个会<strong>静默盖掉</strong>前一个，现象是「那个处理器好像从来没被调用过」，
+      而清单里只列了一个事件名，校验与日志都不会有任何提示。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-python/src/main/resources/script/dump_manifest.py:239-248（清单生成器的命令行形状：--check 与 --write 是配套动作）</div>
+
+<pre><code class="language-python">    parser = argparse.ArgumentParser(
+        prog="dump_manifest.py", description="从装饰器声明导出脚本清单")
+    parser.add_argument("script_dir", help="脚本目录（其下有入口文件与 manifest.json）")
+    parser.add_argument("--id", dest="script_id", default=None, help="把脚本标识也写进清单")
+    parser.add_argument("--check", action="store_true",
+                        help="与目录里现有的 manifest.json 比对，不一致时退 1")
+    parser.add_argument("--entry", dest="entry", default=None, help="入口文件名，缺省读清单或 main.py")
+    parser.add_argument("--write", action="store_true",
+                        help="直接写入目录里的 manifest.json（推荐，绕开 shell 重定向先把文件截空）")
+    options = parser.parse_args(argv)
+</code></pre>
+
+    <p>
+      <code>--check</code> 是给 CI 用的：生成一遍、与磁盘上那份比、不一致就退 1。
+      注释里还留了一条实践教训：打印的是<strong>内核认得的清单原文</strong>，而用于比对的是补齐缺省值之后的形状，
+      两者必须是两份数据——打印一份「为比较而改过的」形状，用户抄回去就会得到一份内核不认的清单
+      （例如 <code>commandOptions</code> 变成了字符串数组）。Python 侧经 <code>worker.py --dump-manifest</code> 调用，
+      Node 侧是 <code>dump_manifest.js</code>。
+    </p>
+
+    <h3>严格校验：把清单漂移变成启动期错误</h3>
+
+    <p>
+      清单与实现的一致性「由代码保证不了」，因此方案是两手：清单由代码生成，加上 worker 启动时比一遍。
+      比对发生在 worker 侧（<code>jellyfish_sdk.py:594-627</code> 的 <code>compare_with</code>），
+      比的是<strong>名字集合</strong>而不是整份清单——描述文本、参数 Schema 属于「给人看的信息」，
+      改了它们不需要脚本作者同步改清单；而名字集合一旦不一致，模型看到的就是一份不存在的工具定义。
+      严格校验失败时 worker <strong>拒绝服务</strong>。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/ScriptGateway.java:639-670（下发给网关的清单摘要：只带名字，不带整份 manifest）</div>
+
+<pre><code class="language-java">    private static Map&lt;String, Object&gt; manifestDigestOf(ScriptPlugin plugin) {
+        ScriptManifest manifest = plugin.manifest();
+        List&lt;String&gt; tools = new ArrayList&lt;String&gt;();
+        for (ScriptManifest.Tool tool : manifest.tools()) {
+            tools.add(tool.name());
+        }
+        List&lt;String&gt; commands = new ArrayList&lt;String&gt;();
+        for (ScriptManifest.Command command : manifest.commands()) {
+            commands.add(command.name());
+        }
+        Map&lt;String, Object&gt; digest = new LinkedHashMap&lt;String, Object&gt;();
+        digest.put("tools", tools);
+        digest.put("commands", commands);
+        digest.put("commandOptions", new ArrayList&lt;String&gt;(manifest.commandOptions()));
+        digest.put("contributions", new ArrayList&lt;String&gt;(manifest.contributions()));
+        digest.put("events", new ArrayList&lt;String&gt;(manifest.events()));
+        List&lt;String&gt; handlers = new ArrayList&lt;String&gt;();
+        for (ScriptManifest.Handler handler : manifest.handlers()) {
+            handlers.add(handler.key());
+        }
+        digest.put("handlers", handlers);
+        // 周期任务只下发名字：脚本侧的比对按名字做（间隔由宿主决定，且可被用户配置覆写，
+        // 因此它不是「清单与实现是否一致」这件事的一部分）
+        List&lt;String&gt; schedules = new ArrayList&lt;String&gt;();
+        for (ScriptManifest.Schedule schedule : manifest.schedules()) {
+            schedules.add(schedule.name());
+        }
+        digest.put("schedules", schedules);
+        return digest;
+    }
+</code></pre>
+
+    <p>
+      为什么只发名字？因为网关要判断的是「实现声明了但清单没有」与「清单声明了但实现没有」，
+      那是名字集合的比较，与描述、参数 Schema 无关；带上整份 manifest 会让网关不得不跟随清单 schema 的每一次演进。
+      严格校验的开关是配置项 <code>manifestStrict</code>（缺省 <code>true</code>）；
+      关掉它时 worker 只把不一致打到 stderr 然后继续服务——那是一个诊断用的逃生门，不是推荐配置。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>8. 事件通道：两个方向，一份白名单</h2>
+
+    <p>
+      事件是两条单向通道：内核事件推给脚本（<code>event</code> 通知），脚本请求发布事件（<code>emit_event</code> 上行调用）。
+      两侧共用同一份白名单，因此不存在「能收到但发不出去」这类被遗忘的组合。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/event/ScriptEventCatalog.java:220-231（投影：公共三件套 + 业务标量字段）</div>
+
+<pre><code class="language-java">    public static Map&lt;String, Object&gt; project(JellyfishEvent event) {
+        Map&lt;String, Object&gt; values = new LinkedHashMap&lt;String, Object&gt;();
+        values.put(FIELD_EVENT, event.getClass().getSimpleName());
+        values.put("eventId", event.getEventId());
+        values.put("occurredAt", Long.valueOf(event.getOccurredAt()));
+        if (event.getSessionId() != null) {
+            values.put("sessionId", event.getSessionId());
+        }
+        Projection projection = ENTRIES.get(event.getClass());
+        if (projection != null) {
+            values.putAll(projection.project(event));
+        }
+        return values;
+    }
+</code></pre>
+
+    <p>
+      <code>ScriptEventCatalog</code> 的三条取舍写在类注释里，都是刻意的：<strong>清单硬编码，不走配置</strong>
+      （事件类随内核版本增删，配置化只会带来两份清单的漂移，而漂移的表现是「脚本声明订阅了一个再也不存在的事件」）；
+      <strong>白名单而非黑名单</strong>（内核以后新增的事件不会自动对脚本开放——事件是内核内部事实的外泄，
+      开放与否应当是显式决定）；<strong>只下发标量字段</strong>（不下发嵌套快照结构，否则内核的内部结构就变成了脚本的对外契约，
+      此后重构会一路碎到脚本里）。实测目录里有 15 类可订阅事件，事件名取类名，与清单 <code>events</code> 声明的名字逐字一致。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/event/ScriptEventBridge.java:313-338（推送侧：只入队，真正的写在专属线程上）</div>
+
+<pre><code class="language-java">    private void enqueue(JellyfishEvent event) {
+        if (closed) {
+            return;
+        }
+        if (!target.isRunning()) {
+            // 事件不拉起进程：网关的懒启动只由「调用」触发。让一个事件去 fork 解释器，
+            // 等于把「事件到了」变成一次可能耗时几百毫秒、还可能失败的重操作，
+            // 而且它发生在通知线程上；代价是「没有调用过的脚本收不到事件」——
+            // 这与「事件可丢」是同一套取舍
+            droppedOffline.incrementAndGet();
+            return;
+        }
+        Map&lt;String, Object&gt; payload;
+        try {
+            payload = ScriptEventCatalog.project(event);
+        } catch (RuntimeException error) {
+            LOG.warn("{} 投影事件 {} 失败，已丢弃: {}", label, event.getClass().getSimpleName(),
+                    error.toString());
+            return;
+        }
+        if (!queue.offer(payload)) {
+            droppedFull.incrementAndGet();
+        }
+    }
+</code></pre>
+
+    <p>
+      为什么推送侧必须有队列与线程？事件由 <code>EventChannel</code> 的通知线程投递，而写子进程 stdin 是阻塞操作——
+      对端读得慢或卡住时，直接写会把通知线程钉死在一次 socket 写上。通知线程被钉住的后果不是「事件晚了一点」，
+      而是内核的<strong>全部通知都停摆</strong>（指标、界面刷新、审计一起停）。因此这里只有入队，
+      真正的写交给自己的一个线程；队列容量 256，满即丢并计数。
+      三条丢弃理由（网关未运行、队列满、投影失败）都计数，让「脚本收不到事件」在台账里可见，
+      而不是变成一句「事件桥接好像不太灵」。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-python/src/main/resources/script/gateway.py:590-610（扇出：只推给已运行的 worker，忙的丢，跳过发起者）</div>
+
+<pre><code class="language-python">    def _push_event(self, params):
+        """把一条事件扇出给「声明了它、且当前空闲」的 worker。
+
+        三条取舍都在这里：
+
+        - **只推给已经在跑的 worker**：给事件补拉起一个进程，等于让「一条通知」变成一次
+          拉起解释器的重操作，而通知本身是可以丢的。代价是没调用过的脚本收不到事件。
+        - **忙的 worker 直接丢**：worker 是单线程的，卡在一次长调用里时它的 socket 缓冲区
+          迟早会被事件填满，而网关是单线程事件循环——一次阻塞写就把整个网关钉住。
+          计数而不排队，是这里唯一不会让网关停摆的选择。
+        - **跳过发起者**：脚本收到自己刚发布的事件就是环。宿主在发布应答里给了 eventId，
+          这里据此认出「这条事件是它自己发的」。
+        """
+        name = params.get("event")
+        payload = params.get("payload") or {}
+        allowed = self.settings.get("allowedEvents") or []
+        if allowed and name not in allowed:
+            self.events_dropped += 1
+            return
+</code></pre>
+
+    <p>
+      回声抑制的做法值得单独看一眼：脚本 <code>emit_event</code> 之后，宿主在应答里回一个
+      <code>eventId</code>，网关把它记进一个<strong>按条数过期</strong>的 <code>OrderedDict</code>
+      （<code>ECHO_MEMORY = 256</code>），扇出时认出发起者就跳过。为什么不在 Java 侧过滤？
+      因为扇出发生在网关里——只有它知道某个事件要发给哪几个脚本。在 Java 侧过滤只能选择「整条事件都不推」，
+      那会连累无关脚本。为什么按条数而不是按时间过期？因为「事件还在飞」这件事没有可观测的终点。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/event/ScriptEventFactory.java:35-49（脚本能发布的事件只有两类）</div>
+
+<pre><code class="language-java">    /** 通用通知事件名。 */
+    public static final String PLUGIN_NOTIFICATION = "PluginNotificationEvent";
+
+    /** 配置告警事件名。 */
+    public static final String CONFIG_WARNING = "ConfigWarningEvent";
+
+    /** 可发布事件名集合。 */
+    public static final Set&lt;String&gt; EMITTABLE;
+
+    static {
+        Set&lt;String&gt; names = new LinkedHashSet&lt;String&gt;();
+        names.add(PLUGIN_NOTIFICATION);
+        names.add(CONFIG_WARNING);
+        EMITTABLE = Collections.unmodifiableSet(names);
+    }
+</code></pre>
+
+    <p>
+      白名单只有两类，而且<strong>都是「自由载荷」</strong>：通知的 <code>payload</code> 任意 JSON，
+      告警只有一句文本。因此这份白名单不会因为内核加字段而需要改。反过来说，
+      <strong>脚本不能伪造内核语义事件</strong>：<code>ToolCallCompletedEvent</code>、
+      <code>PermissionDecidedEvent</code> 这类事件是内核事实的转述，指标、审计与界面都按「它是真的」来消费；
+      脚本能造它们，等于给自己开了一条往审计里写假账的路，而这条路一旦存在，
+      所有事件的可信度都降级为「取决于最有恶意的插件」。
+    </p>
+
+    <div class="callout warn">
+      <span class="callout-title">注意：事件不负责拉起进程，「可丢」是契约而不是缺陷</span>
+      <p>
+        三条丢弃路径都写在源码里：<code>ScriptEventBridge.enqueue</code>（网关未运行、队列满）、
+        <code>gateway.py._push_event</code>（worker 忙或没有 worker、且不在 <code>events.allow</code> 里）。
+        SDK 文档把这件事说得很直接：「真正需要可靠传递的信息请用返回值」。
+        配置项 <code>events.allow</code> <strong>只收窄、不扩展</strong>——可订阅清单硬编码在运行时里，
+        写一个不存在的事件名不会扩大任何能力，只会把范围缩得更小，且启动时只告警不报错
+        （代价远小于「一个笔误让插件起不来」）。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>9. 稳定性：熔断、台账、超时与取消</h2>
+
+    <h3>熔断：拒绝派发，但不摘注册</h3>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/ScriptCircuitBreaker.java:142-153（冷却到期自动转半开）</div>
+
+<pre><code class="language-java">    public synchronized boolean admit() {
+        if (state == State.PERMANENT) {
+            return false;
+        }
+        if (state == State.OPEN) {
+            if (clock.getAsLong() - openedAtMillis &lt; settings.cooldownMillis()) {
+                return false;
+            }
+            state = State.HALF_OPEN;
+        }
+        return true;
+    }
+</code></pre>
+
+    <p>
+      四个状态：<code>CLOSED</code>（正常）、<code>OPEN</code>（熔断中，冷却后自动转半开）、
+      <code>HALF_OPEN</code>（放行探测，成功即恢复、失败则重新打开）、<code>PERMANENT</code>
+      （拒绝且不再自动恢复，只能靠 <code>/reload</code> 重建）。<code>admit()</code> 有副作用——
+      冷却到期时把自己推进到半开，因为「要不要探测」与「探测什么时候开始」本来就是同一件事。
+      半开期<strong>不限制并发探测数</strong>：限制「只放一个」需要排队或计数，代价是把调用线程挂住；
+      而多放几次探测的代价只是多几次失败，状态由最后到达的那个结果决定，是自纠正的。
+    </p>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：为什么熔断是「拒绝派发」而不是「摘掉注册」？</span>
+      <p>
+        注册与进程生命周期解耦（清单驱动、懒启动）是这套设计的核心价值。摘注册会把这个价值丢掉——
+        工具会从清单里<strong>消失</strong>（模型看到的不是「它坏了」，而是「它不存在」），
+        而恢复就得走 <code>/reload</code> 重新装配插件。熔断保住的是<strong>自动半开恢复</strong>：
+        工具仍然在清单里，模型可能反复调用，但它拿到的是一个明确的、带剩余时间的错误，看到一次就会避开。
+        拒绝文案因此必须给出「还要等多久」——<code>Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/CircuitBreakingScriptCaller.java:170-179</code>
+        的 <code>refusalMessage</code> 就是这么写的：「已因连续 N 次失败熔断，将在 M 秒后自动重试」。
+        一句「脚本不可用」只会让模型换个参数再试一次。
+      </p>
+    </div>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/ScriptCircuitBreaker.java:182-199（失败累加与半开探测：打开期间到达的失败不再累加）</div>
+
+<pre><code class="language-java">    public synchronized void recordFailure() {
+        if (state == State.PERMANENT || state == State.OPEN) {
+            // 打开期间失败不再累加：熔断期间本来就没派发新请求，此时到达的失败属于
+            // 「打开之前放行的那一次」。让它顺延冷却时间会让熔断变得不可预测——
+            // 剩余时间忽长忽短，而用户唯一的线索就是这个数字
+            return;
+        }
+        if (state == State.HALF_OPEN) {
+            openRounds++;
+            if (settings.roundsToPermanent() &gt; 0 &amp;&amp; openRounds &gt;= settings.roundsToPermanent()) {
+                state = State.PERMANENT;
+                notifyOpened("连续 " + openRounds + " 轮探测失败，已停止调用（修改脚本或配置后执行 /reload 恢复）");
+                return;
+            }
+            openAt("第 " + openRounds + " 轮探测失败");
+            return;
+        }
+        consecutiveFailures++;
+</code></pre>
+
+    <p>
+      实测的熔断参数（<code>Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/CircuitBreakerSettings.java:21-31</code>）：
+      <code>failuresToOpen = 2</code>（缺省 2 次就开始熔断，因为每一次都很贵——一个完整超时或一次进程重建）、
+      <code>cooldownSeconds = 60</code>、<code>roundsToPermanent = 3</code>。
+      三个参数<strong>零都有确定含义</strong>：<code>0</code> 分别表示「不熔断」「立即重试」「永不转永久」，
+      因此构建器只拒绝负数、不拒绝零——把零当默认值会让「显式关闭熔断」这条唯一手段失效。
+    </p>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：哪些失败<strong>不计入</strong>熔断，比哪些计入更重要</span>
+      <p>
+        <strong>现象</strong>：网关挂过一次之后，所有脚本还要再等一个冷却期；或者用户按了几次 Esc，某个脚本被熔断冷却了；
+        或者一个坏脚本看起来「已经好了」。<br>
+        <strong>根因</strong>：账记错了。判据收在唯一一个方法里
+        （<code>Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/CircuitBreakingScriptCaller.java:148-165</code>），
+        四类失败<strong>明确不计</strong>：<code>ScriptConnectionException</code>（L3：整门语言不可用，不是这个脚本的问题；
+        网关是懒启动的，下次调用会重新拉起来）、错误码 <code>-32001</code>（熔断自己产生的拒绝——记进去会让冷却被自己的拒绝无限延长）、
+        <code>ScriptCancelledException</code>（取消是用户主权）、<code>ScriptNotHandledException</code>（「不表态」既不是成功也不是失败）。
+        其余都计：超时、脚本回报的错误、协议错误码，判据是「这次调用没有拿到结果」。<br>
+        <strong>规避</strong>：给「不表态」专门一个异常类型，而不是复用 <code>null</code> 或抛通用异常——
+        把「这次没去办」与「办砸了」在类型上分开，是这一整套记账能正确的前提。
+      </p>
+    </div>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/CircuitBreakingScriptCaller.java:93-110（装饰器：先问熔断，再转发，按类型记账）</div>
+
+<pre><code class="language-java">    public JsonNode call(ScriptPlugin plugin, String typeName, JsonNode request, CancellationToken token) {
+        ScriptCircuitBreaker breaker = breakerOf(plugin.id());
+        if (!breaker.admit()) {
+            // 拒绝而不是派发：熔断的全部意义就在于「别再往一个已知有问题的脚本上打」
+            throw new ScriptCallException(ScriptProtocol.CODE_CIRCUIT_OPEN, refusalMessage(breaker));
+        }
+        try {
+            JsonNode result = delegate.call(plugin, typeName, request, token);
+            // 拿到结果就算一次成功（空结果也是结果）：只有「不表态」不算——
+            // 它以 ScriptNotHandledException 抛出，走不到这里
+            breaker.recordSuccess();
+            return result;
+        } catch (JellyfishException e) {
+            if (countsAsFailure(e)) {
+                breaker.recordFailure();
+            }
+            throw e;
+        }
+    }
+</code></pre>
+
+    <p>
+      它是<strong>装饰器，不是网关的一部分</strong>：熔断的判据是「这个脚本最近怎么样」，与「进程、协议、worker」无关。
+      放在外面，状态机就能脱离进程被完整验证（时间源可注入，所以「冷却 60 秒后自动半开」这条转移能在单测里被验证，
+      不必靠 <code>Thread.sleep</code>）；放在网关里，验一次这条转移就必须先起一个真实进程。
+    </p>
+
+    <h3>台账与状态命令：注册是快照，运行态是视图</h3>
+
+    <p>
+      脚本插件在 Java 侧没有自己的 PF4J 身份（注册全挂在桥接插件命名空间下），因此 <code>/plugins</code>
+      与插件状态页看不到它们。差一本台账，「我明明写了脚本」就只能靠翻日志判断——而清单漂移是本方案唯一的高危点，
+      它的可观测性不该依赖日志。于是每个桥接插件自带一条 <code>/&lt;语言&gt;</code> 命令，输出
+      <code>ScriptLedger.render()</code> 的结果：脚本数、已登记能力数、运行时自述、熔断状态、
+      事件通道计数、逐脚本注册项、以及逐条列出的启动期问题。
+    </p>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：为什么台账里「注册」用快照，而「运行态」必须现看？</span>
+      <p>
+        <code>ScriptLedger</code> 的类注释把这条区分讲得很清楚：注册结果与启动期问题是 <code>start()</code> 那一刻的事实，
+        不随后续变化；但运行态（进程在不在、哪些脚本被熔断了）必然是<strong>活的</strong>，
+        因此这两部分不是存下来的副本，而是转发到运行时去看一眼。
+        区分方式是：报告「注册了什么」用快照，报告「现在怎么样」用视图——把后者也快照下来，
+        会得到一份「已经过时的真相」，而它比没有更具误导性。
+        渲染顺序也有讲究：运行态、熔断、事件各占单独一行，因为注册数与运行态<strong>本来就是解耦的</strong>
+        （进程没起，注册照样有效），这正是这套设计最需要被看见的一点。
+      </p>
+    </div>
+
+    <h3>超时与取消：两段式，宿主只发指令</h3>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/CommonsExecScriptProcess.java:150-179（进程的两段式关闭：先 EOF，再 TERM，再 KILL）</div>
+
+<pre><code class="language-java">    public void close(long graceMillis, long killMillis) {
+        Process current = process;
+        if (current == null) {
+            stopped.set(true);
+            return;
+        }
+        if (!stopped.compareAndSet(false, true)) {
+            return;
+        }
+        // 先关 stdin：解释器读到 EOF 就走正常退出路径，比信号温和，
+        // 也让「网关正在收信号、worker 来不及回收」的概率最低
+        closeQuietly(current.getOutputStream());
+        if (!awaitExit(graceMillis)) {
+            LOG.warn("脚本进程未在 {} ms 内退出，发送终止信号: {}", Long.valueOf(graceMillis), describeCommand());
+            current.destroy();
+        }
+        // 第二段等待用 killMillis 而不是再等一遍 graceMillis：从这一刻起已经进入「动手收尾」，
+        // 剩下的每一段等待都该受同一个上限约束（否则最坏情况是 grace + grace + kill，
+        // 而那个多出来的 grace 只是把强杀推后）
+        if (!awaitExit(killMillis)) {
+            LOG.warn("脚本进程未响应终止信号，强杀: {}", describeCommand());
+            current.destroyForcibly();
+            if (!awaitExit(killMillis)) {
+                LOG.error("脚本进程强杀后仍未退出，可能出现残留进程: {}", describeCommand());
+            }
+        }
+    }
+</code></pre>
+
+    <p>
+      三个上限是实测值：优雅退出等 3 秒（<code>ScriptGateway.CLOSE_GRACE_MILLIS</code>）、
+      强杀后等 2 秒（<code>CLOSE_KILL_MILLIS</code>）、隔离请求的等待上限 5 秒
+      （<code>KILL_REQUEST_TIMEOUT_MILLIS</code>，与配置无关——网关收到请求就把信号发出去了，应答是即时的）。
+      网关侧 worker 的两段式等待是 2 秒 + 2 秒（<code>KILL_GRACE_SECONDS</code> / <code>KILL_FORCE_SECONDS</code>）。
+    </p>
+
+    <p>
+      超时的处置链有三层，缺一层都收不干净：<strong>宿主侧</strong>
+      <code>ScriptGateway.call</code> 捕获 <code>ScriptTimeoutException</code> 后发 <code>kill_worker</code> 指令
+      （<code>Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/ScriptGateway.java:249-267</code>）；
+      <strong>网关侧</strong>自己的 <code>_expire</code>
+      有同一个截止时间做兜底（宿主失联时仍然会清理），失败在途的那一个并保留排队的请求；
+      <strong>worker 侧</strong>收到 SIGTERM 就立刻 <code>os._exit</code>。两条路径都指向同一个 worker，
+      而网关那侧的 kill 是幂等的——因此「两边同时动手」是正常情况，不是错误，<code>killWorker</code>
+      把「没杀到」当成一个可接受的返回值而不是异常。
+    </p>
+
+    <p>
+      取消（<code>CancellationToken</code>）的接法有一处很关键的工程细节：取消回调可能在<strong>渲染线程</strong>上执行
+      （TUI 的 Esc 路径），因此它只做两件非阻塞的事——翻标志、起一条短命守护线程去杀 worker；
+      杀 worker 是一次阻塞 RPC，绝不能放在回调里。另外取消令牌是<strong>回合级</strong>的，
+      而一次调用只属于其中一次：回调晚到时不能杀掉别的调用正在用的 worker，所以有一个
+      <code>active</code> 标志在 <code>finally</code> 里被清掉。只有工具调用会传真实令牌，
+      其余扩展点一律传 <code>CancellationToken.NONE</code>（<code>ExtensionCodec.handlerTo</code> 的默认实现），
+      这是 <code>ToolCodec</code> 唯一覆盖 <code>handlerTo</code> 的原因。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/ScriptGateway.java:468-497（一代网关的启动：先造会话、再起进程、写出行必须在 initialize 之前就位）</div>
+
+<pre><code class="language-java">    private void start() {
+        // 先造 RPC 会话、后起进程：进程退出回调需要拿到「该通知哪一代」，
+        // 若反过来，回调就会在会话尚未赋值时到达，那次失败只能表现为「初始化等到超时」
+        final ScriptRpc created = new ScriptRpc(this::send, this::onIncoming);
+        this.rpc = created;
+        ScriptProcess started = null;
+        FrameWriter createdWriter = null;
+        try {
+            started = processFactory.start(this::onLine, code -&gt; onExited(created, code.intValue()));
+            this.process = started;
+            // 写出行要排在初始化之前就位：initialize 这一帧本身就要经它才出得去。
+            // 写失败回报给这一代会话——那样「进程其实已经没了」会立刻唤醒正在等待的调用方，
+            // 而不是让它各自等到超时
+            createdWriter = new FrameWriter(started, cause -&gt; onWriteFailure(created, cause));
+            this.writer = createdWriter;
+            // 新的一代不清楚任何一个 worker：上一代的快照必须清掉，
+            // 否则台账会把「上一代退出时的样子」当成现在的样子展示
+            workers.clear();
+            Map&lt;String, Object&gt; params = new LinkedHashMap&lt;String, Object&gt;();
+            params.put(ScriptProtocol.PARAM_SCRIPTS, scriptPayloads());
+            params.put(ScriptProtocol.PARAM_SETTINGS, settings.toJson());
+            JsonNode response = created.call(ScriptProtocol.METHOD_INITIALIZE, ScriptJson.treeOf(params),
+                    initializeTimeoutMillis());
+            reportInitialization(response);
+            LOG.info("{} 脚本网关已启动: {} 个脚本，{}", language.displayName(),
+                    Integer.valueOf(scripts.size()), settings);
+        } catch (RuntimeException e) {
+            discard(created, started, createdWriter);
+            throw e;
+        }
+    }
+</code></pre>
+
+    <p>
+      这段代码里三处顺序都是有代价的：会话先于进程（否则退出回调不知道该通知哪一代）、
+      写出行先于初始化（否则 <code>initialize</code> 那一帧自己发不出去）、
+      <code>workers.clear()</code>（否则台账会把上一代退出时的样子当成现在的样子）。
+      另有两个超时值也需要记住：调用超时就是配置里那<strong>一个</strong>数字，
+      因为「Java 比网关先放弃」会让网关来不及杀掉卡死的 worker，下一次调用撞上同一个卡住的 worker，
+      表现为「连续超时」；而初始化的等待上限刻意更宽（<code>max(30s, 调用超时 + 10s)</code>），
+      因为网关自己有一个更短的初始化宽限，正常情况下「网关的精确错误」总是先到——
+      哪个脚本、差在哪个扩展点都在里面。
+    </p>
+
+    <p>
+      初始化结果的记账方式同样值得抄：<strong>单脚本初始化失败只告警不失败</strong>
+      （网关已经起来了，成功的脚本还能正常工作，而「因为一个脚本的入口文件写错，整门语言都不可用」
+      正是本方案要避免的连坐）；<strong>但一个脚本都没起来就显式失败</strong>，否则后面的每次调用都只会超时，
+      现场离原因（清单与实现对不上）隔了整整一个超时周期。而且<strong>每个脚本都要出现在结果里</strong>
+      （<code>gateway.py._expire_init</code> 的注释）：只在失败时上报的话，「worker 一起来就崩」的脚本会静默消失，
+      而宿主看到的是「清单里有它、初始化结果里没有它」——那正是最难判断的一种不一致。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>10. SDK 与「加一门新语言」的真实成本</h2>
+
+    <p>
+      脚本作者看到的全部 API 在两个 SDK 里，方法名刻意取得一样：<code>tool</code> / <code>command</code> /
+      <code>command_options</code> / <code>contributes</code> / <code>subscribe</code> / <code>periodic</code> /
+      <code>handler</code> / <code>declarations</code> / <code>dump_manifest</code> / <code>compare_with</code> / <code>invoke</code>。
+      Python 用装饰器，Node 用「声明函数 + 就地注册」；Python 的缺省描述取函数文档字符串第一行，Node 必须显式写
+      <code>description</code>（JS 拿不到注释）——而它正是模型看到的那句。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-python/src/main/resources/script/jellyfish_sdk.py:240-257（只多不少：没有 read_only，重复名当场拒绝）</div>
+
+<pre><code class="language-python">def tool(name, description=None, parameters=None, required=None):
+    """声明一个工具。
+
+    ``parameters`` 是 JSON Schema 的 ``properties`` 部分，``required`` 是必填参数名列表：
+    它们会原样进入 ``ToolDescriptor``，也就是模型看到的工具定义，因此必须与函数真正
+    接受的参数一致——不一致的后果是模型按错误的签名调用，而错误只在运行期以
+    「参数缺失」的形式出现。
+
+    这里**没有** ``read_only`` 参数：哪些工具在某个模式下可用完全由用户决定
+    （例如 plan 插件的 ``jellyfish.json`` 段 ``plugins.configurations.jellyfish-plugin-plan.readOnlyTools``），
+    工具无法自称只读——那会让名单只增不减，用户没法把工具拿出来。
+    """
+
+    def decorate(func):
+        if any(item["name"] == name for item in _TOOLS):
+            raise ScriptError("工具名重复声明: %s" % name)
+</code></pre>
+
+    <p>
+      <code>ScriptContext</code> 暴露的东西是刻意收窄的：身份（<code>script_id</code>）、会话与调用者上下文
+      （<code>session_id</code> / <code>parent_session_id</code> / <code>run_id</code> / <code>root_run_id</code>）、
+      原始载荷、配置段（<code>ctx.configuration</code>），以及 <code>emit_event</code>。
+      它<strong>不暴露宿主对象</strong>，也不提供「回调宿主」的能力——脚本能做的事只有「处理这次请求并返回结果」。
+      跨 run 协作的键要从内核取：子代理有独立会话，用 <code>session_id</code> 做键会各写一份，
+      该用哪个键只有内核知道，模型无从指定。
+    </p>
+
+    <p>
+      值对象只有两个：<code>ScriptError</code>（可预期失败——抛出等于告诉宿主「这次调用失败了」，
+      宿主会把它转成协议错误回灌给模型；<strong>不要</strong>用返回值里的 <code>{"error": ...}</code> 表达失败，
+      那会被当成正常输出）与 <code>ToolResult</code>（正文之外再带上给界面看的 <code>summary</code> /
+      <code>terminal</code> / <code>metadata</code>；它们<strong>不进模型上下文</strong>，模型看到的仍是 <code>output</code> 那段文本）。
+    </p>
+
+    <h3>语言适配：新增一门语言要写什么</h3>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-python/src/main/java/zcd/jellyfish/plugin/python/PythonBridgePlugin.java:31-42（子类的全部内容：三个常量 + 一行解析）</div>
+
+<pre><code class="language-java">    static final String KEY_INTERPRETER = "pythonPath";
+
+    /** 默认解释器：交给 PATH 解析，不写死绝对路径（虚拟环境场景由用户用 {@code pythonPath} 指定）。 */
+    static final String DEFAULT_INTERPRETER = "python3";
+
+    /** 默认脚本根目录：相对进程工作目录，与内核「插件相对路径按进程 cwd 解析」同口径。 */
+    static final String DEFAULT_SCRIPTS_ROOT = "scripts/python";
+
+    @Override
+    protected ScriptBridgeConfig resolveConfig(Map&lt;String, Object&gt; configuration) {
+        return ScriptBridgeConfig.from(configuration, KEY_INTERPRETER, DEFAULT_INTERPRETER,
+                DEFAULT_SCRIPTS_ROOT);
+    }
+</code></pre>
+
+    <p>
+      <code>ScriptLanguage</code> 接口只有几个方法：<code>id()</code>、<code>displayName()</code>、
+      <code>probeCommand()</code>、<code>gatewayResources()</code>、<code>startCommand(Path)</code>、
+      <code>environment()</code>。跨语言运行时（协议、进程管理、事件桥接、熔断）对语言一无所知，
+      它只通过这个接口问三件事：怎么启动、启动前怎么探测、进程该带什么环境。
+      这就是「新增一门语言 = 新增一个极薄的桥接插件 + 一份语言适配 + 一份该语言的常驻网关资源」的全部内容，
+      内核与运行时都不动。Node 那一门语言是这条结论的验收证据——它没有让 <code>jellyfish-script</code> 增加一行代码
+      （<code>Jellyfish-Plugins/jellyfish-plugin-node/src/main/java/zcd/jellyfish/plugin/node/NodeLanguage.java:16-24</code>），
+      而且上一门语言踩过的坑（能力上下文每次 <code>start</code> 现造、注册按命名空间回收、熔断不摘注册、PID 文件只报告）
+      在第二门语言上自动成立。
+    </p>
+
+    <p>
+      两个「为什么这么设计」也值得记住。<strong>探测与启动分开</strong>：探测在插件 <code>start()</code> 期执行，
+      只回答「这台机器上有没有这个解释器」，失败属于环境问题、只记告警，不能让插件转 <code>FAILED</code>
+      ——否则用户看到的是「工具凭空消失」；启动则在首次真正调用时才发生，失败只让那一次调用失败。
+      <strong>网关资源清单归语言适配</strong>：它描述的是「这门语言的网关由哪几个文件组成」，
+      与解释器路径、启动命令同属「这门语言长什么样」；留给调用方填会把同一份知识复制到每一个需要构造网关的地方，
+      而两处不一致的表现是「网关少了一个文件」——只在生产里、只在第一次调用时出现。
+    </p>
+
+    <h3>周期任务：脚本没有主循环，所以发起方必须在桥接层</h3>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/ScriptScheduler.java:275-297（触发一次，并代发一次界面失效）</div>
+
+<pre><code class="language-java">    void tickNow(ScriptPlugin plugin, String name) {
+        if (closed) {
+            // 关闭之后连调用都不发起：网关可能已经关了，发出去只会得到一条「调用失败」的噪声
+            return;
+        }
+        ObjectNode request = ScriptJson.objectNode();
+        request.put("name", name);
+        try {
+            caller.call(plugin, PERIODIC_TYPE, request, CancellationToken.NONE);
+        } catch (RuntimeException e) {
+            if (closed) {
+                LOG.debug("周期任务在关闭过程中被打断: script={} task={}", plugin.id(), name);
+            } else {
+                // 熔断/超时/脚本自身报错都到这里。不发失效事件：数据没变，
+                // 发了只会让全部面板白跑一遍（见类注释）
+                LOG.warn("周期任务调用失败: script={} task={} 原因={}", plugin.id(), name, e.getMessage());
+            }
+            return;
+        }
+        emitInvalidation(plugin, name);
+    }
+</code></pre>
+
+    <p>
+      为什么必须有 <code>ScriptScheduler</code>：脚本的 worker 是「收请求 → 跑处理器 → 收事件」的单线程循环，
+      进程只在被调用时活着、空闲还会自毁，因此脚本<strong>无法自行计时</strong>。发起方只能落在桥接层——
+      它是唯一常驻、且手里有调用通路的一侧。三条实测语义：间隔是「上一次跑完 + 间隔」
+      （<code>scheduleWithFixedDelay</code>，本身就是 single-flight 的；取数一次可能十几秒，用固定频率会把
+      「还没返回就又发一次」变成常态）；<strong>成功之后代发一次 <code>UiInvalidatedEvent</code></strong>
+      （脚本发布不了这个事件，而周期任务的语义就是「我后台更新了自己贡献的内容」——
+      没有它，定时抓到的新数据只会写进文件，而屏上那块面板永远不会自己重画）；
+      <strong>失败只记日志、绝不让定时器停</strong>（任务体抛异常会让 <code>scheduleWithFixedDelay</code>
+      的后续触发<strong>静默停止</strong>，表现是「跑了几次就不动了」而日志里什么都没有。
+      连「代发失效」这一步都单独包了 try/catch，因为那恰好是关闭那一刻最容易抛的一步）。
+    </p>
+
+    <p>
+      最后是配置键的全集（实测，<code>Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/ScriptBridgeConfig.java:46-95</code>
+      的常量）。语言无关的键由基类解析，与语言有关的只有两件事：解释器写在哪一个键上、以及两个默认值。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>配置键（<code>plugins.configurations.&lt;桥接插件&gt;</code> 下）</th><th>缺省</th><th>作用与边界</th></tr></thead>
+        <tbody>
+          <tr><td><code>scriptsRoot</code></td><td><code>scripts/python</code> / <code>scripts/node</code></td><td>脚本根目录，相对进程工作目录；其下每个含 <code>manifest.json</code> 的子目录是一个脚本插件。<strong>不检查目录是否存在</strong>（不存在等价于「还没有脚本」），检查留给启动期扫描</td></tr>
+          <tr><td><code>pythonPath</code> / <code>nodePath</code></td><td><code>python3</code> / <code>node</code></td><td>解释器；不写死绝对路径，虚拟环境 / nvm 场景由用户显式指定</td></tr>
+          <tr><td><code>invokeTimeoutSeconds</code></td><td><code>30</code></td><td>单次调用超时；<code>0</code> 表示<strong>没有截止时间</strong>（不是「立刻超时」）。超时隔离该脚本的 worker 并计入熔断</td></tr>
+          <tr><td><code>workerIdleSeconds</code></td><td><code>300</code></td><td>worker 空闲自毁；<code>0</code> 关闭回收</td></tr>
+          <tr><td><code>gatewayIdleSeconds</code></td><td><code>600</code></td><td>网关空闲自毁（懒启动的必备配套：懒启动但不退场等于只懒一次）；<code>0</code> 关闭</td></tr>
+          <tr><td><code>manifestStrict</code></td><td><code>true</code></td><td>worker 首次拉起时逐项比对清单与实现，任何漂移都拒绝服务</td></tr>
+          <tr><td><code>gatewayRoot</code></td><td><code>~/.jellyfish/gateway</code></td><td>网关资源抽取根目录（其下按语言 + 内容摘要分目录）</td></tr>
+          <tr><td><code>pidDirectory</code></td><td><code>~/.jellyfish/pids</code></td><td>PID 文件目录；与抽取目录同级而不是子目录，才不会被「摘要换目录」挡住</td></tr>
+          <tr><td><code>events.allow</code></td><td>空（不额外收窄）</td><td>只收窄、不扩展；写不存在的事件名只会启动时告警</td></tr>
+          <tr><td><code>circuitBreaker.failuresToOpen</code></td><td><code>2</code></td><td>连续失败几次打开；<code>0</code> 表示不熔断</td></tr>
+          <tr><td><code>circuitBreaker.cooldownSeconds</code></td><td><code>60</code></td><td>冷却秒数；<code>0</code> 表示下一次调用立即可以探测</td></tr>
+          <tr><td><code>circuitBreaker.roundsToPermanent</code></td><td><code>3</code></td><td>半开探测失败几轮后转永久；<code>0</code> 表示永不转永久</td></tr>
+          <tr><td><code>scripts.&lt;脚本 id&gt;</code></td><td>—</td><td><strong>逐脚本配置段</strong>，值对桥接层<strong>不透明</strong>（桥接只按 id 切片原样转发）。脚本 id 写错会在启动时发一条配置告警；内容可能含密钥，因此不进日志、不进台账、<code>toString()</code> 也只报数量</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：类型写错的配置一律报错，不退回默认值——这是刻意的</span>
+      <p>
+        <strong>现象</strong>：用户改了三处配置，只有一处没生效，而他没有任何线索。<br>
+        <strong>根因</strong>：如果类型不对时静默走默认值，那就是「配置不生效」这类最难排查问题的标准成因。
+        因此 <code>ScriptBridgeConfig</code> 的每个解析函数都当场抛（<code>seconds</code> / <code>count</code> /
+        <code>bool</code> / <code>requireText</code>），并且只解析<strong>已经落地的键</strong>——
+        声明一堆没人读的键，只会让人误以为配置已经生效，因此键名与真正的消费点严格同步
+        （唯一例外是 <code>scripts</code>：它按脚本 id 原样转发给脚本，桥接不认识里面的 key，否则每加一个脚本插件就要改内核）。<br>
+        <strong>规避</strong>：配错了就看报错里的键名去改，别指望「回退到默认值」——
+        这是本方案有意不给的便利。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>11. 设计难点与备选方案</h2>
+
+    <p>
+      这一节把散落在源码注释里的取舍收拢成一张表，并回答「为什么不换个做法」。四条备选都被认真评估过，
+      结论是各有致命的错配。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>备选方案</th><th>它看起来的优势</th><th>为什么没选（源码/约束给出的理由）</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>嵌入 JS 引擎</strong>（GraalJS / Nashorn / J2V8）</td>
+            <td>无进程往返，类型映射由引擎代劳，调试可断点</td>
+            <td>只解决一门语言（或几门），而本方案的目标是「任意语言」；且它把脚本拉回 JVM 内，用户依赖（<code>akshare</code>、npm 生态）随之失去意义——脚本进程隔离的价值有一半是「依赖装在脚本自己的环境里，崩了只波及它自己」。另外「渲染线程内联执行」那类扩展点被排除，正是因为脚本调用必须能容忍一次进程往返</td>
+          </tr>
+          <tr>
+            <td><strong>JNI / 本地绑定</strong></td>
+            <td>零拷贝、无需协议</td>
+            <td>CPython 的 GIL 与 JVM 线程模型无法共存，一个卡住的脚本会挂住 JVM 线程；崩溃会带走整个内核。而本方案明确要求「脚本卡死、崩溃只影响它自己」</td>
+          </tr>
+          <tr>
+            <td><strong>纯脚本内核</strong>（内核也用 Python 写）</td>
+            <td>没有桥</td>
+            <td>不成立——内核是 Java（PF4J、JLine/TamboUI、LlmTransport 都在 JVM 里），扩展点契约是 Java 接口。这条路等于换一个项目</td>
+          </tr>
+          <tr>
+            <td><strong>RPC over TCP / HTTP</strong></td>
+            <td>进程模型更松，能远程部署</td>
+            <td>要引入端口分配、防火墙、认证与「谁先起」的时序问题；而这里两端必然在同一台机器上、由同一个人启动，stdio 已经足够。stdio 还天然给出「对端死了」的信号（EOF），比心跳更简单</td>
+          </tr>
+          <tr>
+            <td><strong>子进程 + 行分隔 JSON 线协议</strong>（选中）</td>
+            <td>语言无关、进程隔离、崩溃只影响自己</td>
+            <td>代价是四个必须被正面解决的设计难点，见下表</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      选中的方案带来四个难点，它们分别对应本页的某一节，也分别有一处具体的工程答案：
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>难点</th><th>具体表现</th><th>本方案的答案</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>跨语言类型映射</strong></td>
+            <td>Java 值对象 ↔ JSON 形状；字符串与结构化对象必须区分，否则二次转义</td>
+            <td>每个扩展点一个 <code>ExtensionCodec</code>（纯函数、可离线单测）+ <code>Payloads</code> 安全取值层 + 能力档里的 <code>args</code> / <code>shape</code> 键名指向两侧 SDK 的实现</td>
+          </tr>
+          <tr>
+            <td><strong>性能（进程间往返）</strong></td>
+            <td>冷启动几百毫秒；热路径点每次组装请求都被问到</td>
+            <td>懒启动 + 空闲自毁（不占常驻内存）；<code>HotPathPoints</code> 的两个点不冷启动、给 2 秒短截止；<code>FrameWriter</code> 把写从调用线程挪走，让超时对「写不进去」同样有效</td>
+          </tr>
+          <tr>
+            <td><strong>错误传播</strong></td>
+            <td>Java 异常 ↔ 脚本异常；哪些失败该隔离 worker、哪些该熔断、哪些该忽略</td>
+            <td>错误走协议的错误对象而不是「结果里塞 <code>error</code>」（后者会被当成正常输出回灌给模型）；四类异常分别在 <code>protocol/</code> 与顶层定义，记账判据收在 <code>countsAsFailure</code> 一处</td>
+          </tr>
+          <tr>
+            <td><strong>版本兼容</strong></td>
+            <td>SDK 与内核版本、能力档与内核扩展点都可能漂移</td>
+            <td>清单是静态的、网关资源按<strong>内容摘要</strong>分目录（换了资源就是换了目录，不会复用旧版）；<code>manifestStrict</code> 在 worker 启动时逐项比对；<code>ExtensionPointCoverageTest</code> 守着「内核新增扩展点必须分档」</td>
+          </tr>
+          <tr>
+            <td><strong>调试体验</strong></td>
+            <td>脚本出错怎么定位？跨进程栈是断的</td>
+            <td>stdout 只有协议、stderr 全进日志（带脚本前缀）；网关的脏行丢弃也留痕（计数 + stderr + 限流）；<code>/&lt;语言&gt;</code> 台账给出进程 PID、丢弃的迟到响应数、worker 在途与排队、熔断剩余时间、事件推送与丢弃计数</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：为什么「清单是注册的唯一来源」值得付出漂移的代价？</span>
+      <p>
+        替代做法是让脚本运行时上报注册。它的直接后果是：注册必须在 <code>start()</code> 里阻塞等待进程就绪，
+        而进程一旦起不来，插件就只能整个失败——也就是「内核启动依赖解释器」。
+        静态清单换来三件事：Python 环境缺失不阻塞内核启动（清单在磁盘上，与解释器无关）、
+        没有请求时脚本侧进程数为零（注册不需要进程）、worker 崩溃后直接重启即可（清单是权威，无需重注册）。
+        代价是清单可能与实现漂移，因此配套了三重防线：清单由 <code>dump_manifest</code> 从代码生成、
+        <code>--check</code> 供 CI 比对、worker 启动时 <code>compare_with</code> 严格校验。
+        这套「用一个静态事实换掉一条启动期依赖，再花力气守住它」的账，是本页最值得记住的取舍之一。
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2>12. 坑点清单</h2>
+
+    <p>
+      前文散落的坑，这里按「现象 → 根因 → 规避」收成一张表。多数坑的共同特征是
+      <strong>现场离原因很远</strong>——这正是跨进程方案必须额外花钱买可观测性的原因。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>现象</th><th>根因</th><th>规避</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>调用一直等到超时，两侧日志里没有任何线索</td>
+            <td>宿主单行上限 <strong>小于</strong>脚本侧出帧上限：落在中间的帧被就地切成两条非法行丢掉，脚本侧那条「结果超过传输上限」永远不会触发</td>
+            <td>两个数字必须满足严格不等式（宿主 10 MB + 64 KiB &gt; 脚本 10 MB），端到端测试各有一条守卫用例从脚本侧源码读数比对</td>
+          </tr>
+          <tr>
+            <td>某个工具「凭空消失」，内核照常启动</td>
+            <td>清单里的键写错（例如 <code>commands</code> 写成 <code>command</code>）→ 该脚本被判为问题并跳过；而工具清单来自清单文件，与解释器无关</td>
+            <td>清单解析零容忍、未知键报错并列出允许的键名；<code>/&lt;语言&gt;</code> 台账逐条列出启动期问题；用 <code>dump_manifest</code> 生成而不是手写</td>
+          </tr>
+          <tr>
+            <td>脚本里声明的工具/事件从来没有被调用过</td>
+            <td>重复声明被后一个<strong>静默盖掉</strong>（事件到处理器是一对一映射）；或清单与实现不一致而 <code>manifestStrict=false</code></td>
+            <td>重复声明当场抛 <code>ScriptError</code>（<code>jellyfish_sdk.py:442-470</code> 的 <code>subscribe</code>）；保持 <code>manifestStrict=true</code>，让不一致变成启动期拒绝服务</td>
+          </tr>
+          <tr>
+            <td>调用拿到「别人的结果」，此后每次错位一格</td>
+            <td>脚本往协议流里写了一行合法 JSON（脚本自己猜 fd、或 worker 误写），被当成在途请求的应答</td>
+            <td>网关校验应答的 <code>id</code> 是不是在途请求的 <code>seq</code>，对不上就丢弃并计数告警（<code>gateway.py:821-841</code>）；子进程 fd 1/2 指向日志管道，误打印进不了协议流</td>
+          </tr>
+          <tr>
+            <td>熔断打开后所有脚本一起「变慢」，网关恢复后仍要等冷却</td>
+            <td>把 L3 失败（<code>ScriptConnectionException</code>）记进了每个脚本的账；或把熔断自己的拒绝 <code>-32001</code> 再记一次失败，冷却被自己的拒绝无限延长</td>
+            <td>记账判据收在一处：连接故障、取消、「不表态」、熔断拒绝四类<strong>不计</strong>（<code>Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/CircuitBreakingScriptCaller.java:148-165</code>）</td>
+          </tr>
+          <tr>
+            <td>机器上悄悄多出一批解释器进程，没有任何日志指向它</td>
+            <td>网关被 <code>kill -9</code>，worker 未收到信号；而 worker 的孤儿检查（<code>getppid()==1</code>）挂在主循环上，脚本卡在用户代码里时永远轮不到</td>
+            <td>三层兜底：Linux 的 <code>PR_SET_PDEATHSIG</code>、定时器 + 信号处理器的孤儿看门狗、以及「即使配成不回收也要周期性醒来」的 <code>_remaining</code>（<code>worker.py:344-357</code>：注释写明它最初就在「不回收」配置下返回了 <code>None</code>）</td>
+          </tr>
+          <tr>
+            <td>修改网关脚本后不生效</td>
+            <td>资源抽取目录按内容摘要分，但若「改了却没换目录」，上一版网关文件会被复用</td>
+            <td>该设计本身就是规避手段：目录名带内容摘要，资源改一个字节就换目录；旧目录刻意不清理，便于事后确认「当时跑的哪一份」</td>
+          </tr>
+          <tr>
+            <td>PID 文件里留着一个已经不存在的进程号</td>
+            <td>JVM 被强杀，PID 文件来不及删；或后来者已覆盖该文件</td>
+            <td>PID 文件<strong>只报告、不处置</strong>：网关启动时读出旧内容并给出「PID N（仍存活 / 已不存在）」，宿主只记一条 WARN；退出时<strong>仅当文件仍记着自己的 PID 才删</strong>（<code>gateway.py:797-816</code>），否则删掉的会是「后来者还活着」这份唯一证据</td>
+          </tr>
+          <tr>
+            <td>只提供 <code>request_tuning</code> / <code>aging_strategy</code> 的脚本从来没被拉起</td>
+            <td>热路径点不冷启动（这是设计），而「不表态」既不算成功也不算失败，因此也不会被熔断</td>
+            <td>把它当成一条行为边界写进文档：这类脚本唯一的可观测点是 <code>/&lt;语言&gt;</code> 台账里的「未启动」；需要被拉起的逻辑请挂在非热路径点上</td>
+          </tr>
+          <tr>
+            <td>「不表态」被当成成功，坏脚本看起来已经好了</td>
+            <td>用 <code>null</code>（空结果，那是一类<strong>成功</strong>）表达「这次没去办」</td>
+            <td>专门一个 <code>ScriptNotHandledException</code>，由 <code>ScriptRegistrar.handlerFor</code> 在出口处翻回 <code>null</code>（「本插件没有意见」）；它不计熔断，也不当失败上报给模型</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">读源码的推荐顺序</span>
+      <p>
+        想彻底读懂这一块，按这个顺序读最省力：先 <code>ScriptProtocol</code>（协议形状与那条不等式）→
+        <code>FrameWriter</code> 与 <code>ScriptRpc</code>（并发与超时的全部难点）→
+        <code>ScriptGateway</code>（懒启动、初始化、超时处置链）→
+        <code>codec/ExtensionCodec</code> 与两个具体 codec（类型映射）→
+        <code>ScriptManifest</code> 与 <code>ScriptPluginScanner</code>（声明式注册）→
+        最后读 <code>ScriptBridgePlugin</code>（把这一切装起来的顺序）。
+        每读一层，配合 <code>gateway.py</code> / <code>worker.py</code> 里同名概念的那一侧，
+        两侧对照着看，「为什么必须有这一层」会立刻显出来。
+      </p>
+    </div>
+
+    <div class="conclusion">
+      <h2>关键结论</h2>
+      <ol>
+        <li><strong>桥接的本质是「一个 JVM 内的代理人 + 一次进程往返」</strong>：内核侧只看到普通的扩展点注册
+          （脚本与 Java 插件同构），脚本侧一行 Java 都不用写，而 <code>ScriptBridgePlugin</code> 就是那个代理人。</li>
+        <li><strong>注册与进程生命周期彻底解耦</strong>：静态 <code>manifest.json</code> 是注册的唯一来源，
+          于是内核启动不依赖解释器、空闲时脚本侧零进程、worker 崩溃后无需重注册。代价（清单漂移）
+          由「代码生成清单 + <code>--check</code> + 启动时严格校验」三重防线守住。</li>
+        <li><strong>线协议是 stdio 上的 JSON-RPC 2.0，一行一个 JSON</strong>；帧格式选行分隔而不是长度前缀，
+          换来的是「错一行、丢一行、继续」。而宿主单行上限必须<strong>严格大于</strong>脚本侧出帧上限——
+          这是一条被端到端测试钉死的硬不等式，违反它的现象（调用等到超时、无任何线索）离原因最远。</li>
+        <li><strong>扩展点的跨语言能力由 24 个纯函数 codec 承担</strong>，名单只在 <code>ExtensionCodecs.defaults()</code>
+          里出现一次，同时服务于注册、清单校验与调用路由；哪些扩展点支持、哪些明确不做，写在
+          <code>extension-points.json</code> 并由单测逼着内核作者分档。</li>
+        <li><strong>稳定性靠三条边界划分清楚</strong>：熔断拒绝派发但不摘注册（保住自动半开恢复）、
+          四类失败明确不计入熔断、「不表态」用独立异常与「空结果」区分开——记账正确比记账严格更难，也更值钱。</li>
+        <li><strong>进程模型选「子进程 + 行分隔 JSON」而不是嵌 JS 引擎或 JNI</strong>，
+          换来的是语言无关与崩溃隔离；主要代价是进程往返、类型映射、错误传播与调试体验，
+          这四样各自有一处具体工程答案（懒启动 / codec / 协议错误对象 / stderr 与台账）。</li>
+      </ol>
+    </div>
+
+    <nav class="pager" aria-label="翻页">
+      <a class="prev" href="26-plugin-mcp.html"><span class="pager-dir">上一页</span>26 MCP 插件</a>
+      <a class="next" href="index.html"><span class="pager-dir">下一页</span>首页 · 总览与导航</a>
+    </nav>
+
+  </main>
+</div>
+
+<footer class="footer">
+  Jellyfish 源码深度解析 · 本页源码依据：<code>Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/ScriptGateway.java</code>、<code>ScriptBridgePlugin.java</code>、<code>ScriptPidFiles.java</code>、<code>GatewayResources.java</code>、<code>CommonsExecScriptProcess.java</code>、<code>FrameWriter.java</code>、<code>ScriptManifest.java</code>、<code>ScriptPluginScanner.java</code>、<code>ScriptRegistrar.java</code>、<code>ScriptCircuitBreaker.java</code>、<code>CircuitBreakingScriptCaller.java</code>、<code>ScriptScheduler.java</code>、<code>ScriptBridgeConfig.java</code>、<code>codec/ExtensionCodec.java</code>、<code>codec/ExtensionCodecs.java</code>、<code>codec/Payloads.java</code>、<code>codec/HotPathPoints.java</code>、<code>codec/ToolCodec.java</code>、<code>codec/PermissionCodec.java</code>、<code>event/ScriptEventBridge.java</code>、<code>event/ScriptEventCatalog.java</code>、<code>event/ScriptEventFactory.java</code>、<code>protocol/ScriptProtocol.java</code>、<code>protocol/ScriptRpc.java</code>、<code>jellyfish-script/src/main/resources/script/extension-points.json</code>、<code>jellyfish-plugin-python/src/main/java/zcd/jellyfish/plugin/python/PythonLanguage.java</code>、<code>PythonBridgePlugin.java</code>、<code>jellyfish-plugin-python/src/main/resources/script/gateway.py</code>、<code>worker.py</code>、<code>script_wire.py</code>、<code>jellyfish_sdk.py</code>、<code>dump_manifest.py</code>、<code>jellyfish-plugin-node/src/main/java/zcd/jellyfish/plugin/node/NodeLanguage.java</code>、<code>jellyfish-plugin-node/src/main/resources/script/gateway.js</code>、<code>worker.js</code>、<code>script_wire.js</code>、<code>jellyfish_sdk.js</code>、<code>README.md</code>、<code>examples/scripts/README.md</code>、<code>examples/scripts/python/hello/manifest.json</code>。
+</footer>
+
+<!-- 资源按「本地 vendor 优先、CDN 兜底」引用：文件缺失时 assets/app.js 会自动回退到 CDN -->
+<script src="assets/vendor/highlight.min.js"></script>
+<script src="assets/vendor/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
