@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>10 CLI 与 HTTP Server 模式 · Jellyfish 源码深度解析</title>
+<title>15 CLI 与 HTTP Server 模式 · Jellyfish 源码深度解析</title>
 <meta name="description" content="Jellyfish 的启动参数解析、零参数兜底 -tui、模式归属校验与退出码、CLI 的 awaitTurn 契约、Server 路由清单与 SSE 事件、ApiKeyGuard 与 OriginGuard。">
 <link rel="stylesheet" href="assets/style.css">
 <!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
@@ -20,65 +20,63 @@
 
 <div class="layout">
 
-  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <nav class="sidebar" id="sidebar" aria-label="文档导航">
     <div class="sidebar-title">文档目录</div>
     <ul class="nav-list">
       <li><a href="index.html">首页 · 总览与导航</a></li>
     </ul>
-    <div class="nav-group">入门</div>
+    <div class="nav-group">一、入门</div>
     <ul class="nav-list">
       <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
       <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
       <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
     </ul>
-    <div class="nav-group">内核重点</div>
+    <div class="nav-group">二、内核机制</div>
     <ul class="nav-list">
       <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
       <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
       <li><a href="06-permissions.html">06 权限与审批系统</a></li>
-      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
-      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+      <li><a href="07-tools-io.html">07 工具系统与输入输出</a></li>
+      <li><a href="08-commands.html">08 命令系统</a></li>
+      <li><a href="09-config.html">09 配置体系</a></li>
+      <li><a href="10-session-context.html">10 会话持久化与上下文</a></li>
+      <li><a href="11-subagents.html">11 子代理与多 Agent 协作</a></li>
+      <li><a href="12-assembly.html">12 装配与依赖注入</a></li>
+      <li><a href="13-observability.html">13 可观测性与运行观测</a></li>
     </ul>
-    <div class="nav-group">外壳与实战</div>
+    <div class="nav-group">三、外壳</div>
     <ul class="nav-list">
-      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
-      <li><a href="10-cli-server.html" aria-current="page">10 CLI 与 HTTP Server</a></li>
-      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+      <li><a href="14-tui.html">14 终端界面（TamboUI）</a></li>
+      <li><a href="15-cli-server.html" aria-current="page">15 CLI 与 HTTP Server</a></li>
     </ul>
-    <div class="nav-group">拓展</div>
+    <div class="nav-group">四、插件</div>
     <ul class="nav-list">
-      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
-      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
-      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
-      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
-      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+      <li><a href="16-plugins.html">16 PF4J 插件化架构</a></li>
+      <li><a href="17-plugin-overview.html">17 官方插件总览</a></li>
+      <li><a href="18-plugin-tools-shell.html">18 tools 与 shell 插件</a></li>
+      <li><a href="19-plugin-session-compact.html">19 session-file 与 compact 插件</a></li>
+      <li><a href="20-plugin-workflow.html">20 workflow 插件</a></li>
+      <li><a href="21-plugin-plan-todo-skills.html">21 plan / todo / skills 插件</a></li>
+      <li><a href="22-plugin-mcp.html">22 MCP 插件</a></li>
+      <li><a href="23-plugin-script.html">23 跨语言脚本插件</a></li>
     </ul>
-    <div class="nav-group">子系统</div>
+    <div class="nav-group">五、工程与参考</div>
     <ul class="nav-list">
-      <li><a href="17-commands.html">17 命令系统</a></li>
-      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
-      <li><a href="19-config.html">19 配置体系</a></li>
-      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
-    </ul>
-    <div class="nav-group">插件详解</div>
-    <ul class="nav-list">
-      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
-      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
-      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
-      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
-      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
-      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
-      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+      <li><a href="24-testing.html">24 测试体系与构建</a></li>
+      <li><a href="25-pitfalls.html">25 坑点与陷阱清单</a></li>
+      <li><a href="26-comparison.html">26 与主流工具对比</a></li>
+      <li><a href="27-faq-glossary.html">27 常见问题与术语表</a></li>
+      <li><a href="28-learning-path.html">28 学习路径与阅读顺序</a></li>
     </ul>
   </nav>
 
   <main class="content">
 
     <nav class="breadcrumb" aria-label="面包屑">
-      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>10 CLI 与 HTTP Server</span>
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>15 CLI 与 HTTP Server</span>
     </nav>
 
-    <h1>10 CLI 与 HTTP Server</h1>
+    <h1>15 CLI 与 HTTP Server</h1>
     <p class="page-sub">
       两个「非交互」外壳。CLI 面向脚本与管道，Server 面向进程外调用——
       它们的设计约束比 TUI 更硬，因为对外接口是<strong>契约</strong>而不是体验。
@@ -251,7 +249,7 @@ flowchart LR
   AW --> MAP["映射退出码 0 / 2 / 4 / 6 / 7"]
   MAP --> OUT
     </div>
-    <p class="figure-cap">图 10-1　CLI 流程：<strong>先订阅再提交</strong>，然后阻塞等终态</p>
+    <p class="figure-cap">图 15-1　CLI 流程：<strong>先订阅再提交</strong>，然后阻塞等终态</p>
 
     <div class="src-block">Jellyfish/jellyfish-cli/src/main/java/zcd/jellyfish/cli/mode/CliRunMode.java:88-120, 189-204</div>
 
@@ -405,7 +403,7 @@ flowchart LR
   H --> EXP{"requireUsableExposure<br/>非回环地址 且 无密钥？"}
   EXP -->|"是"| FAIL["拒绝启动（退 3）"]
     </div>
-    <p class="figure-cap">图 10-2　Server 的守门顺序（<code>JellyfishServer.java:169-176</code>）：<strong>鉴权在最外层</strong>，新接口默认被保护</p>
+    <p class="figure-cap">图 15-2　Server 的守门顺序（<code>JellyfishServer.java:169-176</code>）：<strong>鉴权在最外层</strong>，新接口默认被保护</p>
 
     <div class="table-scroll">
       <table>
@@ -479,7 +477,7 @@ flowchart LR
           <tr><td>无人裁决</td><td>立即拒绝</td><td>等 120 秒或用户操作</td><td>等 120 秒；<strong>SSE 断连主动拒绝</strong></td></tr>
           <tr><td colspan="4"><strong>注意</strong>：两侧的 120 秒都<strong>可配</strong>（<code>permission.approvalTimeoutSeconds</code> /
               <code>ask.timeoutSeconds</code>），而且写 <code>0</code> 表示<strong>永不超时</strong>——
-              这在 <code>react</code> 线程只有 8 条的前提下很危险，见 <a href="11-pitfalls.html">11 页 C1</a>。</td></tr>
+              这在 <code>react</code> 线程只有 8 条的前提下很危险，见 <a href="25-pitfalls.html">25 页 C1</a>。</td></tr>
           <tr><td>取消</td><td>—</td><td><code>Esc</code></td><td><code>POST /sessions/{id}/cancel</code></td></tr>
         </tbody>
       </table>
@@ -690,7 +688,7 @@ flowchart LR
       <p>
         503 是<strong>可诊断</strong>的：客户端立刻知道「是我请求太猛，该退避重试」，
         而且 <code>Retry-After</code> 这类标准重试语义能接上。这与
-        <a href="07-plugins.html">07 页</a>那条「宁可丢事件、也不内联降级」是同一个取向：
+        <a href="16-plugins.html">16 页</a>那条「宁可丢事件、也不内联降级」是同一个取向：
         <strong>选一个立刻可见的结果，而不是一个「看起来还在工作」的状态</strong>。
       </p>
     </div>
@@ -770,9 +768,9 @@ throw new ApiException(Responses.FORBIDDEN, "COMMAND_NOT_ALLOWED",
       </ol>
     </div>
 
-    <nav class="pager" aria-label="翻页">
-      <a class="prev" href="09-tui.html"><span class="pager-dir">上一页</span>09 终端界面（TamboUI）</a>
-      <a class="next" href="11-pitfalls.html"><span class="pager-dir">下一页</span>11 坑点与陷阱清单</a>
+        <nav class="pager" aria-label="翻页">
+      <a class="prev" href="14-tui.html"><span class="pager-dir">上一页</span>14 终端界面（TamboUI）</a>
+      <a class="next" href="16-plugins.html"><span class="pager-dir">下一页</span>16 PF4J 插件化架构</a>
     </nav>
 
   </main>

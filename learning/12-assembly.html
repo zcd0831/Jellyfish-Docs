@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>12 装配与依赖注入 · Jellyfish 源码深度解析</title>
+<meta name="description" content="Jellyfish 的装配层：Dagger2 组件与 10 个模块怎么用（@Component / @Component.Builder / @BindsInstance / @IntoMap）、JellyfishRuntime 的 23 个访问器怎么维护、两套装法（Dagger 与 JellyfishAssembler）怎么保持一致，以及装配分叉为什么会是静默故障。">
+<link rel="stylesheet" href="assets/style.css">
+<!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
+</head>
+<body>
+
+<header class="topbar">
+  <button class="nav-toggle" id="navToggle" aria-label="切换导航" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">🐙 Jellyfish 源码深度解析</a>
+  <div class="topbar-tools">
+    <input id="navSearch" type="search" placeholder="搜索页面…" aria-label="搜索页面">
+  </div>
+</header>
+
+<div class="layout">
+
+    <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <div class="sidebar-title">文档目录</div>
+    <ul class="nav-list">
+      <li><a href="index.html">首页 · 总览与导航</a></li>
+    </ul>
+    <div class="nav-group">一、入门</div>
+    <ul class="nav-list">
+      <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
+      <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
+      <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
+    </ul>
+    <div class="nav-group">二、内核机制</div>
+    <ul class="nav-list">
+      <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
+      <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
+      <li><a href="06-permissions.html">06 权限与审批系统</a></li>
+      <li><a href="07-tools-io.html">07 工具系统与输入输出</a></li>
+      <li><a href="08-commands.html">08 命令系统</a></li>
+      <li><a href="09-config.html">09 配置体系</a></li>
+      <li><a href="10-session-context.html">10 会话持久化与上下文</a></li>
+      <li><a href="11-subagents.html">11 子代理与多 Agent 协作</a></li>
+      <li><a href="12-assembly.html" aria-current="page">12 装配与依赖注入</a></li>
+      <li><a href="13-observability.html">13 可观测性与运行观测</a></li>
+    </ul>
+    <div class="nav-group">三、外壳</div>
+    <ul class="nav-list">
+      <li><a href="14-tui.html">14 终端界面（TamboUI）</a></li>
+      <li><a href="15-cli-server.html">15 CLI 与 HTTP Server</a></li>
+    </ul>
+    <div class="nav-group">四、插件</div>
+    <ul class="nav-list">
+      <li><a href="16-plugins.html">16 PF4J 插件化架构</a></li>
+      <li><a href="17-plugin-overview.html">17 官方插件总览</a></li>
+      <li><a href="18-plugin-tools-shell.html">18 tools 与 shell 插件</a></li>
+      <li><a href="19-plugin-session-compact.html">19 session-file 与 compact 插件</a></li>
+      <li><a href="20-plugin-workflow.html">20 workflow 插件</a></li>
+      <li><a href="21-plugin-plan-todo-skills.html">21 plan / todo / skills 插件</a></li>
+      <li><a href="22-plugin-mcp.html">22 MCP 插件</a></li>
+      <li><a href="23-plugin-script.html">23 跨语言脚本插件</a></li>
+    </ul>
+    <div class="nav-group">五、工程与参考</div>
+    <ul class="nav-list">
+      <li><a href="24-testing.html">24 测试体系与构建</a></li>
+      <li><a href="25-pitfalls.html">25 坑点与陷阱清单</a></li>
+      <li><a href="26-comparison.html">26 与主流工具对比</a></li>
+      <li><a href="27-faq-glossary.html">27 常见问题与术语表</a></li>
+      <li><a href="28-learning-path.html">28 学习路径与阅读顺序</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <nav class="breadcrumb" aria-label="面包屑">
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>12 装配与依赖注入</span>
+    </nav>
+
+    <h1>12 装配与依赖注入 <span class="tag focus">重点</span></h1>
+    <p class="page-sub">
+      「装配」在这个仓库里是两件事叠在一起：一张<strong>对象图</strong>（谁依赖谁、哪些实例必须唯一）和一份
+      <strong>交付契约</strong>（外壳拿到哪 23 个入口）。这一页讲 Dagger2 具体怎么把这张图声明出来、
+      <code>JellyfishRuntime</code> 为什么是这样一份契约、以及「同一段行为两种装法」是怎么被钉住的。
+    </p>
+
+    <section class="goals">
+      <h2>学习目标</h2>
+      <ul>
+        <li>知道 <code>jellyfish-di</code> 的 13 个源文件各是什么，以及它们合起来只有一个职责；</li>
+        <li>能用一句话说清 <code>JellyfishComponent</code> 为什么<strong>继承</strong> <code>JellyfishRuntime</code> 而不是各写一份；</li>
+        <li>解释 <code>@Component.Builder</code> + <code>@BindsInstance</code> 存在的理由，以及它修掉的 <code>N-07</code> 是什么；</li>
+        <li>拿到 10 个模块 / 22 条 <code>@Provides</code> 的完整分工表，并能说清每条为什么落在这个模块；</li>
+        <li>说清 <code>@IntoMap</code> + <code>@StringKey</code> 的 Map 多绑定为什么比 <code>if-else</code> / 工厂里的 <code>switch</code> 好；</li>
+        <li>知道 Dagger 的编译期校验兜住了什么，以及 <code>Dagger*</code> 生成物在覆盖率与调用点上的位置；</li>
+        <li>列出「同一实例」这类<strong>不体现在方法签名上</strong>的约束，以及两套装法各自怎么落实、测试怎么抓分叉。</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================ -->
+    <h2>1. 两种装法，一个契约</h2>
+
+    <p>
+      先给结论：这个仓库里<strong>装配知识只有一份</strong>，但它有两种落地实现，二者交付同一个
+      <code>JellyfishRuntime</code>。为什么要有专门的装配层、为什么不只用 Dagger，
+      <a href="03-architecture.html">03 页</a>第 2 节已经从「模块边界」的角度讲过一遍，这里不再重复；
+      本页补的是机制细节：Dagger 到底怎么用、门面接口怎么维护、两套装法怎么保持一致。
+    </p>
+
+    <p>
+      先把范围说清楚。装配层是 <code>jellyfish-di</code>，主源码恰好 <strong>13 个文件</strong>：
+      <code>JellyfishComponent.java</code>（298 行）、<code>JellyfishRuntime.java</code>（214 行）、
+      <code>JellyfishAssembler.java</code>（569 行），加上 10 个 <code>@Module</code>。
+      这个模块<strong>不带任何资源</strong>（配置与提示词分别归 <code>infra</code> 与 <code>cli</code>），
+      它只装东西（<code>Jellyfish/docs/constraints.md:183-184</code>）。
+    </p>
+
+    <div class="mermaid">
+flowchart TD
+  CFG["AppConfig：配置来源 = 部署事实<br/>（两侧都由调用方给）"] --> D
+  CFG --> M
+  D["Dagger 侧：JellyfishComponent<br/>@Singleton + @Component(modules = 10 个 Module)<br/>@Component.Builder + @BindsInstance"]
+  M["手工侧：JellyfishAssembler.create(AppConfig)<br/>内部类 Assembly implements JellyfishRuntime"]
+  D --> GEN["注解处理器生成 DaggerJellyfishComponent<br/>缺绑定在编译期就报错"]
+  GEN --> RT
+  M --> RT
+  RT["JellyfishRuntime：23 个访问器<br/>不含任何 DI 注解、不声明生命周期"]
+  RT --> SH["外壳装配：Launcher（CLI）<br/>TuiRunMode / Server 装配点"]
+  SH --> LC["AgentHarness.bootstrap() → 运行 → shutdown()"]
+    </div>
+    <p class="figure-cap">图 12-1　两种装法走完全不同的路，收敛到同一份交付契约，再由外壳决定启动与收敛的时机</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>一件事</th><th>Dagger 侧怎么落</th><th>手工侧怎么落</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>AppConfig</code> 从哪来</td>
+            <td><code>JellyfishComponent.Builder.appConfig(...)</code>，调用方给</td>
+            <td><code>JellyfishAssembler.create(AppConfig)</code> 的入参</td>
+          </tr>
+          <tr>
+            <td>依赖图怎么声明</td>
+            <td>10 个 <code>@Module</code> 里的 22 条 <code>@Provides</code>，<strong>编译期</strong>生成装配代码</td>
+            <td><code>Assembly.assemble()</code> 里自上而下的 <code>new</code> 序列，<strong>运行时</strong>一次建完</td>
+          </tr>
+          <tr>
+            <td>交付契约怎么保证不漏</td>
+            <td><code>JellyfishComponent extends JellyfishRuntime</code>，少一个访问器就编译不过</td>
+            <td>内部类 <code>Assembly implements JellyfishRuntime</code>，同样是编译期</td>
+          </tr>
+          <tr>
+            <td>对象图什么时候建</td>
+            <td>组件是<strong>惰性</strong>的：第一次访问某个访问器时才建那条链</td>
+            <td><strong>全量急切</strong>构造：<code>create()</code> 返回时整张图已经建好</td>
+          </tr>
+          <tr>
+            <td>两者会不会漂移</td>
+            <td colspan="2">同一段行为对两种装配<strong>各跑一遍</strong>：<code>JellyfishAssemblerTest</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      这张表里最值得记住的是最后一行：前四行都是「两种写法」，只有最后一行是「一个测试」。
+      <a href="24-testing.html">24 页</a>第 5 节讲过这个测试怎么双跑，本节末（第 4 节）会补上它具体钉住了哪几条约束。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>2. Dagger2 在这个项目里到底怎么用</h2>
+
+    <p>
+      全站此前没有一页讲过 Dagger2 的用法，所以这一节从注解开始。先说清一件事：
+      <strong>项目用的 Dagger 版本是 2.16，注解处理器由父 POM 统一配置</strong>
+      （<code>Jellyfish/pom.xml:61</code> 定义版本，<code>Jellyfish/pom.xml:253-255</code> 在
+      <code>maven-compiler-plugin</code> 的 <code>annotationProcessorPaths</code> 里挂上
+      <code>dagger-compiler</code>），因此<strong>子模块的 <code>pom.xml</code> 里只声明 <code>dagger</code> 依赖、
+      不重复声明处理器</strong>（<code>Jellyfish/jellyfish-di/pom.xml</code> 的依赖清单里没有 <code>dagger-compiler</code>）。
+    </p>
+
+    <h3>2.1 <code>@Component</code>：一个接口声明 10 个模块，并继承交付契约</h3>
+
+    <div class="src-block">Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/JellyfishComponent.java:31-49（类注释 + <code>@Component</code> + 继承 <code>JellyfishRuntime</code>）</div>
+
+<pre><code class="language-java">/**
+ * 应用级 Dagger2 组件：在最外层（composition root）装配共享的 {@code OkHttpClient}、
+ * LLM 客户端注册表、配置门面、扩展层（注册表 / 同步策略 / 事件通道）、插件运行时、agent 定义与权限判定。
+ * &lt;p&gt;
+ * &lt;b&gt;它继承 {@link JellyfishRuntime}&lt;/b&gt;：那 23 个访问器是「装配完成后对外交付什么」的契约，
+ * 与具体装法无关；本组件是 Dagger 侧的实现，{@link JellyfishAssembler} 是手工装配侧的实现。
+ * 继承而非各写一份，是为了让「两边少交付一个入口」在编译期就暴露，而不是等某个外壳用到时才发现。
+ * &lt;p&gt;
+ * &lt;b&gt;{@link AppConfig} 由构建者注入，不由模块提供&lt;/b&gt;：配置来源是部署事实，两种装法都该由调用方决定
+ * （见 {@link ConfigModule} 的类注释）。只想要最常用的那份来源（classpath）时用
+ * {@link ConfigModule#loadDefault()}。
+ *
+ * @author zcd
+ */
+@Singleton
+@Component(modules = {ConfigModule.class, LlmModule.class, ExtensionModule.class, EventModule.class,
+        PluginModule.class, AgentModule.class, PermissionModule.class, AskModule.class, CommandModule.class,
+        MetricsModule.class})
+public interface JellyfishComponent extends JellyfishRuntime {</code></pre>
+
+    <p>
+      三个要点。第一，<code>@Singleton</code> 写在组件接口上，含义是「这个组件的作用域」——
+      组件内部的单例。凡是标了 <code>@Singleton</code> 的 <code>@Provides</code>
+      （或带 <code>@Singleton</code> 的 <code>@Inject</code> 构造器）在整个组件里只会被创建一次，
+      这正是「全局共享的 <code>OkHttpClient</code>」这类约束的落地方式。
+    </p>
+
+    <p>
+      第二，<code>@Component(modules = {...})</code> 一次列了 <strong>10 个模块</strong>，
+      顺序按「先基础设施、后域服务」排：<code>ConfigModule</code>、<code>LlmModule</code>、
+      <code>ExtensionModule</code>、<code>EventModule</code>、<code>PluginModule</code>、<code>AgentModule</code>、
+      <code>PermissionModule</code>、<code>AskModule</code>、<code>CommandModule</code>、<code>MetricsModule</code>。
+      这个顺序<strong>不影响语义</strong>（Dagger 自己算依赖顺序），列出来只是为了读起来顺。
+    </p>
+
+    <p>
+      第三，也是这一小节真正要说的一点：<code>JellyfishComponent extends JellyfishRuntime</code>。
+      接口继承带来的是<strong>编译期的完整性检查</strong>：Dagger 生成的实现类必须把 23 个访问器全部实现，
+      少一个就是编译错误。如果两套装配各自声明一份入口清单（而不是共享一个接口），
+      「Dagger 侧漏了 <code>healthCheck()</code>」这种问题就要等到 <code>-server</code> 外壳真的去调
+      <code>GET /health</code> 时才发现，而手工装配侧可能早就补上了——两边的不一致没人能提前发现。
+    </p>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：继承比「各写一份」多买到的是「编译期」</span>
+      <p>
+        一个更松的做法是在 <code>JellyfishComponent</code> 里手抄 23 个方法签名。它能跑，
+        但抄写这件事没有任何机制保证两边同步：手工侧加了访问器，Dagger 侧不会编译失败，
+        只是外壳用不了。继承把这件事交给 <code>javac</code>——<strong>漏交付从「运行时某个外壳报错」
+        提前成「编译不过」</strong>，代价为零。
+      </p>
+      <p>
+        顺带一个可读性上的事实：<code>JellyfishComponent</code> 里那 23 个访问器是<strong>重复声明</strong>的
+        （继承已经给了签名）。它们存在的价值是每一条都带一段「调用点是谁」的 javadoc——
+        例如 <code>approvalChannel()</code> 那条写明「只有 <code>-tui</code> 会 <code>attach()</code>，
+        <code>-cli</code> 与 <code>-server</code> 不挂审批者，因此需要审批的工具一律按拒绝处理」。
+        这类「谁在调」的信息在 <code>JellyfishRuntime</code> 里只写「保证非 <code>null</code>」，
+        分开放是有意的：契约给实现者看，调用点说明给使用者看。
+      </p>
+    </div>
+
+    <h3>2.2 <code>@Component.Builder</code> + <code>@BindsInstance</code>：<code>AppConfig</code> 为什么由调用方给</h3>
+
+    <p>
+      这是整套装配里唯一一处「必须由外部喂进来」的绑定，也是最近才修掉的一个等价性缺口。
+      先看源码：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/JellyfishComponent.java:51-71（构建者与实例绑定）</div>
+
+<pre><code class="language-java">    /**
+     * 组件构建者：把 {@link AppConfig} 作为实例绑定交给组件。
+     * &lt;p&gt;
+     * &lt;b&gt;为什么要有它&lt;/b&gt;：此前 {@code AppConfig} 由 {@code ConfigModule} 固定从
+     * {@code classpath:config.json} 读，而手工装配侧（{@link JellyfishAssembler}）是调用方传入——
+     * 「两种装法交付同一契约」这句话在配置来源上并不成立。现在两侧都由调用方给，
+     * 差异只剩各自的调用方想给什么。
+     *
+     * @author zcd
+     */
+    @Component.Builder
+    interface Builder {
+
+        /**
+         * 绑定应用级配置（配置来源由调用方决定）。
+         *
+         * @param appConfig 应用级配置，不可为 {@code null}
+         * @return 本构建者，便于链式调用
+         */
+        @BindsInstance
+        Builder appConfig(AppConfig appConfig);</code></pre>
+
+    <p>
+      先说这两个注解各自做什么。<code>@Component.Builder</code> 让 Dagger 为组件生成一个构建者类
+      （生成物就是 <code>DaggerJellyfishComponent.builder()</code>）；<code>@BindsInstance</code>
+      表示「把调用者手里<strong>这一份现成实例</strong>直接绑进图里」，而不是让 Dagger 去构造它。
+      没有 <code>@BindsInstance</code> 的话，<code>AppConfig</code> 就必须由某个模块的
+      <code>@Provides</code>（或带 <code>@Inject</code> 的构造器）提供——而 <code>AppConfig</code>
+      是纯数据类，构造它需要先决定「去哪读」，那正是个部署事实。
+    </p>
+
+    <p>
+      注释里的那段历史值得单独讲，因为它是本页最实在的一个教训。修之前的状态是：
+      Dagger 侧固定读 <code>classpath:config.json</code>，手工装配侧由调用方传入。
+      于是「两种装法交付同一契约」这句写在注释里的话，<strong>在配置来源这一件事上并不成立</strong>
+      （报告编号 <code>N-07</code>）。现在的口径是「两侧都由调用方给」，
+      这条规矩同时也写进了约束清单（<code>Jellyfish/docs/constraints.md:187-190</code>），
+      还配了一条测试专门钉住它（第 4 节会看到）。
+    </p>
+
+    <p>
+      那「最常用的那一份来源（classpath）」放哪？放在 <code>ConfigModule</code> 的
+      <strong>普通静态方法</strong>里，而不是 <code>@Provides</code>：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/ConfigModule.java:44-46（缺省来源的唯一落点）</div>
+
+<pre><code class="language-java">    public static AppConfig loadDefault() {
+        return new ConfigLoader(new SettingsReader(), new SettingsBinder()).loadAppConfig();
+    }</code></pre>
+
+    <p>
+      为什么不是 <code>@Provides</code>？因为它与 <code>@BindsInstance</code> 会形成<strong>同类型双绑定</strong>，
+      Dagger 在编译期就报错。而「最常用的那一份来源」仍然需要一个落点，否则每个只想要缺省行为的调用方
+      （CLI、测试）都要自己把 <code>SettingsReader</code> 与 <code>SettingsBinder</code> 拼一遍，
+      那种重复必然漂移——这段理由逐字写在
+      <code>Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/ConfigModule.java:36</code> 起的注释里。
+    </p>
+
+    <p>
+      CLI 侧就三行，一眼能看完「谁决定配置来源」：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-cli/src/main/java/zcd/jellyfish/cli/JellyfishApplication.java:84-98（CLI 的组件创建点）</div>
+
+<pre><code class="language-java">        if (options.isVersion()) {
+            console.writeOut(PROGRAM_NAME + " " + version() + "\n");
+            return ExitCodes.OK;
+        }
+        try {
+            // 配置来源由本外壳决定：CLI 用的就是最常用的那一份（classpath:config.json）
+            return new Launcher(DaggerJellyfishComponent.builder()
+                    .appConfig(ConfigModule.loadDefault())
+                    .build(), console).launch(options);
+        } catch (RuntimeException e) {
+            // 走到这里说明失败发生在能归类之前：DI 装配 / 组件创建，或启动最早的那几步
+            // （项目级配置的信任表态、选模式）。此刻还没有 harness 可收敛，也没有「运行期」可言，
+            // 因此一律归启动失败。launch() 内部的失败由它自己分成 3 / 2 / 4，不会到这里
+            console.writeErrLine("初始化失败：" + e.getMessage());
+            return ExitCodes.STARTUP_ERROR;
+        }</code></pre>
+
+    <p>
+      三点留意。第一，<code>DaggerJellyfishComponent</code> 是<strong>注解处理器的产物</strong>，
+      它不在源码仓库里，构建时出现在 <code>target/generated-sources/annotations/</code> 下——
+      本项目里能看到 <code>DaggerJellyfishComponent.java</code> 与 22 个
+      <code>*_Factory.java</code>（每条 <code>@Provides</code> 一个）。
+      本页<strong>不描述生成物的内部实现</strong>：那是 Dagger 的版本相关细节，读它没有收益，
+      知道「它是编译期生成的、CLI 直接用它的 builder」就够了。
+    </p>
+
+    <p>
+      第二，<code>ConfigModule.loadDefault()</code> 是<strong>静态调用</strong>，不依赖任何注入对象；
+      这正是「只想用缺省来源」的调用方唯一需要写的一行。
+      第三，注意 <code>try</code> 的位置：组件创建被包在「初始化失败」这一档里，
+      与 <code>launch()</code> 内部的 3 / 2 / 4 分类刻意分开——装配期炸了就是「内核没起成」。
+    </p>
+
+    <h3>2.3 10 个模块、22 条 <code>@Provides</code>：谁提供什么，为什么这么切</h3>
+
+    <p>
+      这一节的数字是自己数出来的（命令写在括号里，可复现）：
+      <strong>10 个 <code>@Module</code></strong>（<code>grep -rl '^@Module'</code>，10 个文件）、
+      <strong>22 条 <code>@Provides</code></strong>（<code>grep -rn '@Provides$'</code>，22 处）。
+      另一个独立佐证是生成物目录下恰好有 22 个 <code>*_Factory.java</code>——每条 <code>@Provides</code> 恰好一个。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>模块</th><th>提供什么</th><th><code>@Provides</code></th><th>为什么这样切分</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>ConfigModule</code></td>
+            <td><code>ProjectConfigTrust</code>；另有静态方法 <code>loadDefault()</code></td>
+            <td>1</td>
+            <td>配置来源是部署事实，<strong>不由模块决定</strong>；模块里只留「信任裁决必须唯一」这一条绑定</td>
+          </tr>
+          <tr>
+            <td><code>LlmModule</code></td>
+            <td><code>OkHttpClient</code>、流式线程池 <code>ExecutorService</code>、7 个厂商 <code>LlmClientCreator</code></td>
+            <td>9</td>
+            <td>共享连接池与线程池是全局资源；厂商客户端做成 <strong>Map 多绑定</strong>，按 provider type 路由</td>
+          </tr>
+          <tr>
+            <td><code>ExtensionModule</code></td>
+            <td><code>TypeRegistry</code>、<code>ExtensionRegistry</code></td>
+            <td>2</td>
+            <td>同步侧与异步侧<strong>共用同一份表</strong>的唯一落点，两个派发策略都只是这张表上的视图</td>
+          </tr>
+          <tr>
+            <td><code>EventModule</code></td>
+            <td><code>EventChannelOptions</code>、<code>EventChannel</code>、<code>EventPublisher</code></td>
+            <td>3</td>
+            <td>异步通道 + 一个<strong>窄接口视图</strong>，让配置层只依赖接口</td>
+          </tr>
+          <tr>
+            <td><code>PluginModule</code></td>
+            <td><code>PluginRuntimeConfig</code>、<code>PluginContextFactory</code>、<code>SubAgentPort</code>、<code>PF4JPluginManager</code></td>
+            <td>4</td>
+            <td>插件运行时那四件套；顺序敏感（装配输入 → 上下文工厂 → 门面），放进同一个模块便于对照</td>
+          </tr>
+          <tr>
+            <td><code>AgentModule</code></td>
+            <td><code>PermissionPolicyProvider</code>（绑到 <code>AgentManager</code> 本身）</td>
+            <td>1</td>
+            <td>策略来源本就来自 agent 定义，依赖方向是 <strong>agent → permission</strong></td>
+          </tr>
+          <tr>
+            <td><code>PermissionModule</code></td>
+            <td>不提供任何绑定</td>
+            <td>0</td>
+            <td>判定所需的协作者都带 <code>@Inject</code> 构造器，Dagger 自行装配；模块本身是分工说明</td>
+          </tr>
+          <tr>
+            <td><code>AskModule</code></td>
+            <td><code>AskPort</code>（绑到 <code>AskChannel</code>）</td>
+            <td>1</td>
+            <td>插件拿到的是 api 侧接口，<strong>接口到实现的边只能显式声明</strong></td>
+          </tr>
+          <tr>
+            <td><code>CommandModule</code></td>
+            <td>不提供任何绑定</td>
+            <td>0</td>
+            <td><code>CommandManager</code> 只依赖 <code>ExtensionRegistry</code>，自带 <code>@Inject</code> 构造器</td>
+          </tr>
+          <tr>
+            <td><code>MetricsModule</code></td>
+            <td><code>HealthCheck</code></td>
+            <td>1</td>
+            <td>检查项<strong>跨 <code>infra</code> 与 <code>core</code> 两层</strong>，只能在最外层显式拼装</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      这张表解释了一个容易误解的现象：<strong>10 个模块里有 2 个是「空的」</strong>
+      （<code>PermissionModule</code>、<code>CommandModule</code> 只有 <code>@Module</code> 与私有构造器）。
+      它们不是占位垃圾。<code>PermissionModule</code> 的类注释解释了为什么空还留着：
+      它曾经放着一个「一律返回 <code>unrestricted</code>」的占位实现，后来
+      <code>PermissionPolicyProvider</code> 挪到 <code>AgentModule</code>（依赖方向 agent → permission），
+      占位实现被删掉——<strong>保留它会形成同类型双绑定，Dagger 编译期即失败</strong>
+      （<code>Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/PermissionModule.java:8</code> 起）。
+      换句话说，「空模块」本身是「这一层不许有别的绑定」的一份声明。
+    </p>
+
+    <p>
+      另一个值得注意的边界：模块里<strong>只提供「怎么造」，不提供「造出来的东西怎么用」</strong>。
+      例如 <code>PluginModule</code> 只提供四个插件运行时构件，
+      但命令、工具、扩展点这些注册都不在这里发生——它们在 <code>AgentHarness.bootstrap()</code> 与插件自己的
+      <code>start()</code> 里完成。装配层只负责「谁依赖谁、哪些实例必须唯一」。
+    </p>
+
+    <h3>2.4 模块里反复出现的三种写法：<code>static</code>、<code>@Singleton</code>、窄接口视图</h3>
+
+    <p>
+      看几个有代表性的 <code>@Provides</code>，就能把模块的写法归纳完。
+      第一个是全局共享的 HTTP 客户端：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/LlmModule.java:50-62（<code>static</code> 的 <code>@Provides</code>：共享连接池）</div>
+
+<pre><code class="language-java">    /**
+     * 提供全局共享的 HTTP 客户端。
+     * &lt;p&gt;
+     * 构造细节（含「关掉重定向」的理由）在 {@code LlmClients.newHttpClient()}：
+     * 手写装配侧（{@code JellyfishAssembler}）也要交付同一份，因此只留一个落点。
+     *
+     * @return OkHttpClient
+     */
+    @Provides
+    @Singleton
+    static OkHttpClient provideOkHttpClient() {
+        return LlmClients.newHttpClient();
+    }</code></pre>
+
+    <p>
+      <strong>为什么 <code>@Provides</code> 方法都是 <code>static</code></strong>：模块类本身没有任何状态
+      （每个模块都是 <code>final</code> + 私有构造器），因此不需要先 <code>new</code> 一个模块实例再调方法。
+      声明成 <code>static</code> 之后 Dagger 直接静态调用它，省掉一个没有意义的对象；
+      同时这也是一个约束信号——<strong>模块不许持有状态</strong>，否则它就会成为「同一实例」约束的第四个落点。
+    </p>
+
+    <p>
+      注意 <code>@Singleton</code> 与 <code>LlmClients.newHttpClient()</code> 的组合：真正的构造细节
+      （含 <code>followRedirects(false)</code> 这类安全取舍）只在
+      <code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/support/LlmClients.java:55</code> 一处，
+      Dagger 侧与手工侧都调它。<strong>「两边交付同一份」的落实办法是把构造收敛成一个静态工厂</strong>，
+      而不是在两条装配路径上各写一遍构造参数。
+    </p>
+
+    <p>
+      第二个例子是流式线程池，它演示了「有界优于无界」这条判断，同时也说明
+      <strong>同一份代码路径在两套装法里逐字相同</strong>（对照 <code>JellyfishAssembler</code> 里的同名私有方法）：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/LlmModule.java:74-91（有界线程池：并发上限与等待队列都是常量）</div>
+
+<pre><code class="language-java">    @Provides
+    @Singleton
+    static ExecutorService provideStreamExecutor() {
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                STREAM_MAX_THREADS,
+                STREAM_MAX_THREADS,
+                STREAM_KEEP_ALIVE_SECONDS,
+                TimeUnit.SECONDS,
+                new LinkedBlockingQueue&lt;&gt;(STREAM_QUEUE_CAPACITY),
+                runnable -&gt; {
+                    Thread thread = new Thread(runnable, "llm-stream");
+                    thread.setDaemon(true);
+                    return thread;
+                },
+                new ThreadPoolExecutor.AbortPolicy());
+        executor.allowCoreThreadTimeOut(true);
+        return executor;
+    }</code></pre>
+
+    <p>
+      常量在模块顶部定义（<code>STREAM_MAX_THREADS = 32</code>、<code>STREAM_QUEUE_CAPACITY = 128</code>、
+      <code>STREAM_KEEP_ALIVE_SECONDS = 60L</code>，<code>Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/LlmModule.java:38-45</code>）。
+      线程工厂把线程设为守护线程，这样空闲线程不会阻止 JVM 退出；<code>AbortPolicy</code>
+      表示「线程 + 队列都满就当场拒绝」，而不是无限排队。
+      <em>这些运行参数与配置无关</em>——它们是装配期定型的常量，改它们要重启进程。
+    </p>
+
+    <p>
+      第三个例子是事件通道与它的窄接口视图，这是「同一实例」约束在模块里的写法原型：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/EventModule.java:44-59（通道单例 + 窄接口视图就是通道本身）</div>
+
+<pre><code class="language-java">    @Provides
+    @Singleton
+    static EventChannel provideEventChannel(EventChannelOptions options, TypeRegistry registry) {
+        return new EventChannel(options, registry);
+    }
+
+    /**
+     * 提供窄接口视图：配置层只依赖它。
+     *
+     * @param eventChannel 事件通道
+     * @return 通知发布接口
+     */
+    @Provides
+    static EventPublisher provideEventPublisher(EventChannel eventChannel) {
+        return eventChannel;
+    }</code></pre>
+
+    <p>
+      <strong><code>provideEventPublisher</code> 没有 <code>@Singleton</code></strong>，
+      但它 <code>return eventChannel</code>——返回的就是那个被 <code>@Singleton</code> 标记的通道实例。
+      「窄接口视图与通道是同一个对象」这条约束因此靠两件事同时成立：
+      通道是单例，视图直接返回它。<code>EventPublisher</code> 是给配置层用的窄接口
+      （配置告警只该有「发布」这一个动作），让 <code>RuntimeConfig</code> 不去依赖 <code>EventChannel</code>
+      的订阅面。
+    </p>
+
+    <p>
+      上一段提到的<strong>「表」在 <code>ExtensionModule</code> 而不在 <code>EventModule</code></strong>，
+      这是有意的：表是同步侧与异步侧共享的东西，把它单独提供成单例，两个派发策略就只能拿到同一份。
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/ExtensionModule.java:24-45（唯一一份 <code>TypeRegistry</code> 与它的两个视图）</div>
+
+<pre><code class="language-java">    /**
+     * 提供唯一一份类型注册表。
+     *
+     * @return 类型注册表
+     */
+    @Provides
+    @Singleton
+    static TypeRegistry provideTypeRegistry() {
+        return new TypeRegistry();
+    }
+
+    /**
+     * 提供同步扩展点策略。
+     *
+     * @param registry 共用注册表
+     * @return 同步扩展点策略
+     */
+    @Provides
+    @Singleton
+    static ExtensionRegistry provideExtensionRegistry(TypeRegistry registry) {
+        return new ExtensionRegistry(registry);
+    }</code></pre>
+
+    <p>
+      这两个类（<code>TypeRegistry</code>、<code>ExtensionRegistry</code>、<code>EventChannel</code>）
+      <strong>都没有 <code>@Inject</code> 构造器</strong>，只能由模块提供：这就是「不得各自再建一份表」
+      在机制上的保证——如果它们带 <code>@Inject</code> 构造器，Dagger 完全可以自己造一份，
+      而每一次 <code>new</code> 都可能是「第二份表」的来源。
+    </p>
+
+    <p>
+      最后一个例子演示「跨层拼装」：健康检查的四个检查项分别来自 <code>infra</code> 与 <code>core</code>，
+      谁都拼不全这份清单，只有最外层能拼。
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/MetricsModule.java:39-58（跨层列表只能在装配处拼）</div>
+
+<pre><code class="language-java">    /**
+     * 提供健康检查汇总：按「模型 → 插件 → 事件通道 → 压缩」的顺序陈列检查项。
+     *
+     * @param modelManager   模型门面
+     * @param pluginManager  插件运行时门面
+     * @param eventChannel   事件通道
+     * @param compactor      会话压缩器
+     * @return 健康检查
+     */
+    @Provides
+    @Singleton
+    static HealthCheck provideHealthCheck(ModelManager modelManager, PF4JPluginManager pluginManager,
+                                          EventChannel eventChannel, ConversationCompactor compactor) {
+        List&lt;HealthIndicator&gt; indicators = new ArrayList&lt;HealthIndicator&gt;();
+        indicators.add(new ModelHealthIndicator(modelManager));
+        indicators.add(new PluginHealthIndicator(pluginManager));
+        indicators.add(new EventChannelHealthIndicator(eventChannel));
+        indicators.add(new CompactionHealthIndicator(compactor));
+        return new HealthCheck(indicators);
+    }</code></pre>
+
+    <p>
+      这四个检查项之所以能放在一起，是因为 <code>HealthIndicator</code> 被抽成了接口：
+      <code>infra/metrics</code> 不必为了报告压缩状态去依赖 <code>core</code>，
+      <code>core</code> 也不必知道还有哪些检查项。顺序固定为「模型 → 插件 → 事件通道 → 压缩」，
+      目的是让每次读报告都是同一形状（这几句理由写在
+      <code>Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/MetricsModule.java:21-32</code> 的类注释里）。
+      这些检查项在第 <a href="13-observability.html">13 页</a>会从观测侧再讲一遍。
+    </p>
+
+    <h3>2.5 <code>@IntoMap</code> + <code>@StringKey</code>：厂商客户端注册表</h3>
+
+    <p>
+      这是全站唯一一处「Map 多绑定」，也是 Dagger 用法上最值得学的一处。
+      先说它解决什么问题：内核认识 7 个 provider 键，每个键对应一个「怎么造客户端」的函数。
+      朴素做法是在工厂里写一长串 <code>switch</code>，或者在装配处 <code>if-else</code> 拼一张表——
+      两种做法都把「厂商清单」写进了<strong>消费方</strong>。
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/LlmModule.java:100-119（每个厂商一条 <code>@Provides @IntoMap @StringKey</code>）</div>
+
+<pre><code class="language-java">    @Provides
+    @IntoMap
+    @StringKey(ProviderTypes.OPENAI)
+    static LlmClientCreator openAiClientCreator(OkHttpClient httpClient, ExecutorService streamExecutor) {
+        return provider -&gt; new OpenAiLlmClient(provider, httpClient, streamExecutor);
+    }
+
+    /**
+     * 注册 DeepSeek 客户端创建器。
+     *
+     * @param httpClient     HTTP 客户端
+     * @param streamExecutor 流式线程池
+     * @return 客户端创建器
+     */
+    @Provides
+    @IntoMap
+    @StringKey(ProviderTypes.DEEPSEEK)
+    static LlmClientCreator deepSeekClientCreator(OkHttpClient httpClient, ExecutorService streamExecutor) {
+        return provider -&gt; new DeepSeekLlmClient(provider, httpClient, streamExecutor);
+    }</code></pre>
+
+    <p>
+      这段长这样读：<code>@IntoMap</code> 表示「这条绑定不贡献单个对象，而贡献一个 map 条目」，
+      <code>@StringKey(ProviderTypes.OPENAI)</code> 表示「键是字符串 <code>"openai"</code>」。
+      7 条这样的 <code>@Provides</code> 合起来就是一张
+      <code>Map&lt;String, LlmClientCreator&gt;</code> 绑定，
+      消费者是注入它的工厂：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm/LlmClientFactory.java:69-84（消费整张 map 的 <code>@Inject</code> 构造器）</div>
+
+<pre><code class="language-java">    /**
+     * 构造工厂。
+     *
+     * @param creators       Dagger2 注入的 provider type 到创建器的映射，可为 {@code null}
+     * @param extensions     扩展注册表，用于查询插件提供的 provider 类型
+     * @param streamExecutor 流式线程池，插件适配器要在它上面跑阻塞式传输
+     */
+    @Inject
+    public LlmClientFactory(Map&lt;String, LlmClientCreator&gt; creators, ExtensionRegistry extensions,
+                            ExecutorService streamExecutor) {
+        if (creators != null) {
+            this.creators.putAll(creators);
+        }
+        this.extensions = extensions;
+        this.streamExecutor = streamExecutor;
+    }</code></pre>
+
+    <p>
+      调用方一个字都不用改：<code>LlmClientFactory</code> 拿到整张表，按
+      <code>provider.getType()</code> 查表创建客户端（<code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm/LlmClientFactory.java:169-171</code>）。
+      于是关键的性质是：<strong>新增一个厂商 = 在 <code>LlmModule</code> 里加一条 <code>@Provides</code></strong>，
+      不动工厂、不动任何调用方。
+    </p>
+
+    <p>
+      键的取值来自常量类 <code>ProviderTypes</code>（<code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/support/ProviderTypes.java:14-22</code>），
+      7 个键是 <code>openai</code> / <code>deepseek</code> / <code>minimax</code> / <code>gemini</code> /
+      <code>google</code> / <code>claude</code> / <code>anthropic</code>。
+      其中后两组是<strong>别名</strong>：<code>google</code> 与 <code>gemini</code> 都造
+      <code>GeminiLlmClient</code>，<code>anthropic</code> 与 <code>claude</code> 都造 <code>ClaudeLlmClient</code>。
+      别名键的存在是一处真实风险：漏掉一个别名键<strong>不会编译失败</strong>，
+      表现为「配了那个 provider 却静默不可用」（这条写在
+      <code>Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/JellyfishAssembler.java:409-410</code>）。
+      而 <code>LlmClientCreator</code> 本身只是个单方法接口，一眼能看完：
+      「由一个 <code>Provider</code> 配置创建对应 <code>LlmClient</code> 的工厂函数」
+      （<code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm/LlmClientCreator.java:8-9</code>）。
+    </p>
+
+    <div class="callout design">
+      <span class="callout-title">设计依据：为什么是 Map 多绑定，而不是 <code>if-else</code> 或工厂里的 <code>switch</code></span>
+      <p>
+        三种做法的差别不在「能不能跑」，在<strong>新增一个厂商要碰几个文件、漏了会不会被发现</strong>：
+      </p>
+      <ul>
+        <li><strong><code>if-else</code> / <code>switch</code></strong>：厂商清单写在消费方，
+            新增厂商要改工厂；漏改的后果是运行到那一条时报「未知 provider」——错误点离改动点很远。</li>
+        <li><strong>手拼一张 <code>Map</code></strong>：清单离开消费方了，但落在一处普通代码里，
+            与其它绑定的写法不一致，装配层要同时维护两种风格（手工侧确实就是手拼一张
+            <code>LinkedHashMap</code>，见第 4 节）。</li>
+        <li><strong><code>@IntoMap</code> 多绑定</strong>：每条绑定自带键，清单<strong>由绑定本身构成</strong>，
+            消费方只声明「我要一张 <code>Map&lt;String, LlmClientCreator&gt;</code>」。
+            键重复会在编译期报错，键缺失（比如别名忘了加）则由测试或运行期暴露——
+            这是 Dagger 在这里能提供的最大帮助。</li>
+      </ul>
+      <p>
+        还有一个附带收益：多绑定让「插件也能注册 provider」变得顺手。
+        <code>LlmClientFactory</code> 的 <code>getRegisteredTypes()</code> 只返回内核自带的
+        <code>Map</code> 快照，插件接管的类型另走扩展注册表查询——两条来源被清晰分开。
+      </p>
+    </div>
+
+    <h3>2.6 编译期校验：Dagger 在这里到底帮了什么</h3>
+
+    <p>
+      Dagger 最实际的收益不是「少写 <code>new</code>」，而是<strong>把一批错误从运行期提到编译期</strong>：
+    </p>
+
+    <ul>
+      <li><strong>缺绑定</strong>：某个构造器需要一个 <code>Foo</code>，而没有任何地方能提供它 →
+          编译失败。运行时容器（反射式 DI）对应的是启动或首次解析时抛
+          <code>NoSuchBeanDefinitionException</code> 一类的错误，而且往往带着一份难读的候选链。</li>
+      <li><strong>同类型双绑定</strong>：<code>PermissionModule</code> 里那个历史占位实现就是活例子——
+          它的类注释写明「保留它会与 <code>AgentModule</code> 形成同类型双绑定，Dagger 编译期即失败」
+          （<code>Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/PermissionModule.java:8</code> 起）。
+          这条规矩的两面都要记住：<strong>多一条绑定编译不过，少一条绑定也编译不过</strong>，
+          所以「两种装法交付同一契约」这件事，在 Dagger 侧是被编译器持续检查的。</li>
+      <li><strong>接口没有绑定到实现</strong>：api 侧的接口（<code>AskPort</code>、<code>SubAgentPort</code>）
+          Dagger 无从构造，必须显式绑定到实现——这正是 <code>AskModule</code> 必须存在一条
+          <code>@Provides</code> 的原因（<code>Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/AskModule.java:40-44</code>），
+          缺了它同样是编译期报错。</li>
+    </ul>
+
+    <p>
+      对照一下覆盖率这一侧：<code>Dagger*</code> 生成物与 <code>*_Factory.*</code> 被排除在 JaCoCo 统计之外
+      （<code>Jellyfish/pom.xml:272-278</code>，其中 <code>Jellyfish/pom.xml:274</code> 就是 <code>**/Dagger*</code>），
+      所以 <code>jellyfish-di</code> 报出来的覆盖率<strong>只反映人写的装配代码</strong>
+      （<a href="24-testing.html">24 页</a>第 3 节列了这股覆盖率实测）。这两件事是配套的：
+      生成物不进分母，人写的那部分就必须由测试兜住。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>3. <code>JellyfishRuntime</code>：交付契约怎么维护</h2>
+
+    <p>
+      上一节讲的是「怎么装」，这一节讲「装完交付什么」。这个接口只有 214 行，
+      但它的注释里有三条判断值得逐条看。<a href="03-architecture.html">03 页</a>已经逐字引用过它的类注释，
+      这里不重复整段，只把机制部分说透。
+    </p>
+
+    <h3>3.1 23 个访问器</h3>
+
+    <p>
+      数一遍：<code>Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/JellyfishRuntime.java:54-213</code>
+      一共 <strong>23 个方法</strong>，全是无参访问器。按用途分组如下（行号就不逐条写了，
+      全部落在上面那个区间里，需要确认时按方法名定位即可）：
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>分组</th><th>访问器</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>模型与配置</td>
+            <td><code>llmClientFactory()</code>、<code>modelManager()</code>、<code>runtimeConfig()</code>、<code>appConfig()</code>、<code>projectConfigTrust()</code></td>
+          </tr>
+          <tr>
+            <td>运行时宿主与 agent</td>
+            <td><code>agentHarness()</code>、<code>agentManager()</code></td>
+          </tr>
+          <tr>
+            <td>权限与人工交互</td>
+            <td><code>permissionManager()</code>、<code>approvalChannel()</code>、<code>askChannel()</code></td>
+          </tr>
+          <tr>
+            <td>会话与输入</td>
+            <td><code>conversationCompactor()</code>、<code>inputDirectives()</code>、<code>sessionManager()</code>、<code>sessionDefaults()</code>、<code>conversationService()</code>、<code>turnRegistry()</code></td>
+          </tr>
+          <tr>
+            <td>命令</td>
+            <td><code>commandManager()</code></td>
+          </tr>
+          <tr>
+            <td>扩展与事件</td>
+            <td><code>extensionRegistry()</code>、<code>eventChannel()</code></td>
+          </tr>
+          <tr>
+            <td>插件</td>
+            <td><code>runtimeInfoHolder()</code></td>
+          </tr>
+          <tr>
+            <td>外壳通道与运行时总线</td>
+            <td><code>shellStreams()</code>、<code>runEventBus()</code></td>
+          </tr>
+          <tr>
+            <td>观测</td>
+            <td><code>healthCheck()</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      <strong>为什么是「普通接口」</strong>：注释里的理由是摆脱代码生成——Dagger 的实现类由注解处理器产生，
+      任何想复用内核的外壳都被迫先依赖那套生成物。抽成不含任何 DI 注解的接口之后，
+      外壳只认这 23 个访问器。这一点在 <code>Jellyfish/AGENTS.md:45-47</code> 有对应的一句话总结：
+      CLI 用 <code>DaggerJellyfishComponent</code>，不用 Dagger 的容器用 <code>JellyfishAssembler</code>。
+    </p>
+
+    <p>
+      顺带一个反面例子：这个接口<strong>没有</strong> <code>getBean(Class)</code> 这类泛型查找方法，
+      也没有任何 <code>Optional</code> 返回值——23 个访问器里每一个都写「保证非 <code>null</code>」。
+      这是刻意的：契约上不留「可能没有」的口子，调用方就不必在每一处写 null 检查，
+      而装配期该炸的问题就在装配期炸掉。
+    </p>
+
+    <h3>3.2 刻意不声明生命周期</h3>
+
+    <p>
+      接口上一个 <code>start()</code> / <code>stop()</code> 都没有。理由在注释里：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/JellyfishRuntime.java:35-38（为什么不放一对 start/stop）</div>
+
+<pre><code class="language-java"> * &lt;b&gt;本接口刻意不声明生命周期&lt;/b&gt;：启动与收敛是 {@link AgentHarness#bootstrap()} /
+ * {@link AgentHarness#shutdown()} 的事，外壳按自己的时机调（CLI 在 {@code Launcher} 里，
+ * Spring 外壳在 {@code SmartLifecycle} 里）。接口里再放一对 start/stop 只会多出「谁先谁后」的
+ * 第二处说法，而启动顺序是内核的硬约束，只能有一处。</code></pre>
+
+    <p>
+      这段话有可验证的落点：CLI 侧启动与收敛确实都写在 <code>Launcher</code> 里——
+      先写运行时信息（<code>Jellyfish/jellyfish-cli/src/main/java/zcd/jellyfish/cli/Launcher.java:87-88</code>），
+      再做项目级配置的信任表态（<code>Jellyfish/jellyfish-cli/src/main/java/zcd/jellyfish/cli/Launcher.java:92-93</code>），
+      然后 <code>bootstrap()</code>（<code>Jellyfish/jellyfish-cli/src/main/java/zcd/jellyfish/cli/Launcher.java:104</code>），
+      最后在 <code>finally</code> 里 <code>shutdown()</code>（<code>Jellyfish/jellyfish-cli/src/main/java/zcd/jellyfish/cli/Launcher.java:135</code>）。
+      这几步的相对顺序<strong>不是外壳的心血来潮</strong>：运行时信息必须在 <code>bootstrap()</code> 之前写入
+      （插件在 <code>start()</code> 里就会读它，这条写在
+      <code>Jellyfish/docs/constraints.md:897-898</code>），信任表态也必须在装载配置之前。
+    </p>
+
+    <p>
+      所以接口上不放 start/stop 不是「懒得加」，而是<strong>避免出现第二处顺序的说法</strong>。
+      外壳拿到的 <code>JellyfishRuntime</code> 只是一个「已经装好的对象图」，
+      什么时候让它转起来由外壳按自己的容器时机决定。
+    </p>
+
+    <h3>3.3 「同一实例」约束：不体现在签名上，只能靠实现自己守住</h3>
+
+    <p>
+      这是这套设计真实的弱点，作者在类注释里直接承认了：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/JellyfishRuntime.java:40-43（逐字）</div>
+
+<pre><code class="language-java"> * &lt;b&gt;实现者必须保证「同一实例」约束&lt;/b&gt;：例如 {@code EventPublisher} 与 {@link #eventChannel()}
+ * 必须是同一个对象、{@link ExtensionRegistry} 与 {@link EventChannel} 必须共用同一份
+ * {@code TypeRegistry}。这些约束不体现在方法签名上，只能靠各实现自己守住；两套实现的一致性
+ * 由 {@code JellyfishAssemblerTest} 断言。</code></pre>
+
+    <p>
+      换句话说：接口能保证「你交给我一个 <code>eventChannel()</code>」，但保证不了
+      「别的组件内部用的也是这一份」。这类约束一共有四处，全部得靠两条装配路径各自落实：
+    </p>
+
+    <div class="mermaid">
+flowchart LR
+  TR["TypeRegistry：唯一一份表"] --> ER["ExtensionRegistry（同步、不可丢）"]
+  TR --> EC["EventChannel（异步、可丢）"]
+  EC --> EP["EventPublisher：窄接口视图就是通道本身"]
+  EC --> WARN["模型 / agent / 配置的告警都从这里出去"]
+  PT["ProjectConfigTrust：唯一实例"] --> CG["外壳：启动期授予信任"]
+  PT --> RC["RuntimeConfig.refresh()：读信任决定项目级配置是否参与合并"]
+    </div>
+    <p class="figure-cap">图 12-2　四处「必须唯一」的实例与它们各自的第二个读者——每一条分叉都是静默的</p>
+
+    <p>
+      这张图里每一条边都代表一次「两处必须看到同一份状态」。它们的失败模式在
+      <a href="25-pitfalls.html">25 页</a>与本节第 5 小节会再展开，这里先把四处点清楚：
+    </p>
+
+    <ul>
+      <li><strong>注册表唯一</strong>：同步扩展点与异步事件通道共用同一份 <code>TypeRegistry</code>。
+          分叉的代价很具体——插件停止时按 owner 回收只走过通道那一张表，
+          于是该插件的事件订阅全部残留（插件已经停了、监听器还在被回调的幽灵订阅）。</li>
+      <li><strong><code>EventPublisher</code> 就是那个通道</strong>：配置、模型、agent 的告警都从它出去。
+          如果它指向另一个没人订阅的通道，现象是「我配错了但一点提示都没有」。</li>
+      <li><strong><code>ProjectConfigTrust</code> 唯一</strong>：授予信任发生在启动期（启动参数或交互确认），
+          而读取它发生在 <code>RuntimeConfig.refresh()</code>；两份状态就会「确认了却不生效」。</li>
+      <li><strong>键一个都不能少</strong>：厂商别名键（<code>google</code> / <code>anthropic</code>）漏了不会编译失败，
+          只会让配置里那个 provider 静默不可用。</li>
+    </ul>
+
+    <!-- ============================================================ -->
+    <h2>4. 两套装配怎么保持一致</h2>
+
+    <p>
+      Dagger 侧讲完了，现在看手工侧。它存在的理由写在
+      <code>Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/JellyfishAssembler.java:96-123</code>
+      的类注释里，最关键的两句是：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/JellyfishAssembler.java:105-112（与 Dagger 侧的关系，逐字）</div>
+
+<pre><code class="language-java"> * &lt;b&gt;与 {@link JellyfishComponent} 的关系&lt;/b&gt;：两者是同一张图的两种装法，交付同一个
+ * {@link JellyfishRuntime} 契约。&lt;b&gt;配置来源也由各自的调用方决定&lt;/b&gt;——本工厂的入参是
+ * {@link AppConfig}，Dagger 侧的 {@link JellyfishComponent.Builder} 同样要求调用方给一份
+ * （`N-07` 之前 Dagger 侧固定从 classpath 读，两侧在此并不等价）。
+ * {@code @Module} 里的每一条 {@code @Provides} 在这里都有一行对应物，
+ * 因此内核新增绑定时&lt;b&gt;两处都要改&lt;/b&gt;——这是本方案已知的代价，用
+ * {@code JellyfishAssemblerTest} 的「共享实例」断言把分叉风险压到可发现。</code></pre>
+
+    <p>
+      这段话把这一节的四件事全说了：入口、配置来源、代价、护栏。下面逐个看机制。
+    </p>
+
+    <h3>4.1 入口：<code>create(AppConfig)</code> 与内部类 <code>Assembly</code></h3>
+
+    <div class="src-block">Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/JellyfishAssembler.java:141-156（唯一入口：全量急切构造）</div>
+
+<pre><code class="language-java">    /**
+     * 装配出一张完整的对象图。
+     * &lt;p&gt;
+     * 唯一的入参是 {@link AppConfig}：它是「去哪读配置」这一部署事实的载体，
+     * 其余一切（模型 / agent / 运行期设置 / 插件扫描目录）都由内核在
+     * {@code bootstrap()} 里按它去读——与 CLI 外壳走的是同一条路，因此没有任何配置语义被绕过。
+     *
+     * @param appConfig 应用级配置，不可为 {@code null}
+     * @return 装配结果，保证非 {@code null}
+     */
+    public static JellyfishRuntime create(AppConfig appConfig) {
+        Objects.requireNonNull(appConfig, "appConfig must not be null");
+        Assembly assembly = new Assembly();
+        assembly.assemble(appConfig);
+        return assembly;
+    }</code></pre>
+
+    <p>
+      结构上是一个「可变字段的私有类 + 一次性装配」，而不是「二十个局部变量 + 二十参构造器」——
+      理由是<strong>让装配顺序在代码里自上而下可读</strong>，因为顺序本身就是约束。
+      类注释里还有一条重要提醒：手工侧是<strong>全量急切构造</strong>，而 Dagger 的组件是惰性的；
+      两者的时间点都在 <code>bootstrap()</code> 之前，而配置要到那之后的 <code>refresh()</code> 才装载，
+      因此<strong>装配期读到的一切「配置」都只是缺省值</strong>
+      （<code>Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/JellyfishAssembler.java:113-117</code>）。
+      需要按配置定型的运行参数只能推迟到「真正用到的那一刻」再读，这条纪律在
+      <code>Jellyfish/docs/constraints.md:554-558</code> 有完整表述。
+    </p>
+
+    <p>
+      同包里还有一个只给测试用的静态方法
+      <code>pluginContextFactoryOf(JellyfishRuntime)</code>
+      （<code>Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/JellyfishAssembler.java:169-171</code>），
+      它把装配期的局部变量取出来给测试看——因为「插件拿到的出向端口是不是占位实现」正是一类静默故障。
+    </p>
+
+    <h3>4.2 装配顺序：两条硬约束都不在「清单」里</h3>
+
+    <div class="src-block">Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/JellyfishAssembler.java:221-246（顺序的唯一支配者与两处非直觉顺序，并附第一层）</div>
+
+<pre><code class="language-java">        /**
+         * 按依赖顺序装配整张图。
+         * &lt;p&gt;
+         * 顺序只受一件事支配：&lt;b&gt;被依赖者先建&lt;/b&gt;。有两处不是直觉顺序，都是有原因的：
+         * &lt;ol&gt;
+         *     &lt;li&gt;&lt;b&gt;插件运行时排在 ReAct / 压缩链之后&lt;/b&gt;——{@code PluginContextFactory} 需要
+         *     {@code SubAgentPort}，而它的实现链是「委派适配器 → 子代理启动器 → ReAct 循环器 →
+         *     动作分发器 → 压缩器」。先建插件运行时会拿不到这条路；&lt;/li&gt;
+         *     &lt;li&gt;&lt;b&gt;{@code PluginRuntimeConfig} 只建一次、且此处不刷新有效值&lt;/b&gt;——它是
+         *     「引用稳定、快照可换」的发布点，真正的刷新在 {@code AgentHarness.bootstrap()} 里
+         *     （必须在插件启动之前）。这里若 new 一个新对象刷新，管理器手里那份会永远停在旧快照。&lt;/li&gt;
+         * &lt;/ol&gt;
+         *
+         * @param appConfig 应用级配置，不可为 {@code null}
+         */
+        private void assemble(AppConfig appConfig) {
+            // 应用级配置留一份引用：外壳在启动期要按它算出「哪些项目级配置文件存在」
+            this.appConfig = appConfig;
+            // 第一层：扩展层。两份策略共用同一份注册表——这是硬约束，不得各建一份
+            TypeRegistry registry = new TypeRegistry();
+            extensionRegistry = new ExtensionRegistry(registry);
+            EventChannelOptions channelOptions = EventChannelOptions.defaults();
+            eventChannel = new EventChannel(channelOptions, registry);
+            // 窄接口视图与通道是同一个对象：配置 / 模型 / agent 的告警都从这里出去，
+            // 只有 bootstrap() 启动的那一个通道才有人订阅
+            EventPublisher publisher = eventChannel;</code></pre>
+
+    <p>
+      两条非直觉顺序里，第一条（插件运行时排在 ReAct / 压缩链之后）是<strong>依赖关系决定的</strong>：
+      <code>PluginContextFactory</code> 要拿到 <code>SubAgentPort</code>，而那条实现链要穿过
+      子代理启动器、ReAct 循环器、动作分发器、压缩器，最后到子代理委派适配器。
+      对应的落点在第十四层：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/JellyfishAssembler.java:335-351（第十三层与第十四层：插件运行时要等两个出向端口就位）</div>
+
+<pre><code class="language-java">            // 第十三层：子代理。启动器是唯一入口，「task 工具」与「插件委派」都走它，
+            // 这样两边的准入 / 并发 / 深度 / 预算 / 归档行为逐字段一致
+            SubAgentArchive subAgentArchive = new SubAgentArchive(toolOutputStore, runtimeConfig);
+            SubAgentLauncher subAgentLauncher = new SubAgentLauncher(sessionManager, agentManager, modelResolver,
+                    runtimeConfig, reActLooper, runContextHolder, permissionManager, agentRuntime, subAgentArchive);
+            TaskTool taskTool = new TaskTool(subAgentLauncher);
+            SubAgentPanel subAgentPanel = new SubAgentPanel(agentRuntime);
+            SubAgentPort delegations = new SubAgentDelegationAdapter(subAgentLauncher);
+
+            // 第十四层：插件运行时（必须排在 ReAct / 压缩链之后，因为它要拿到两个出向端口）
+            PluginRuntimeConfig pluginRuntimeConfig = PluginRuntimeConfig.defaults();
+            pluginRuntimeConfig.refresh(runtimeConfig.getPluginRoots(), runtimeConfig.getPluginsSettings());
+            pluginContextFactory = new PluginContextFactory(extensionRegistry, eventChannel,
+                    registry, runtimeInfoHolder, actionQueue, sessionManager, shellIngress, delegations,
+                    askChannel);
+            PF4JPluginManager pluginManager = new PF4JPluginManager(pluginContextFactory, pluginRuntimeConfig,
+                    eventChannel);</code></pre>
+
+    <p>
+      这里还有一处与模块写法<strong>不同</strong>的细节值得记下来：手工侧在装配时就调了一次
+      <code>pluginRuntimeConfig.refresh(...)</code>，而 Dagger 侧在
+      <code>providePluginRuntimeConfig</code> 里也调了一次
+      （<code>Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/PluginModule.java:57-63</code>）。
+      两次都是在「合法的默认对象」上刷一份<strong>构造期快照</strong>，
+      真正生效的刷新发生在 <code>AgentHarness.bootstrap()</code> 里、插件启动之前。
+      对象是「引用稳定、快照可换」的，所以装配期刷一次不生效但无害，忘掉真正的刷新才是故障。
+    </p>
+
+    <p>
+      第二条非直觉顺序（<code>PluginRuntimeConfig</code> 只建一次）在两边是同一个道理：
+      <strong>刷新要刷在管理器手里的那一个对象上</strong>，不能另建一个。
+    </p>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：顺序不能靠「照抄清单」</span>
+      <p>
+        装配顺序是硬约束，但<strong>它不是一份可以背下来的清单</strong>。原因有二：
+      </p>
+      <ul>
+        <li>清单会随依赖图变化而失效，而依赖图是活的（每次新增绑定都可能插入一层）；</li>
+        <li>同一个「先后」在不同位置有不同理由——<code>assemble()</code> 的顺序理由是「谁依赖谁」，
+            而 <code>AgentHarness.shutdown()</code> 的收敛顺序理由是「先静默所有写者、再兜底落盘」，
+            两者不是一回事。</li>
+      </ul>
+      <p>
+        要改装配顺序时，正确的做法是<strong>读这两处的注释</strong>：
+        <code>Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/JellyfishAssembler.java:221-235</code> 的
+        <code>assemble()</code> 注释，以及 <code>AgentHarness.shutdown()</code> 里那条「<code>flushAll()</code>
+        必须早于 <code>pluginManager.close()</code>」的硬约束（<code>Jellyfish/AGENTS.md</code> 的「关键不变量」一节有摘要）。
+      </p>
+    </div>
+
+    <h3>4.3 新增一个绑定：两处都要改</h3>
+
+    <p>
+      这是这套方案已知的代价，也是最容易犯的错。最典型的一处不是 Dagger 侧漏改，
+      而是<strong>别名键</strong>——它在两边都是普通代码：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/JellyfishAssembler.java:406-430（手工侧手拼的那张 map：与 7 条 <code>@Provides @IntoMap</code> 一一对应）</div>
+
+<pre><code class="language-java">        /**
+         * 构造厂商客户端创建器表。
+         * &lt;p&gt;
+         * &lt;b&gt;键一个都不能少&lt;/b&gt;：{@code google} / {@code anthropic} 是 {@code gemini} / {@code claude}
+         * 的别名键，漏掉它们不会编译失败，而是「配了那个 provider 却静默不可用」。
+         *
+         * @param httpClient     HTTP 客户端
+         * @param streamExecutor 流式线程池
+         * @return 不可变映射，保证非 {@code null}
+         */
+        private static Map&lt;String, LlmClientCreator&gt; llmClientCreators(OkHttpClient httpClient,
+                                                                       ExecutorService streamExecutor) {
+            Map&lt;String, LlmClientCreator&gt; creators = new LinkedHashMap&lt;String, LlmClientCreator&gt;();
+            creators.put(ProviderTypes.OPENAI, provider -&gt; new OpenAiLlmClient(provider, httpClient, streamExecutor));
+            creators.put(ProviderTypes.DEEPSEEK,
+                    provider -&gt; new DeepSeekLlmClient(provider, httpClient, streamExecutor));
+            creators.put(ProviderTypes.MINIMAX,
+                    provider -&gt; new MiniMaxLlmClient(provider, httpClient, streamExecutor));
+            creators.put(ProviderTypes.GEMINI, provider -&gt; new GeminiLlmClient(provider, httpClient, streamExecutor));
+            creators.put(ProviderTypes.GOOGLE, provider -&gt; new GeminiLlmClient(provider, httpClient, streamExecutor));
+            creators.put(ProviderTypes.CLAUDE, provider -&gt; new ClaudeLlmClient(provider, httpClient, streamExecutor));
+            creators.put(ProviderTypes.ANTHROPIC,
+                    provider -&gt; new ClaudeLlmClient(provider, httpClient, streamExecutor));
+            return creators;
+        }</code></pre>
+
+    <p>
+      对照一下就很清楚：Dagger 侧同一件事写成了 7 条独立的 <code>@Provides</code>
+      （<code>Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/LlmModule.java:100-187</code>），
+      手工侧写成了 7 行 <code>creators.put(...)</code>。<strong>两边都要求「键一个不少」，
+      而手工侧的漏写在编译期不会被发现</strong>——漏一个别名键是静默的（Dagger 侧若键重复会报错，
+      漏键同样不会）。这就是
+      <code>Jellyfish/docs/constraints.md:185-186</code> 那条「新增依赖绑定两处都要改，
+      一致性由 <code>JellyfishAssemblerTest</code> 守」的具体样子。
+    </p>
+
+    <h3>4.4 <code>JellyfishAssemblerTest</code> 怎么锁一致性</h3>
+
+    <p>
+      这个测试有 283 行、9 个方法，类注释把「防什么」和「怎么防」都写清楚了
+      （<code>Jellyfish/jellyfish-di/src/test/java/zcd/jellyfish/di/JellyfishAssemblerTest.java:33-49</code>）：
+      <strong>「谁依赖谁」写错会编译不过</strong>（类型互不相同），
+      真正会静默出事的只有一类——<strong>本该唯一的实例被建了第二份</strong>。
+      而它<strong>用行为断言而不是比对象引用</strong>：约束的落点全在私有字段里，反射读字段会把测试绑死在实现细节上。
+    </p>
+
+    <p>
+      首先是那条专治 <code>N-07</code> 的断言——它给两次<strong>不同</strong>的输入，要求两次都命中调用方给的那一份：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-di/src/test/java/zcd/jellyfish/di/JellyfishAssemblerTest.java:62-78（配置来源必须由调用方决定）</div>
+
+<pre><code class="language-java">    void both_assemblies_should_use_the_app_config_given_by_the_caller() {
+        // Given：两份可辨认的配置。**给两次不同的输入**是为了排掉「固定从某个来源读」那种实现——
+        // 它最多只能命中其中一份，而这里要求两次都命中调用方给的那一份
+        AppConfig first = appConfigNamed("jellyfish-di-test-a");
+        AppConfig second = appConfigNamed("jellyfish-di-test-b");
+
+        // When / Then：两种装法读到的都是**那一次**给的那一份（配置来源是部署事实，由调用方决定）。
+        // 这份断言钉住的正是 N-07：此前 Dagger 侧固定从 classpath 读，与手工装配侧不等价
+        assertEquals("jellyfish-di-test-a",
+                DaggerJellyfishComponent.builder().appConfig(first).build().appConfig().getProcessName());
+        assertEquals("jellyfish-di-test-b",
+                DaggerJellyfishComponent.builder().appConfig(second).build().appConfig().getProcessName());
+        assertEquals("jellyfish-di-test-a",
+                JellyfishAssembler.create(first).appConfig().getProcessName());
+        assertEquals("jellyfish-di-test-b",
+                JellyfishAssembler.create(second).appConfig().getProcessName());
+    }</code></pre>
+
+    <p>
+      这条测试的设计值得单独学：<strong>它没有断言「AppConfig 非 null」，而是喂了两份可辨认的配置</strong>。
+      因为「非 null」证明不了「是调用方给的那一份」——一个固定从
+      <code>classpath</code> 读的实现照样能让断言通过，只要它构造出了一份非 null 的配置。
+      给两次不同的输入，就把「固定从某个来源读」那种实现彻底排掉了：它最多只能命中其中一份。
+    </p>
+
+    <p>
+      然后是「共享同一份表」这条，它从一个入口写、从另一个入口读：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-di/src/test/java/zcd/jellyfish/di/JellyfishAssemblerTest.java:201-219（同步扩展点与事件通道必须落在同一张表上）</div>
+
+<pre><code class="language-java">    void both_strategies_should_share_the_same_TypeRegistry() {
+        // Given / When / Then：同步扩展点与事件通道必须落在**同一张**注册表上。
+        // 反例的代价很具体：插件停止时的回收（按 owner）只走过通道那一张表，
+        // 于是该插件的事件订阅全部残留——插件已经停了、监听器还在被回调的幽灵订阅
+        forEachRuntime(assembly -&gt; {
+            Subscription subscription = assembly.extensionRegistry().handle("di-parity",
+                    CommandRequest.class, "shared-table", new CommandDescriptor("共享表探针", null, null, false),
+                    request -&gt; CommandResult.ok("ok"), RegisterOptions.DEFAULT);
+            try {
+                // 一份表 ⇒ 从通道这一侧按 owner 回收，扩展点那一侧也必然空掉
+                assembly.eventChannel().unsubscribeAll("di-parity");
+                assertTrue(assembly.extensionRegistry().handlers(CommandRequest.class, "shared-table").isEmpty(),
+                        "通道与扩展点各拿一张表：从通道侧按 owner 回收，扩展点上的注册仍在");
+            } finally {
+                subscription.close();
+            }
+        });
+    }</code></pre>
+
+    <p>
+      关键在「<strong>从一个入口写、从另一个入口读</strong>」：注册走
+      <code>extensionRegistry()</code>，回收走 <code>eventChannel()</code>。
+      两条访问器只要有任何一个拿到了第二份注册表，这条断言就会红。
+      这比「反射读私有字段、比较两个引用」结实得多——后者改个字段名就红，而红的原因与约束无关。
+    </p>
+
+    <p>
+      最后是双跑机制本身，以及它为什么能成立：
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-di/src/test/java/zcd/jellyfish/di/JellyfishAssemblerTest.java:236-253（把两种装配放进同一个列表，逐一遍历）</div>
+
+<pre><code class="language-java">    /**
+     * 对两种装配各跑一遍同一段断言：Dagger 组件与手工装配。
+     * &lt;p&gt;
+     * &lt;b&gt;两者的 {@link AppConfig} 是同一份&lt;/b&gt;（此前刻意不同：Dagger 侧固定从 classpath 读、
+     * 手工侧由调用方给）。{@code N-07} 之后两侧都由调用方给，因此这里可以也确实应当喂同一份——
+     * 「同一段行为对两种装配各跑一遍」只有在输入也相同的时候才说明问题。
+     *
+     * @param assertions 针对单个装配结果的断言
+     */
+    private static void forEachRuntime(Consumer&lt;JellyfishRuntime&gt; assertions) {
+        AppConfig appConfig = emptyAppConfig();
+        List&lt;JellyfishRuntime&gt; assemblies = new ArrayList&lt;JellyfishRuntime&gt;();
+        assemblies.add(DaggerJellyfishComponent.builder().appConfig(appConfig).build());
+        assemblies.add(JellyfishAssembler.create(appConfig));
+        for (JellyfishRuntime assembly : assemblies) {
+            assertions.accept(assembly);
+        }
+    }</code></pre>
+
+    <p>
+      这段注释点出了一个容易忽略的前提：<strong>「同一段行为各跑一遍」只有在输入也相同的时候才说明问题</strong>。
+      <code>N-07</code> 修掉之前，两侧的配置来源刻意不同（Dagger 从 <code>classpath</code> 读、
+      手工侧由调用方给），那时的双跑其实是在比两个输入不同的东西。<a href="24-testing.html">24 页</a>
+      第 5 节从测试体系的角度讲过这个测试，这里补的是它与
+      <code>AppConfig</code> 绑定的这条因果。
+    </p>
+
+    <!-- ============================================================ -->
+    <h2>5. 装配错了会怎样</h2>
+
+    <p>
+      这一节把上面散落的坑点收在一起，因为它们的共同特征很鲜明：<strong>装配错误几乎都不会抛异常</strong>。
+    </p>
+
+    <h3>5.1 静默分叉：不报错，只是什么都不发生</h3>
+
+    <p>
+      少写一行 <code>EventPublisher publisher = eventChannel;</code>（手工侧那一行在
+      <code>Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/JellyfishAssembler.java:246</code>）的后果<strong>不是异常</strong>，
+      而是「配置 / 模型 / agent 的告警发进一个没人订阅的通道」——现象是
+      <strong>「我配错了但一点提示都没有」</strong>。同类的还有：
+    </p>
+
+    <ul>
+      <li>插件拿到的出向端口被装成占位实现（<code>AskPort.unavailable()</code>）：插件照常启动，
+          功能只在运行时悄悄不生效——测试里为此专门断言了「不是占位」「就是装配出来的那一个通道」
+          （<code>Jellyfish/jellyfish-di/src/test/java/zcd/jellyfish/di/JellyfishAssemblerTest.java:221-234</code>）。</li>
+      <li>两个派发策略各拿一张 <code>TypeRegistry</code>：幽灵订阅（插件停了，监听器还在被回调）。</li>
+      <li>厂商别名键漏一个：配了 <code>google</code> 却「provider 不认识」。</li>
+    </ul>
+
+    <div class="callout pitfall">
+      <span class="callout-title">坑点：这类问题只能靠专门的测试抓</span>
+      <p>
+        它们没有编译错误、没有启动期异常、日志里也不会有痕迹——因为「发到一个没人订阅的通道」
+        在实现上完全合法。判断这类问题的办法只有一个：<strong>改完装配先跑</strong>
+        <code>mvn -q -Dtest=JellyfishAssemblerTest test</code>。
+        这也是为什么这个测试用的是「从一个入口写、从另一个入口读」的行为断言——
+        它抓的正是可观察行为上的分叉，而不是实现上的写法。
+      </p>
+    </div>
+
+    <h3>5.2 顺序类分叉：别照抄清单</h3>
+
+    <p>
+      顺序错误的表现比静默分叉好一点（通常是 <code>NullPointerException</code>，
+      因为你拿到了一个还没赋值的字段），但定位起来依然费劲。要改顺序时，以
+      <code>Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/JellyfishAssembler.java:221-235</code>
+      的注释与 <code>AgentHarness.shutdown()</code> 为准，不要照抄一份「哪一步必须第几个」的清单——
+      理由见上面的坑点框（顺序的「为什么」在不同位置并不相同）。
+    </p>
+
+    <h3>5.3 配置来源不统一：两种装法在起跑线上就不同</h3>
+
+    <p>
+      如果 <code>AppConfig</code> 回到「由模块固定提供」的做法，
+      就会出现「CLI 与其它容器外壳的配置来源不同」——一个用 <code>classpath:config.json</code>，
+      另一个用它自己的来源，而<strong>两边都认为自己装的是同一个契约</strong>。
+      这正是加 <code>Builder</code> 要解决的问题，也是
+      <code>Jellyfish/docs/constraints.md:190</code> 那条「<strong>不要</strong>把它改回模块提供」的原因。
+    </p>
+
+    <h3>5.4 覆盖率上的错觉</h3>
+
+    <p>
+      <code>Dagger*</code> 与 <code>*_Factory.*</code> 被排除在 JaCoCo 之外
+      （<code>Jellyfish/pom.xml:272-278</code>），所以 <code>jellyfish-di</code> 报出来的覆盖率
+      <strong>只反映人写的装配代码</strong>：<code>JellyfishRuntime</code>、<code>JellyfishAssembler</code>
+      与 10 个模块。反过来说，生成物没人测（也不该测），
+      而人写的那部分——尤其「哪些实例必须唯一」这类约束——就得靠
+      <code>JellyfishAssemblerTest</code> 与几个模块级测试
+      （<code>AgentModuleTest</code>、<code>AskModuleTest</code>、<code>ExtensionModuleTest</code>、
+      <code>PluginModuleTest</code>，都在同一目录下）来覆盖。
+    </p>
+
+    <div class="conclusion">
+      <h2>关键结论</h2>
+      <ol>
+        <li><strong>10 个模块、22 条 <code>@Provides</code>、23 个访问器、13 个源文件</strong>——
+            这四个数字是这一页的骨架，也都是可以自己数一遍的（数法见第 2.3 节与第 3.1 节的说明）。</li>
+        <li><code>JellyfishComponent extends JellyfishRuntime</code>：<strong>继承买的是编译期</strong>——
+            漏交付一个入口变成编译错误，而不是某个外壳用到时才发现。两套装法因此不可能在入口集合上漂移。</li>
+        <li><code>@Component.Builder</code> + <code>@BindsInstance</code> 把 <code>AppConfig</code>
+            交回调用方：配置来源是<strong>部署事实</strong>，不该由「用哪种装法」决定。
+            缺省来源（<code>classpath</code>）留在 <code>ConfigModule.loadDefault()</code>，不能做成 <code>@Provides</code>（会双绑定）。</li>
+        <li><code>@IntoMap</code> + <code>@StringKey</code> 让「新增厂商只加一条 <code>@Provides</code>」成立：
+            清单由绑定本身构成，消费方只声明「我要一张 map」。唯一的空隙是别名键——它漏了不报错。</li>
+        <li><code>JellyfishRuntime</code> 是<strong>不含 DI 注解、不声明生命周期</strong>的普通接口：
+            前者让外壳不必依赖 Dagger 代码生成，后者让「启动顺序」全站只有一处说法
+            （<code>AgentHarness.bootstrap()</code> / <code>shutdown()</code>，外壳决定时机）。</li>
+        <li>「同一实例」约束不体现在签名上——注册表唯一、<code>EventPublisher</code> 就是那个通道、
+            信任裁决唯一、别名键齐全。四条都只能靠实现自己守住，靠
+            <code>JellyfishAssemblerTest</code>（同一段行为对两种装配各跑一遍）抓分叉。</li>
+        <li><strong>装配分叉是静默的</strong>：没有异常、没有日志，只有「某个功能悄悄不生效」。
+            这是这一层最贵的一课，也是「两处都要改」这个代价被接受的前提。</li>
+      </ol>
+    </div>
+
+        <nav class="pager" aria-label="翻页">
+      <a class="prev" href="11-subagents.html"><span class="pager-dir">上一页</span>11 子代理与多 Agent 协作</a>
+      <a class="next" href="13-observability.html"><span class="pager-dir">下一页</span>13 可观测性与运行观测</a>
+    </nav>
+
+  </main>
+</div>
+
+<footer class="footer">
+  Jellyfish 源码深度解析 · 本页源码依据：<code>JellyfishComponent.java</code>、<code>JellyfishRuntime.java</code>、
+  <code>JellyfishAssembler.java</code>、<code>ConfigModule.java</code>、<code>LlmModule.java</code>、
+  <code>ExtensionModule.java</code>、<code>EventModule.java</code>、<code>PluginModule.java</code>、
+  <code>AgentModule.java</code>、<code>PermissionModule.java</code>、<code>AskModule.java</code>、
+  <code>CommandModule.java</code>、<code>MetricsModule.java</code>、<code>JellyfishAssemblerTest.java</code>、
+  <code>AgentModuleTest.java</code>、<code>AskModuleTest.java</code>、<code>ExtensionModuleTest.java</code>、
+  <code>PluginModuleTest.java</code>、<code>LlmClientFactory.java</code>、<code>LlmClientCreator.java</code>、
+  <code>ProviderTypes.java</code>、<code>LlmClients.java</code>、<code>ProjectConfigTrust.java</code>、
+  <code>JellyfishApplication.java</code>、<code>Launcher.java</code>、<code>pom.xml</code>（根与 <code>jellyfish-di</code>）、
+  <code>AGENTS.md</code>、<code>docs/constraints.md</code>。
+</footer>
+
+<!-- 资源按「本地 vendor 优先、CDN 兜底」引用：文件缺失时 assets/app.js 会自动回退到 CDN -->
+<script src="assets/vendor/highlight.min.js"></script>
+<script src="assets/vendor/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

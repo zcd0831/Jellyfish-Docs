@@ -20,55 +20,53 @@
 
 <div class="layout">
 
-  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <nav class="sidebar" id="sidebar" aria-label="文档导航">
     <div class="sidebar-title">文档目录</div>
     <ul class="nav-list">
       <li><a href="index.html">首页 · 总览与导航</a></li>
     </ul>
-    <div class="nav-group">入门</div>
+    <div class="nav-group">一、入门</div>
     <ul class="nav-list">
       <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
       <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
       <li><a href="03-architecture.html" aria-current="page">03 整体架构与三外壳装配</a></li>
     </ul>
-    <div class="nav-group">内核重点</div>
+    <div class="nav-group">二、内核机制</div>
     <ul class="nav-list">
       <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
       <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
       <li><a href="06-permissions.html">06 权限与审批系统</a></li>
-      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
-      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+      <li><a href="07-tools-io.html">07 工具系统与输入输出</a></li>
+      <li><a href="08-commands.html">08 命令系统</a></li>
+      <li><a href="09-config.html">09 配置体系</a></li>
+      <li><a href="10-session-context.html">10 会话持久化与上下文</a></li>
+      <li><a href="11-subagents.html">11 子代理与多 Agent 协作</a></li>
+      <li><a href="12-assembly.html">12 装配与依赖注入</a></li>
+      <li><a href="13-observability.html">13 可观测性与运行观测</a></li>
     </ul>
-    <div class="nav-group">外壳与实战</div>
+    <div class="nav-group">三、外壳</div>
     <ul class="nav-list">
-      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
-      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
-      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+      <li><a href="14-tui.html">14 终端界面（TamboUI）</a></li>
+      <li><a href="15-cli-server.html">15 CLI 与 HTTP Server</a></li>
     </ul>
-    <div class="nav-group">拓展</div>
+    <div class="nav-group">四、插件</div>
     <ul class="nav-list">
-      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
-      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
-      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
-      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
-      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+      <li><a href="16-plugins.html">16 PF4J 插件化架构</a></li>
+      <li><a href="17-plugin-overview.html">17 官方插件总览</a></li>
+      <li><a href="18-plugin-tools-shell.html">18 tools 与 shell 插件</a></li>
+      <li><a href="19-plugin-session-compact.html">19 session-file 与 compact 插件</a></li>
+      <li><a href="20-plugin-workflow.html">20 workflow 插件</a></li>
+      <li><a href="21-plugin-plan-todo-skills.html">21 plan / todo / skills 插件</a></li>
+      <li><a href="22-plugin-mcp.html">22 MCP 插件</a></li>
+      <li><a href="23-plugin-script.html">23 跨语言脚本插件</a></li>
     </ul>
-    <div class="nav-group">子系统</div>
+    <div class="nav-group">五、工程与参考</div>
     <ul class="nav-list">
-      <li><a href="17-commands.html">17 命令系统</a></li>
-      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
-      <li><a href="19-config.html">19 配置体系</a></li>
-      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
-    </ul>
-    <div class="nav-group">插件详解</div>
-    <ul class="nav-list">
-      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
-      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
-      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
-      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
-      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
-      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
-      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+      <li><a href="24-testing.html">24 测试体系与构建</a></li>
+      <li><a href="25-pitfalls.html">25 坑点与陷阱清单</a></li>
+      <li><a href="26-comparison.html">26 与主流工具对比</a></li>
+      <li><a href="27-faq-glossary.html">27 常见问题与术语表</a></li>
+      <li><a href="28-learning-path.html">28 学习路径与阅读顺序</a></li>
     </ul>
   </nav>
 
@@ -360,14 +358,14 @@ EventPublisher publisher = eventChannel;</code></pre>
       <ul>
         <li><strong>TUI 先进首页</strong>。用户可能第一件事就是 <code>/session</code> 去看历史会话，或者
             <code>--session &lt;id&gt;</code> 直接恢复一个。启动就建一个空会话等于凭空多了一条「退出即消失」的垃圾记录
-            （<code>SessionManager.create()</code> 刻意不落盘，见 <a href="08-session-context.html">08 页</a>）。</li>
+            （<code>SessionManager.create()</code> 刻意不落盘，见 <a href="10-session-context.html">10 页</a>）。</li>
         <li><strong>Server 的会话由 HTTP 请求带 id 决定</strong>。一个进程可能同时服务多个会话，
             「当前会话」这个概念在 Server 模式下根本不存在。</li>
       </ul>
       <p>
         判据在代码里就一行：<code>SessionBootstrap.deferCreation</code> 里 <code>mode != CLI</code> 即延后（<code>:83, :103</code>）。
         这也解释了另一条规则：<code>--session</code> / <code>--agent</code> / <code>--model</code> 都是「<em>新建会话时</em>的绑定」，
-        所以它们在 Server 下没有意义，一律判用法错误退 2（见 <a href="10-cli-server.html">10 页</a>）。
+        所以它们在 Server 下没有意义，一律判用法错误退 2（见 <a href="15-cli-server.html">15 页</a>）。
       </p>
     </div>
 
@@ -592,7 +590,7 @@ EventPublisher publisher = eventChannel;</code></pre>
           <tr><td>10</td><td><code>pluginRuntimeConfig.refresh(...)</code></td><td><strong>必须在 <code>pluginManager.bootstrap()</code> 之前</strong>：插件运行时此刻才读扫描目录与启用/禁用名单</td></tr>
           <tr><td>11</td><td><code>pluginManager.bootstrap()</code></td><td>扫描并启动插件；插件的 <code>start()</code> 在此注册扩展点</td></tr>
           <tr><td>12</td><td><code>modelManager.refreshCatalogs()</code></td><td><strong>必须在 11 之后</strong>：传输实现与目录处理器都是插件在那一步才注册的，「先问只会得到空目录」</td></tr>
-          <tr><td>13</td><td><code>sessionManager.restore()</code></td><td><strong>必须在 11 之后</strong>：插件此刻才注册好恢复处理器。这就是 <a href="08-session-context.html">08 页</a>那条「restore 早于 bootstrap 会静默恢复 0 个会话」的来源</td></tr>
+          <tr><td>13</td><td><code>sessionManager.restore()</code></td><td><strong>必须在 11 之后</strong>：插件此刻才注册好恢复处理器。这就是 <a href="10-session-context.html">10 页</a>那条「restore 早于 bootstrap 会静默恢复 0 个会话」的来源</td></tr>
         </tbody>
       </table>
     </div>
@@ -610,7 +608,7 @@ EventPublisher publisher = eventChannel;</code></pre>
         现在的顺序让这种冲突必然是「启动期报错」，把问题从「运行时说不清」挪到「启动时说不清都难」。
       </p>
       <p>
-        这也解释了 <a href="07-plugins.html">07 页</a>里 <code>TypeRegistry</code> 的「覆盖压链」机制为什么需要它：
+        这也解释了 <a href="16-plugins.html">16 页</a>里 <code>TypeRegistry</code> 的「覆盖压链」机制为什么需要它：
         <strong>覆盖是受支持的能力，但必须是显式声明的</strong>。内核先注册 + 要 <code>override</code> 才允许覆盖，
         两条合起来才成立。
       </p>
@@ -867,7 +865,7 @@ shutdownNow() 会把排队任务丢掉，那些 run 从此没有人来落终态�
       </ol>
     </div>
 
-    <nav class="pager" aria-label="翻页">
+        <nav class="pager" aria-label="翻页">
       <a class="prev" href="02-quickstart.html"><span class="pager-dir">上一页</span>02 环境准备与快速上手</a>
       <a class="next" href="04-agent-loop.html"><span class="pager-dir">下一页</span>04 Agent Loop 内核</a>
     </nav>

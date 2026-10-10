@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>15 可观测性与运行观测 · Jellyfish 源码深度解析</title>
+<title>13 可观测性与运行观测 · Jellyfish 源码深度解析</title>
 <meta name="description" content="Jellyfish 的可观测性：33 个指标常量与 MetricsRegistry、四个健康检查指示器与最差优先聚合、GET /health 契约、run 观测（RunRegistry/AgentRunSnapshot/RunEventBus/RunPermit）及其空白。">
 <link rel="stylesheet" href="assets/style.css">
 <!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
@@ -20,65 +20,63 @@
 
 <div class="layout">
 
-  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <nav class="sidebar" id="sidebar" aria-label="文档导航">
     <div class="sidebar-title">文档目录</div>
     <ul class="nav-list">
       <li><a href="index.html">首页 · 总览与导航</a></li>
     </ul>
-    <div class="nav-group">入门</div>
+    <div class="nav-group">一、入门</div>
     <ul class="nav-list">
       <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
       <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
       <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
     </ul>
-    <div class="nav-group">内核重点</div>
+    <div class="nav-group">二、内核机制</div>
     <ul class="nav-list">
       <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
       <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
       <li><a href="06-permissions.html">06 权限与审批系统</a></li>
-      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
-      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+      <li><a href="07-tools-io.html">07 工具系统与输入输出</a></li>
+      <li><a href="08-commands.html">08 命令系统</a></li>
+      <li><a href="09-config.html">09 配置体系</a></li>
+      <li><a href="10-session-context.html">10 会话持久化与上下文</a></li>
+      <li><a href="11-subagents.html">11 子代理与多 Agent 协作</a></li>
+      <li><a href="12-assembly.html">12 装配与依赖注入</a></li>
+      <li><a href="13-observability.html" aria-current="page">13 可观测性与运行观测</a></li>
     </ul>
-    <div class="nav-group">外壳与实战</div>
+    <div class="nav-group">三、外壳</div>
     <ul class="nav-list">
-      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
-      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
-      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+      <li><a href="14-tui.html">14 终端界面（TamboUI）</a></li>
+      <li><a href="15-cli-server.html">15 CLI 与 HTTP Server</a></li>
     </ul>
-    <div class="nav-group">拓展</div>
+    <div class="nav-group">四、插件</div>
     <ul class="nav-list">
-      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
-      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
-      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
-      <li><a href="15-observability.html" aria-current="page">15 可观测性与运行观测</a></li>
-      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+      <li><a href="16-plugins.html">16 PF4J 插件化架构</a></li>
+      <li><a href="17-plugin-overview.html">17 官方插件总览</a></li>
+      <li><a href="18-plugin-tools-shell.html">18 tools 与 shell 插件</a></li>
+      <li><a href="19-plugin-session-compact.html">19 session-file 与 compact 插件</a></li>
+      <li><a href="20-plugin-workflow.html">20 workflow 插件</a></li>
+      <li><a href="21-plugin-plan-todo-skills.html">21 plan / todo / skills 插件</a></li>
+      <li><a href="22-plugin-mcp.html">22 MCP 插件</a></li>
+      <li><a href="23-plugin-script.html">23 跨语言脚本插件</a></li>
     </ul>
-    <div class="nav-group">子系统</div>
+    <div class="nav-group">五、工程与参考</div>
     <ul class="nav-list">
-      <li><a href="17-commands.html">17 命令系统</a></li>
-      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
-      <li><a href="19-config.html">19 配置体系</a></li>
-      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
-    </ul>
-    <div class="nav-group">插件详解</div>
-    <ul class="nav-list">
-      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
-      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
-      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
-      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
-      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
-      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
-      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+      <li><a href="24-testing.html">24 测试体系与构建</a></li>
+      <li><a href="25-pitfalls.html">25 坑点与陷阱清单</a></li>
+      <li><a href="26-comparison.html">26 与主流工具对比</a></li>
+      <li><a href="27-faq-glossary.html">27 常见问题与术语表</a></li>
+      <li><a href="28-learning-path.html">28 学习路径与阅读顺序</a></li>
     </ul>
   </nav>
 
   <main class="content">
 
     <nav class="breadcrumb" aria-label="面包屑">
-      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>15 可观测性与运行观测</span>
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>13 可观测性与运行观测</span>
     </nav>
 
-    <h1>15 可观测性与运行观测</h1>
+    <h1>13 可观测性与运行观测</h1>
     <p class="page-sub">
       前面十四页讲的是「它怎么工作」。这一页讲「你怎么知道它正在怎么工作」——
       以及一个必须说清的结论：<strong>内核里这套东西做得挺完整，但几乎没有出口。</strong>
@@ -118,7 +116,7 @@ flowchart TB
   E3 --> RB["RunEventBus<br/>（可靠 lane）"]
   RB --> SSE["SseRunListener<br/>→ run_started / run_finished"]
     </div>
-    <p class="figure-cap">图 15-1　三条通道：指标是「累计计数」、健康是「当下状态」、run 事件是「生命周期」</p>
+    <p class="figure-cap">图 13-1　三条通道：指标是「累计计数」、健康是「当下状态」、run 事件是「生命周期」</p>
 
     <div class="table-scroll">
       <table>
@@ -271,7 +269,7 @@ flowchart LR
   R --> DTO["HealthDto{status, healthy, results[]}"]
   DTO --> H["GET /health → 恒 200"]
     </div>
-    <p class="figure-cap">图 15-2　四个指示器 → 最差优先聚合 → 恒 200 的 HTTP 响应</p>
+    <p class="figure-cap">图 13-2　四个指示器 → 最差优先聚合 → 恒 200 的 HTTP 响应</p>
 
     <div class="table-scroll">
       <table>
@@ -316,7 +314,7 @@ flowchart LR
       <p>
         这个区分对运维很重要：<code>WARN</code> 是「去装插件」，<code>DOWN</code> 是「去配配置」。
         如果两者都判 DOWN，运维会去查一个本来没问题的配置文件。
-        这也解释了 <a href="11-pitfalls.html">11 页</a>里那条「没装压缩插件只降 WARN」——
+        这也解释了 <a href="25-pitfalls.html">25 页</a>里那条「没装压缩插件只降 WARN」——
         它是同一个判断标准的一致应用。
       </p>
     </div>
@@ -339,7 +337,7 @@ flowchart LR
       <li><strong>它是唯一免鉴权的路由</strong>：<code>ApiKeyGuard</code> 里
           <code>if (isHealthProbe(exchange) || isAuthorized(exchange))</code>（<code>:76</code>），
           而 <code>isHealthProbe</code> 要求 <strong>GET + 路径归一化后等于 <code>/health</code></strong>（<code>:107-113</code>）。
-          路径先归一化很关键——否则 <code>/health/../sessions</code> 这类写法可能绕过（<a href="10-cli-server.html">10 页</a>）。</li>
+          路径先归一化很关键——否则 <code>/health/../sessions</code> 这类写法可能绕过（<a href="15-cli-server.html">15 页</a>）。</li>
     </ul>
 
     <div class="callout pitfall">
@@ -441,7 +439,7 @@ flowchart LR
       <p>
         「低频状态用拉取（面板每秒读一次）、高频过程用推送（文本增量走事件）」是一条很实用的分界线。
         判据是<strong>「消费速率上限」</strong>而不是「变化频率」：变化再快，若消费者处理不过来，就该改成拉取。
-        注意这跟 <a href="07-plugins.html">07 页</a>的「能否丢弃」是两条不同的判据。
+        注意这跟 <a href="16-plugins.html">16 页</a>的「能否丢弃」是两条不同的判据。
       </p>
     </div>
 
@@ -568,9 +566,9 @@ metrics.gauge(MetricNames.EVENT_CHANNEL_PUBLISHED, stats::getPublished);</code><
       </ol>
     </div>
 
-    <nav class="pager" aria-label="翻页">
-      <a class="prev" href="14-faq-glossary.html"><span class="pager-dir">上一页</span>14 常见问题与术语表</a>
-      <a class="next" href="16-testing.html"><span class="pager-dir">下一页</span>16 测试体系与构建</a>
+        <nav class="pager" aria-label="翻页">
+      <a class="prev" href="12-assembly.html"><span class="pager-dir">上一页</span>12 装配与依赖注入</a>
+      <a class="next" href="14-tui.html"><span class="pager-dir">下一页</span>14 终端界面（TamboUI）</a>
     </nav>
 
   </main>

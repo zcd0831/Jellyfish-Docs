@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>20 子代理与多 Agent 协作 · Jellyfish 源码深度解析</title>
+<title>11 子代理与多 Agent 协作 · Jellyfish 源码深度解析</title>
 <meta name="description" content="子代理的委派链路与逐项准入、父子之间唯一的通信机制（结果回灌 + 归档路径）、上下文与状态隔离、并发的两层门控与许可让出、run 上下文装载，以及多 Agent 协作的三种形态与 run 观测通道。">
 <link rel="stylesheet" href="assets/style.css">
 <!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
@@ -20,65 +20,63 @@
 
 <div class="layout">
 
-  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <nav class="sidebar" id="sidebar" aria-label="文档导航">
     <div class="sidebar-title">文档目录</div>
     <ul class="nav-list">
       <li><a href="index.html">首页 · 总览与导航</a></li>
     </ul>
-    <div class="nav-group">入门</div>
+    <div class="nav-group">一、入门</div>
     <ul class="nav-list">
       <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
       <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
       <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
     </ul>
-    <div class="nav-group">内核重点</div>
+    <div class="nav-group">二、内核机制</div>
     <ul class="nav-list">
       <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
       <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
       <li><a href="06-permissions.html">06 权限与审批系统</a></li>
-      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
-      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+      <li><a href="07-tools-io.html">07 工具系统与输入输出</a></li>
+      <li><a href="08-commands.html">08 命令系统</a></li>
+      <li><a href="09-config.html">09 配置体系</a></li>
+      <li><a href="10-session-context.html">10 会话持久化与上下文</a></li>
+      <li><a href="11-subagents.html" aria-current="page">11 子代理与多 Agent 协作</a></li>
+      <li><a href="12-assembly.html">12 装配与依赖注入</a></li>
+      <li><a href="13-observability.html">13 可观测性与运行观测</a></li>
     </ul>
-    <div class="nav-group">外壳与实战</div>
+    <div class="nav-group">三、外壳</div>
     <ul class="nav-list">
-      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
-      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
-      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+      <li><a href="14-tui.html">14 终端界面（TamboUI）</a></li>
+      <li><a href="15-cli-server.html">15 CLI 与 HTTP Server</a></li>
     </ul>
-    <div class="nav-group">拓展</div>
+    <div class="nav-group">四、插件</div>
     <ul class="nav-list">
-      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
-      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
-      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
-      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
-      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+      <li><a href="16-plugins.html">16 PF4J 插件化架构</a></li>
+      <li><a href="17-plugin-overview.html">17 官方插件总览</a></li>
+      <li><a href="18-plugin-tools-shell.html">18 tools 与 shell 插件</a></li>
+      <li><a href="19-plugin-session-compact.html">19 session-file 与 compact 插件</a></li>
+      <li><a href="20-plugin-workflow.html">20 workflow 插件</a></li>
+      <li><a href="21-plugin-plan-todo-skills.html">21 plan / todo / skills 插件</a></li>
+      <li><a href="22-plugin-mcp.html">22 MCP 插件</a></li>
+      <li><a href="23-plugin-script.html">23 跨语言脚本插件</a></li>
     </ul>
-    <div class="nav-group">子系统</div>
+    <div class="nav-group">五、工程与参考</div>
     <ul class="nav-list">
-      <li><a href="17-commands.html">17 命令系统</a></li>
-      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
-      <li><a href="19-config.html">19 配置体系</a></li>
-      <li><a href="20-subagents.html" aria-current="page">20 子代理与多 Agent 协作</a></li>
-    </ul>
-    <div class="nav-group">插件详解</div>
-    <ul class="nav-list">
-      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
-      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
-      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
-      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
-      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
-      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
-      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+      <li><a href="24-testing.html">24 测试体系与构建</a></li>
+      <li><a href="25-pitfalls.html">25 坑点与陷阱清单</a></li>
+      <li><a href="26-comparison.html">26 与主流工具对比</a></li>
+      <li><a href="27-faq-glossary.html">27 常见问题与术语表</a></li>
+      <li><a href="28-learning-path.html">28 学习路径与阅读顺序</a></li>
     </ul>
   </nav>
 
   <main class="content">
 
     <nav class="breadcrumb" aria-label="面包屑">
-      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>20 子代理与多 Agent 协作</span>
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>11 子代理与多 Agent 协作</span>
     </nav>
 
-    <h1>20 子代理与多 Agent 协作</h1>
+    <h1>11 子代理与多 Agent 协作</h1>
     <p class="page-sub">
       委派链路、父子之间唯一的通信机制、并发门控与上下文装载、多 Agent 协作的三种形态。
       <a href="04-agent-loop.html">04 页</a>讲了「边界在哪里」，这一页讲「机制怎么接起来的」。
@@ -113,7 +111,7 @@ flowchart TD
   A --> B --> C --> D --> E --> F --> G --> H
   G -->|"子会话末条 assistant 文本与用量"| H
     </div>
-    <p class="figure-cap">图 20-1　委派链路：前四跳都可能拒绝，拒绝时一律在「建 run 之前」返回</p>
+    <p class="figure-cap">图 11-1　委派链路：前四跳都可能拒绝，拒绝时一律在「建 run 之前」返回</p>
 
     <div class="table-scroll">
       <table>
@@ -435,7 +433,7 @@ sequenceDiagram
   TT-->>M: 首行结论 + 正文 + 完整记录见 path
   M->>FS: 需要细节时按路径 read_file 回读
     </div>
-    <p class="figure-cap">图 20-2　父子之间的全部通道：一条下行、一条上行、一个文件指针</p>
+    <p class="figure-cap">图 11-2　父子之间的全部通道：一条下行、一条上行、一个文件指针</p>
 
     <div class="table-scroll">
       <table>
@@ -761,12 +759,12 @@ sequenceDiagram
       <p>
         <strong>根因</strong>：三层有损叠加。① 未收敛时只回灌「原因 + 最后一段正文」；
         ② 回灌文本作为工具输出，还要过 <code>ToolOutputLimiter</code> 的硬截断，超限时按头 30% / 尾 70%
-        切分并把全文落盘（见 <a href="18-tools-io.html">18 页</a>）；
+        切分并把全文落盘（见 <a href="07-tools-io.html">07 页</a>）；
         ③ 长文本的档案是另一份文件（run 归档），与工具输出落盘<strong>不共用配额</strong>。
       </p>
       <p>
         <strong>规避</strong>：给主模型的提示里要显式区分这两种缺失——「文本太长」由工具输出信封里的
-        <code>_path</code> 兜（见 <a href="18-tools-io.html">18 页</a>），「文本不长但进程没跑完」由归档路径兜；
+        <code>_path</code> 兜（见 <a href="07-tools-io.html">07 页</a>），「文本不长但进程没跑完」由归档路径兜；
         两条合起来，主模型在两种情况下都能拿到回看线索。同时记住：<strong>归档路径只在
         <code>TRUNCATED</code> 时才附</strong>，正常完成时附它「只会诱导主模型去读一份并不需要的文件」。
       </p>
@@ -1250,7 +1248,7 @@ sequenceDiagram
             <td>模型提交一份 spec，由插件执行</td>
             <td>workflow 插件内部调用 ②，自己管步骤与依赖</td>
             <td>② 的全部约束，加上插件自己的 ledger / 依赖判定</td>
-            <td>多步骤、有跨步骤依赖的编排（见 <a href="24-plugin-workflow.html">24 页</a>）</td>
+            <td>多步骤、有跨步骤依赖的编排（见 <a href="20-plugin-workflow.html">20 页</a>）</td>
           </tr>
         </tbody>
       </table>
@@ -1372,7 +1370,7 @@ sequenceDiagram
 
     <p>
       承上启下：步骤图、跨步骤依赖、失败补救、结果聚合这些都属于「表达形式」，
-      因此细节放在 <a href="24-plugin-workflow.html">24 workflow 插件</a>；
+      因此细节放在 <a href="20-plugin-workflow.html">20 workflow 插件</a>；
       本页只固定它的<strong>位置</strong>——它在形态 ② 之上，因此额度、并发、取消、用量、归档的行为
       与 <code>task</code> 逐字段一致，插件不自己起线程池、不自己实现并发上限。
     </p>
@@ -1398,7 +1396,7 @@ sequenceDiagram
     <h2>7. 观测通道：run 起止走哪儿，插件要观测得绕哪条道</h2>
 
     <p>
-      <a href="15-observability.html">15 页</a>讲过「run 观测是与外壳事件并列的第二条可靠通道」。
+      <a href="13-observability.html">13 页</a>讲过「run 观测是与外壳事件并列的第二条可靠通道」。
       这里补两条本页相关的边界：<strong>run 事件不带外壳回合的契约</strong>，以及
       <strong>插件看不到内核总线，只能走通知通道</strong>。
     </p>
@@ -1459,7 +1457,7 @@ sequenceDiagram
             <td>面板拉取</td>
             <td>外壳</td>
             <td>无事件，按帧轮询 <code>runtime.activeRuns()</code></td>
-            <td><code>SubAgentPanel.java:88</code>、<code>RunRegistry.java:258-266</code>（见 <a href="15-observability.html">15 页</a>）</td>
+            <td><code>SubAgentPanel.java:88</code>、<code>RunRegistry.java:258-266</code>（见 <a href="13-observability.html">13 页</a>）</td>
           </tr>
         </tbody>
       </table>
@@ -1568,7 +1566,7 @@ sequenceDiagram
             排回同一个 8 线程池会让并发父回合互相等死；run 跑在独立的 <code>agent-run</code> 池。
             改动时先看两池是否「不共享队列」。</li>
         <li><strong>审批与提问阻塞的是 <code>react</code> 线程</strong>：两者都在工具调用里同步等待
-            （见 <a href="04-agent-loop.html">04 页</a>与 <a href="07-plugins.html">07 页</a>对事件内联降级的取舍）。
+            （见 <a href="04-agent-loop.html">04 页</a>与 <a href="16-plugins.html">16 页</a>对事件内联降级的取舍）。
             因此「在 <code>react</code> 线程上做会阻塞的事」是双倍危险——它同时拖慢回合数与子代理的唤醒。</li>
         <li><strong><code>maxDepth = 1</code> 时「让出许可」是空操作</strong>：等待方是顶层回合，它没有许可。
             调大 <code>maxDepth</code> 等于打开一条此前从未被覆盖的路径（见第 4.3 节）。</li>
@@ -1613,9 +1611,9 @@ sequenceDiagram
       </ol>
     </div>
 
-    <nav class="pager" aria-label="翻页">
-      <a class="prev" href="19-config.html"><span class="pager-dir">上一页</span>19 配置体系</a>
-      <a class="next" href="21-plugin-overview.html"><span class="pager-dir">下一页</span>21 官方插件总览</a>
+        <nav class="pager" aria-label="翻页">
+      <a class="prev" href="10-session-context.html"><span class="pager-dir">上一页</span>10 会话持久化与上下文</a>
+      <a class="next" href="12-assembly.html"><span class="pager-dir">下一页</span>12 装配与依赖注入</a>
     </nav>
 
   </main>

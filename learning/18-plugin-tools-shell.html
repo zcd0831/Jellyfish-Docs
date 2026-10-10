@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>22 tools 与 shell 插件 · Jellyfish 源码深度解析</title>
+<title>18 tools 与 shell 插件 · Jellyfish 源码深度解析</title>
 <meta name="description" content="从源码看官方 tools 与 shell 插件：工具清单与参数 Schema、文件工具的匹配与限额、路径闸门，以及命令启动、超时终止与审批边界。">
 <link rel="stylesheet" href="assets/style.css">
 <!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
@@ -20,67 +20,65 @@
 
 <div class="layout">
 
-  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <nav class="sidebar" id="sidebar" aria-label="文档导航">
     <div class="sidebar-title">文档目录</div>
     <ul class="nav-list">
       <li><a href="index.html">首页 · 总览与导航</a></li>
     </ul>
-    <div class="nav-group">入门</div>
+    <div class="nav-group">一、入门</div>
     <ul class="nav-list">
       <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
       <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
       <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
     </ul>
-    <div class="nav-group">内核重点</div>
+    <div class="nav-group">二、内核机制</div>
     <ul class="nav-list">
       <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
       <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
       <li><a href="06-permissions.html">06 权限与审批系统</a></li>
-      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
-      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+      <li><a href="07-tools-io.html">07 工具系统与输入输出</a></li>
+      <li><a href="08-commands.html">08 命令系统</a></li>
+      <li><a href="09-config.html">09 配置体系</a></li>
+      <li><a href="10-session-context.html">10 会话持久化与上下文</a></li>
+      <li><a href="11-subagents.html">11 子代理与多 Agent 协作</a></li>
+      <li><a href="12-assembly.html">12 装配与依赖注入</a></li>
+      <li><a href="13-observability.html">13 可观测性与运行观测</a></li>
     </ul>
-    <div class="nav-group">外壳与实战</div>
+    <div class="nav-group">三、外壳</div>
     <ul class="nav-list">
-      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
-      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
-      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+      <li><a href="14-tui.html">14 终端界面（TamboUI）</a></li>
+      <li><a href="15-cli-server.html">15 CLI 与 HTTP Server</a></li>
     </ul>
-    <div class="nav-group">拓展</div>
+    <div class="nav-group">四、插件</div>
     <ul class="nav-list">
-      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
-      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
-      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
-      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
-      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+      <li><a href="16-plugins.html">16 PF4J 插件化架构</a></li>
+      <li><a href="17-plugin-overview.html">17 官方插件总览</a></li>
+      <li><a href="18-plugin-tools-shell.html" aria-current="page">18 tools 与 shell 插件</a></li>
+      <li><a href="19-plugin-session-compact.html">19 session-file 与 compact 插件</a></li>
+      <li><a href="20-plugin-workflow.html">20 workflow 插件</a></li>
+      <li><a href="21-plugin-plan-todo-skills.html">21 plan / todo / skills 插件</a></li>
+      <li><a href="22-plugin-mcp.html">22 MCP 插件</a></li>
+      <li><a href="23-plugin-script.html">23 跨语言脚本插件</a></li>
     </ul>
-    <div class="nav-group">子系统</div>
+    <div class="nav-group">五、工程与参考</div>
     <ul class="nav-list">
-      <li><a href="17-commands.html">17 命令系统</a></li>
-      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
-      <li><a href="19-config.html">19 配置体系</a></li>
-      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
-    </ul>
-    <div class="nav-group">插件详解</div>
-    <ul class="nav-list">
-      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
-      <li><a href="22-plugin-tools-shell.html" aria-current="page">22 tools 与 shell 插件</a></li>
-      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
-      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
-      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
-      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
-      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+      <li><a href="24-testing.html">24 测试体系与构建</a></li>
+      <li><a href="25-pitfalls.html">25 坑点与陷阱清单</a></li>
+      <li><a href="26-comparison.html">26 与主流工具对比</a></li>
+      <li><a href="27-faq-glossary.html">27 常见问题与术语表</a></li>
+      <li><a href="28-learning-path.html">28 学习路径与阅读顺序</a></li>
     </ul>
   </nav>
 
   <main class="content">
 
     <nav class="breadcrumb" aria-label="面包屑">
-      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>22 tools 与 shell 插件</span>
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>18 tools 与 shell 插件</span>
     </nav>
 
-    <h1>22 tools 与 shell 插件</h1>
+    <h1>18 tools 与 shell 插件</h1>
     <p class="page-sub">
-      工具系统在内核里只有一条执行链（见 <a href="18-tools-io.html">18 页</a>），那官方的工具是从哪来的？
+      工具系统在内核里只有一条执行链（见 <a href="07-tools-io.html">07 页</a>），那官方的工具是从哪来的？
       这一页打开 <code>jellyfish-plugin-tools</code> 与 <code>jellyfish-plugin-shell</code> 两个插件包，
       看它们各自注册了什么、工具实现里的取舍是什么，以及「执行一条 shell 命令」为什么必须经过审批。
     </p>
@@ -105,7 +103,7 @@
       两个插件做的事情同构——<strong>在自己的 <code>start()</code> 里把「名片 + 处理器」交给插件上下文</strong>，
       差别只在它们把什么东西变成了能力：<code>tools</code> 把文件系统的读、写、改、列、搜五个动作变成工具，
       <code>shell</code> 把「在本机起一个进程」变成工具。注册窗口与回收规则由框架负责（见
-      <a href="07-plugins.html">07 页</a>），两个插件类都没有额外逻辑。
+      <a href="16-plugins.html">16 页</a>），两个插件类都没有额外逻辑。
     </p>
 
     <div class="table-scroll">
@@ -308,14 +306,14 @@ flowchart TD
   A --> G["FileReferencePromptContribution 注册到 PromptContributionRequest"]
   E --> H["PermissionVerdict：无异议 / 要审批 / 拒绝"]
 </div>
-    <p class="figure-cap">图 22-1　tools 插件一次 <code>start()</code> 的五个注册动作，只有前两个是工具</p>
+    <p class="figure-cap">图 18-1　tools 插件一次 <code>start()</code> 的五个注册动作，只有前两个是工具</p>
 
     <!-- ============================================================ -->
     <h2>3. 工具参数 Schema 怎么描述</h2>
 
     <p>
       内核只要求 <code>ToolDescriptor.parameters</code> 是 JSON Schema 的 <code>properties</code> 部分，
-      <code>type: object</code> 与 <code>required</code> 由内核在转成厂商请求时自己包上（见 <a href="18-tools-io.html">18 页</a>）。
+      <code>type: object</code> 与 <code>required</code> 由内核在转成厂商请求时自己包上（见 <a href="07-tools-io.html">07 页</a>）。
       既然只是一张「参数名 → 一段带类型的描述」的映射，<code>tools</code> 插件就<strong>刻意不引入任何 JSON 库</strong>，
       用一百多行的 <code>ToolSchema</code> 把话说完。每个参数的描述只有两个键：
     </p>
@@ -448,7 +446,7 @@ flowchart TD
         <strong>根因</strong>：这是两道路径。工具自己的 <code>max_bytes</code> 只是<strong>工具级的默认安全带</strong>
         （<code>Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ReadFileTool.java:46-47</code>），
         它让绝大多数调用不必惊动内核；内核那层还会再兜一次底，输出超过预算时落盘、只回灌头尾预览
-        （见 <a href="18-tools-io.html">18 页</a>）。两道都省不掉：工具不管，内核的落盘会被频繁触发；
+        （见 <a href="07-tools-io.html">07 页</a>）。两道都省不掉：工具不管，内核的落盘会被频繁触发；
         内核不管，某个工具忘了限流就会把上下文撑爆。<br>
         <strong>规避</strong>：读大文件用 <code>offset</code> / <code>limit</code> 分片，
         不要指望把 <code>max_bytes</code> 调大就能「一次读完」——落盘信封给的是预览与回查路径，不是全文。
@@ -1132,7 +1130,7 @@ sequenceDiagram
   Runner-->>Tool: ShellResult
   Tool->>Sink: summary 后再 finish
 </div>
-    <p class="figure-cap">图 22-2　一条 shell 命令的执行链：工具不物化输出，只把结论与元数据交出去</p>
+    <p class="figure-cap">图 18-2　一条 shell 命令的执行链：工具不物化输出，只把结论与元数据交出去</p>
 
     <!-- ============================================================ -->
     <h2>10. 超时、终止与失败表达</h2>
@@ -1481,7 +1479,7 @@ sequenceDiagram
       <strong>现象</strong>：命令输出几百 MB，系统没有崩、也没把内存吃光，但机器 CPU 被那条命令占满，
       一直跑到超时。<br>
       <strong>根因</strong>：内核的捕获通道管的是「输出进不进内存/磁盘」（落盘与头尾预览，见
-      <a href="18-tools-io.html">18 页</a>），它不限制子进程本身干什么。<code>yes</code> 之类的命令会一直产出，
+      <a href="07-tools-io.html">07 页</a>），它不限制子进程本身干什么。<code>yes</code> 之类的命令会一直产出，
       <code>ShellOutputCapture</code> 继续 drain（必须继续，否则子进程会因管道写满而卡住），计数在涨，
       而 CPU 已经是那条命令的了。<br>
       <strong>规避</strong>：靠<strong>时间</strong>兜底，不靠输出量——<code>timeoutSeconds</code>（缺省 120 秒）
@@ -1563,9 +1561,9 @@ sequenceDiagram
       </ol>
     </div>
 
-    <nav class="pager" aria-label="翻页">
-      <a class="prev" href="21-plugin-overview.html"><span class="pager-dir">上一页</span>21 官方插件总览</a>
-      <a class="next" href="23-plugin-session-compact.html"><span class="pager-dir">下一页</span>23 session-file 与 compact 插件</a>
+        <nav class="pager" aria-label="翻页">
+      <a class="prev" href="17-plugin-overview.html"><span class="pager-dir">上一页</span>17 官方插件总览</a>
+      <a class="next" href="19-plugin-session-compact.html"><span class="pager-dir">下一页</span>19 session-file 与 compact 插件</a>
     </nav>
 
   </main>

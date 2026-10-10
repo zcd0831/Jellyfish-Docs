@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>09 终端界面（TamboUI） · Jellyfish 源码深度解析</title>
+<title>14 终端界面（TamboUI） · Jellyfish 源码深度解析</title>
 <meta name="description" content="Jellyfish TUI：ChatShell 六区域与高度账本、ToolkitApp 渲染回调、渲染线程独占界面状态、UiInvalidatedEvent 失效信号、键盘映射陷阱、渲染性能约束与日志隔离。">
 <link rel="stylesheet" href="assets/style.css">
 <!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
@@ -20,65 +20,63 @@
 
 <div class="layout">
 
-  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <nav class="sidebar" id="sidebar" aria-label="文档导航">
     <div class="sidebar-title">文档目录</div>
     <ul class="nav-list">
       <li><a href="index.html">首页 · 总览与导航</a></li>
     </ul>
-    <div class="nav-group">入门</div>
+    <div class="nav-group">一、入门</div>
     <ul class="nav-list">
       <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
       <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
       <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
     </ul>
-    <div class="nav-group">内核重点</div>
+    <div class="nav-group">二、内核机制</div>
     <ul class="nav-list">
       <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
       <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
       <li><a href="06-permissions.html">06 权限与审批系统</a></li>
-      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
-      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+      <li><a href="07-tools-io.html">07 工具系统与输入输出</a></li>
+      <li><a href="08-commands.html">08 命令系统</a></li>
+      <li><a href="09-config.html">09 配置体系</a></li>
+      <li><a href="10-session-context.html">10 会话持久化与上下文</a></li>
+      <li><a href="11-subagents.html">11 子代理与多 Agent 协作</a></li>
+      <li><a href="12-assembly.html">12 装配与依赖注入</a></li>
+      <li><a href="13-observability.html">13 可观测性与运行观测</a></li>
     </ul>
-    <div class="nav-group">外壳与实战</div>
+    <div class="nav-group">三、外壳</div>
     <ul class="nav-list">
-      <li><a href="09-tui.html" aria-current="page">09 终端界面（TamboUI）</a></li>
-      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
-      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+      <li><a href="14-tui.html" aria-current="page">14 终端界面（TamboUI）</a></li>
+      <li><a href="15-cli-server.html">15 CLI 与 HTTP Server</a></li>
     </ul>
-    <div class="nav-group">拓展</div>
+    <div class="nav-group">四、插件</div>
     <ul class="nav-list">
-      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
-      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
-      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
-      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
-      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+      <li><a href="16-plugins.html">16 PF4J 插件化架构</a></li>
+      <li><a href="17-plugin-overview.html">17 官方插件总览</a></li>
+      <li><a href="18-plugin-tools-shell.html">18 tools 与 shell 插件</a></li>
+      <li><a href="19-plugin-session-compact.html">19 session-file 与 compact 插件</a></li>
+      <li><a href="20-plugin-workflow.html">20 workflow 插件</a></li>
+      <li><a href="21-plugin-plan-todo-skills.html">21 plan / todo / skills 插件</a></li>
+      <li><a href="22-plugin-mcp.html">22 MCP 插件</a></li>
+      <li><a href="23-plugin-script.html">23 跨语言脚本插件</a></li>
     </ul>
-    <div class="nav-group">子系统</div>
+    <div class="nav-group">五、工程与参考</div>
     <ul class="nav-list">
-      <li><a href="17-commands.html">17 命令系统</a></li>
-      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
-      <li><a href="19-config.html">19 配置体系</a></li>
-      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
-    </ul>
-    <div class="nav-group">插件详解</div>
-    <ul class="nav-list">
-      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
-      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
-      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
-      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
-      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
-      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
-      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+      <li><a href="24-testing.html">24 测试体系与构建</a></li>
+      <li><a href="25-pitfalls.html">25 坑点与陷阱清单</a></li>
+      <li><a href="26-comparison.html">26 与主流工具对比</a></li>
+      <li><a href="27-faq-glossary.html">27 常见问题与术语表</a></li>
+      <li><a href="28-learning-path.html">28 学习路径与阅读顺序</a></li>
     </ul>
   </nav>
 
   <main class="content">
 
     <nav class="breadcrumb" aria-label="面包屑">
-      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>09 终端界面（TamboUI）</span>
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>14 终端界面（TamboUI）</span>
     </nav>
 
-    <h1>09 终端界面（TamboUI）</h1>
+    <h1>14 终端界面（TamboUI）</h1>
     <p class="page-sub">
       <code>TuiApp.java</code> 有 2176 行，是整个仓库最大的单个类。理解它的关键在于一条纪律：
       <strong>界面状态只归渲染线程</strong>。
@@ -216,7 +214,7 @@ flowchart TB
 
     <p>
       第 1 步的 <code>drainShell</code> 是「每帧一次」而不是「每来一条就刷」——
-      这是 <a href="07-plugins.html">07 页</a>里 <code>ShellIngress</code> 信件箱模型能成立的前提：
+      这是 <a href="16-plugins.html">16 页</a>里 <code>ShellIngress</code> 信件箱模型能成立的前提：
       <strong>投递与消费解耦，消费时机由渲染节奏决定</strong>。
     </p>
 
@@ -322,7 +320,7 @@ sequenceDiagram
         回合进行中要拒绝新输入（由 <code>SubmissionPolicy</code> 负责），而不是用阻塞来解决。
       </p>
       <p>
-        这是 TUI 与 CLI 最大的结构差异：CLI（<a href="10-cli-server.html">10 页</a>）<strong>就是要</strong>
+        这是 TUI 与 CLI 最大的结构差异：CLI（<a href="15-cli-server.html">15 页</a>）<strong>就是要</strong>
         <code>awaitTurn</code> 阻塞等终态，因为它的输出契约是「stdout 只等于最终回答」。
       </p>
     </div>
@@ -557,7 +555,7 @@ static final int PARSE_MAX_CHARS = 32 * 1024;  // 超长只解析尾部窗口</c
         收在<strong>构造器</strong>是另一种思路：让<strong>数据在诞生时就不可能带着危险字符</strong>。
         于是「有没有过滤」不再取决于每个输出点是否记得，而取决于「你有没有用这个类型」——
         而类型是编译期能约束的。<strong>靠「不可能构造出坏数据」比靠「每个出口都记得检查」更可靠</strong>。
-        详见 <a href="11-pitfalls.html">11 页 G3</a>。
+        详见 <a href="25-pitfalls.html">25 页 G3</a>。
       </p>
     </div>
 
@@ -695,9 +693,9 @@ int available = Math.max(MIN_BODY_WIDTH, totalWidth - prefixWidth);        // :6
       </ol>
     </div>
 
-    <nav class="pager" aria-label="翻页">
-      <a class="prev" href="08-session-context.html"><span class="pager-dir">上一页</span>08 会话持久化与上下文</a>
-      <a class="next" href="10-cli-server.html"><span class="pager-dir">下一页</span>10 CLI 与 HTTP Server</a>
+        <nav class="pager" aria-label="翻页">
+      <a class="prev" href="13-observability.html"><span class="pager-dir">上一页</span>13 可观测性与运行观测</a>
+      <a class="next" href="15-cli-server.html"><span class="pager-dir">下一页</span>15 CLI 与 HTTP Server</a>
     </nav>
 
   </main>

@@ -20,55 +20,53 @@
 
 <div class="layout">
 
-  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <nav class="sidebar" id="sidebar" aria-label="文档导航">
     <div class="sidebar-title">文档目录</div>
     <ul class="nav-list">
       <li><a href="index.html">首页 · 总览与导航</a></li>
     </ul>
-    <div class="nav-group">入门</div>
+    <div class="nav-group">一、入门</div>
     <ul class="nav-list">
       <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
       <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
       <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
     </ul>
-    <div class="nav-group">内核重点</div>
+    <div class="nav-group">二、内核机制</div>
     <ul class="nav-list">
       <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
       <li><a href="05-llm-api.html" aria-current="page">05 多厂商 LLM API 抽象层</a></li>
       <li><a href="06-permissions.html">06 权限与审批系统</a></li>
-      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
-      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+      <li><a href="07-tools-io.html">07 工具系统与输入输出</a></li>
+      <li><a href="08-commands.html">08 命令系统</a></li>
+      <li><a href="09-config.html">09 配置体系</a></li>
+      <li><a href="10-session-context.html">10 会话持久化与上下文</a></li>
+      <li><a href="11-subagents.html">11 子代理与多 Agent 协作</a></li>
+      <li><a href="12-assembly.html">12 装配与依赖注入</a></li>
+      <li><a href="13-observability.html">13 可观测性与运行观测</a></li>
     </ul>
-    <div class="nav-group">外壳与实战</div>
+    <div class="nav-group">三、外壳</div>
     <ul class="nav-list">
-      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
-      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
-      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+      <li><a href="14-tui.html">14 终端界面（TamboUI）</a></li>
+      <li><a href="15-cli-server.html">15 CLI 与 HTTP Server</a></li>
     </ul>
-    <div class="nav-group">拓展</div>
+    <div class="nav-group">四、插件</div>
     <ul class="nav-list">
-      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
-      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
-      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
-      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
-      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+      <li><a href="16-plugins.html">16 PF4J 插件化架构</a></li>
+      <li><a href="17-plugin-overview.html">17 官方插件总览</a></li>
+      <li><a href="18-plugin-tools-shell.html">18 tools 与 shell 插件</a></li>
+      <li><a href="19-plugin-session-compact.html">19 session-file 与 compact 插件</a></li>
+      <li><a href="20-plugin-workflow.html">20 workflow 插件</a></li>
+      <li><a href="21-plugin-plan-todo-skills.html">21 plan / todo / skills 插件</a></li>
+      <li><a href="22-plugin-mcp.html">22 MCP 插件</a></li>
+      <li><a href="23-plugin-script.html">23 跨语言脚本插件</a></li>
     </ul>
-    <div class="nav-group">子系统</div>
+    <div class="nav-group">五、工程与参考</div>
     <ul class="nav-list">
-      <li><a href="17-commands.html">17 命令系统</a></li>
-      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
-      <li><a href="19-config.html">19 配置体系</a></li>
-      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
-    </ul>
-    <div class="nav-group">插件详解</div>
-    <ul class="nav-list">
-      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
-      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
-      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
-      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
-      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
-      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
-      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+      <li><a href="24-testing.html">24 测试体系与构建</a></li>
+      <li><a href="25-pitfalls.html">25 坑点与陷阱清单</a></li>
+      <li><a href="26-comparison.html">26 与主流工具对比</a></li>
+      <li><a href="27-faq-glossary.html">27 常见问题与术语表</a></li>
+      <li><a href="28-learning-path.html">28 学习路径与阅读顺序</a></li>
     </ul>
   </nav>
 
@@ -514,7 +512,7 @@ if (request.hasTools()) {
     <p>
       对外的出口有两个：非流式走 <code>LlmResponse.getThinking()</code>，流式走 <code>LlmStreamListener.onThinking</code>。
       外壳侧怎么展示（<code>-cli</code> 的 <code>--show-thinking</code>、TUI 的 <code>Ctrl+T</code> / <code>/thinking</code>）
-      是 <a href="09-tui.html">09 页</a>与 <a href="10-cli-server.html">10 页</a>的内容——<strong>两侧通过这个出口解耦</strong>：
+      是 <a href="14-tui.html">14 页</a>与 <a href="15-cli-server.html">15 页</a>的内容——<strong>两侧通过这个出口解耦</strong>：
       内核不关心你要不要看思考，它只负责把文本端出来。
     </p>
 
@@ -602,7 +600,7 @@ if (request.hasTools()) {
       <p>
         因为插件是<strong>别人写的代码</strong>，跑在同一个 JVM 里。如果直接把内核的 <code>LlmRequest</code> 交给它，
         它就拿到了一堆可变对象：能改 <code>messages</code>、能在里面塞字段、能持有引用延迟改。
-        而那份请求之后还要<strong>被缓存前缀比对</strong>（<a href="08-session-context.html">08 页</a>的 <code>CacheBreakWatcher</code>），
+        而那份请求之后还要<strong>被缓存前缀比对</strong>（<a href="10-session-context.html">10 页</a>的 <code>CacheBreakWatcher</code>），
         一旦被改，缓存结论就失真了。
       </p>
       <p>
@@ -790,7 +788,7 @@ private final int cacheWriteTokens;    // :50
         Anthropic 把输入拆成互斥的三部分：普通输入 / <code>cache_read_input_tokens</code> /
         <code>cache_creation_input_tokens</code>。<strong>缓存命中率的分母必须是三者之和</strong>，
         否则算出来的命中率会大于 100%（<code>cacheRead</code> 可以接近甚至超过基础输入）。
-        这也是 <a href="08-session-context.html">08 页</a>那条「分母是总输入」在 Claude 上的具体含义。
+        这也是 <a href="10-session-context.html">10 页</a>那条「分母是总输入」在 Claude 上的具体含义。
       </p>
       <p>
         另外 <code>ClaudeLlmClient.java:46</code> 记了一条实测行为：
@@ -873,7 +871,7 @@ private final int cacheWriteTokens;    // :50
       </ol>
     </div>
 
-    <nav class="pager" aria-label="翻页">
+        <nav class="pager" aria-label="翻页">
       <a class="prev" href="04-agent-loop.html"><span class="pager-dir">上一页</span>04 Agent Loop 内核</a>
       <a class="next" href="06-permissions.html"><span class="pager-dir">下一页</span>06 权限与审批系统</a>
     </nav>

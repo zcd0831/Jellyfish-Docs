@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>23 session-file 与 compact 插件 · Jellyfish 源码深度解析</title>
+<title>19 session-file 与 compact 插件 · Jellyfish 源码深度解析</title>
 <meta name="description" content="两个官方插件：session-file 负责一个会话一个 JSON 的原子落盘、git 版本层、恢复与删除链；compact 只提供压缩策略（摘要提示词 + 两个数值参数），没装它压缩整体缺席。">
 <link rel="stylesheet" href="assets/style.css">
 <!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
@@ -20,67 +20,65 @@
 
 <div class="layout">
 
-  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <nav class="sidebar" id="sidebar" aria-label="文档导航">
     <div class="sidebar-title">文档目录</div>
     <ul class="nav-list">
       <li><a href="index.html">首页 · 总览与导航</a></li>
     </ul>
-    <div class="nav-group">入门</div>
+    <div class="nav-group">一、入门</div>
     <ul class="nav-list">
       <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
       <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
       <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
     </ul>
-    <div class="nav-group">内核重点</div>
+    <div class="nav-group">二、内核机制</div>
     <ul class="nav-list">
       <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
       <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
       <li><a href="06-permissions.html">06 权限与审批系统</a></li>
-      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
-      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+      <li><a href="07-tools-io.html">07 工具系统与输入输出</a></li>
+      <li><a href="08-commands.html">08 命令系统</a></li>
+      <li><a href="09-config.html">09 配置体系</a></li>
+      <li><a href="10-session-context.html">10 会话持久化与上下文</a></li>
+      <li><a href="11-subagents.html">11 子代理与多 Agent 协作</a></li>
+      <li><a href="12-assembly.html">12 装配与依赖注入</a></li>
+      <li><a href="13-observability.html">13 可观测性与运行观测</a></li>
     </ul>
-    <div class="nav-group">外壳与实战</div>
+    <div class="nav-group">三、外壳</div>
     <ul class="nav-list">
-      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
-      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
-      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+      <li><a href="14-tui.html">14 终端界面（TamboUI）</a></li>
+      <li><a href="15-cli-server.html">15 CLI 与 HTTP Server</a></li>
     </ul>
-    <div class="nav-group">拓展</div>
+    <div class="nav-group">四、插件</div>
     <ul class="nav-list">
-      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
-      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
-      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
-      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
-      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+      <li><a href="16-plugins.html">16 PF4J 插件化架构</a></li>
+      <li><a href="17-plugin-overview.html">17 官方插件总览</a></li>
+      <li><a href="18-plugin-tools-shell.html">18 tools 与 shell 插件</a></li>
+      <li><a href="19-plugin-session-compact.html" aria-current="page">19 session-file 与 compact 插件</a></li>
+      <li><a href="20-plugin-workflow.html">20 workflow 插件</a></li>
+      <li><a href="21-plugin-plan-todo-skills.html">21 plan / todo / skills 插件</a></li>
+      <li><a href="22-plugin-mcp.html">22 MCP 插件</a></li>
+      <li><a href="23-plugin-script.html">23 跨语言脚本插件</a></li>
     </ul>
-    <div class="nav-group">子系统</div>
+    <div class="nav-group">五、工程与参考</div>
     <ul class="nav-list">
-      <li><a href="17-commands.html">17 命令系统</a></li>
-      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
-      <li><a href="19-config.html">19 配置体系</a></li>
-      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
-    </ul>
-    <div class="nav-group">插件详解</div>
-    <ul class="nav-list">
-      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
-      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
-      <li><a href="23-plugin-session-compact.html" aria-current="page">23 session-file 与 compact 插件</a></li>
-      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
-      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
-      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
-      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+      <li><a href="24-testing.html">24 测试体系与构建</a></li>
+      <li><a href="25-pitfalls.html">25 坑点与陷阱清单</a></li>
+      <li><a href="26-comparison.html">26 与主流工具对比</a></li>
+      <li><a href="27-faq-glossary.html">27 常见问题与术语表</a></li>
+      <li><a href="28-learning-path.html">28 学习路径与阅读顺序</a></li>
     </ul>
   </nav>
 
   <main class="content">
 
     <nav class="breadcrumb" aria-label="面包屑">
-      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>23 session-file 与 compact 插件</span>
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>19 session-file 与 compact 插件</span>
     </nav>
 
-    <h1>23 session-file 与 compact 插件</h1>
+    <h1>19 session-file 与 compact 插件</h1>
     <p class="page-sub">
-      <a href="08-session-context.html">08 页</a>讲了内核侧的会话机制——谁负责变更、什么时候落盘、压缩怎么推进边界。
+      <a href="10-session-context.html">10 页</a>讲了内核侧的会话机制——谁负责变更、什么时候落盘、压缩怎么推进边界。
       这一页讲另一侧：<strong>这两件事具体由哪个插件、用什么文件、什么线程、什么失败语义做的</strong>。
       两个插件加起来 1577 行主源码，但它们决定了「会话会不会丢」和「长会话还能不能继续」。
     </p>
@@ -157,7 +155,7 @@ flowchart LR
   CC["内核 ConversationCompactor"] -->|"问 这一次该怎么压"| CP["compact 插件<br/>CompactPlugin"]
   CP --> RES["summary-prompt.md<br/>jar 根目录的资源"]
     </div>
-    <p class="figure-cap">图 23-1　两条互不相干的扩展点链路：一条管状态留住，一条管历史变短</p>
+    <p class="figure-cap">图 19-1　两条互不相干的扩展点链路：一条管状态留住，一条管历史变短</p>
 
     <!-- ============================================================ -->
     <h2>2. <code>session-file</code> 注册了哪三个扩展点</h2>
@@ -190,7 +188,7 @@ flowchart LR
             <td><code>SessionPersistRequest</code></td>
             <td><code>persist</code>（<code>Jellyfish-Plugins/jellyfish-plugin-session-file/src/main/java/zcd/jellyfish/plugin/sessionfile/SessionFilePlugin.java:105-118</code>）</td>
             <td>序列化快照 → 内容变了才写文件 → 排一次 git 提交</td>
-            <td><code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/session/SessionManager.java:1302-1319</code>（见 <a href="08-session-context.html">08 页</a>）</td>
+            <td><code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/session/SessionManager.java:1302-1319</code>（见 <a href="10-session-context.html">10 页</a>）</td>
           </tr>
           <tr>
             <td><code>SessionDeleteRequest</code></td>
@@ -771,7 +769,7 @@ sequenceDiagram
   P-->>SM: SessionRestoreResult（坏文件只 WARN）
   SM->>SM: importSnapshots（已存在则跳过）
     </div>
-    <p class="figure-cap">图 23-2　恢复的时序：插件必须先注册，内核才会问到它</p>
+    <p class="figure-cap">图 19-2　恢复的时序：插件必须先注册，内核才会问到它</p>
 
     <div class="callout pitfall">
       <span class="callout-title">坑点：<code>restore()</code> 早于插件 bootstrap → 静默恢复 0 个会话</span>
@@ -796,7 +794,7 @@ sequenceDiagram
       <p>
         同一族的坑还有关闭侧：<code>flushAll()</code> 必须排在 <code>pluginManager.close()</code> 之前
         （<code>Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/AgentHarness.java:273-274</code>、<code>:284</code>），
-        否则 Ctrl+C 会丢掉当前回合。更完整的清单见 <a href="11-pitfalls.html">11 页</a>的 D7。
+        否则 Ctrl+C 会丢掉当前回合。更完整的清单见 <a href="25-pitfalls.html">25 页</a>的 D7。
       </p>
     </div>
 
@@ -1176,7 +1174,7 @@ flowchart TD
   K --> M["maxSummaryCharsOf 钳制摘要上限"]
   M --> F["发摘要请求 推进 boundary"]
     </div>
-    <p class="figure-cap">图 23-3　内核侧的点：插件只出现在最上面那一格里</p>
+    <p class="figure-cap">图 19-3　内核侧的点：插件只出现在最上面那一格里</p>
 
     <p>
       合并规则是<strong>逐字段按优先级取第一</strong>：摘要指令取「order 最小且给出了非空白指令」的那一个，
@@ -1415,13 +1413,13 @@ flowchart TD
             只有 <code>/delete</code> 才会让插件删文件。</li>
         <li><strong><code>restore()</code> 早于插件 bootstrap 会静默恢复 0 个会话</strong>：
             <code>extensions.bindings(...)</code> 为空时循环一次都不进，没有报错。
-            凡走扩展点的能力都必须等插件启动（<a href="11-pitfalls.html">11 页</a> D7）。</li>
+            凡走扩展点的能力都必须等插件启动（<a href="25-pitfalls.html">25 页</a> D7）。</li>
         <li><strong>关停时 <code>flushAll()</code> 必须早于 <code>pluginManager.close()</code></strong>，
             否则 Ctrl+C 丢当前回合。</li>
         <li><strong>插件配置段里的 <code>~</code> 不会由内核展开</strong>，插件自己展开；不展开会在工作目录建一个
             名为 <code>~</code> 的目录。</li>
         <li><strong>落盘目录默认在 <code>~/.jellyfish/sessions</code></strong>（主目录），不在项目目录；
-            它和工具输出目录 <code>~/.jellyfish/tool-outputs</code> 不是一个地方（见 <a href="08-session-context.html">08 页</a>）。</li>
+            它和工具输出目录 <code>~/.jellyfish/tool-outputs</code> 不是一个地方（见 <a href="10-session-context.html">10 页</a>）。</li>
         <li><strong>会话标识会被拼进文件路径</strong>，所以 <code>requireSafeFileName</code> 拒绝
             <code>/</code>、<code>\</code> 与 <code>..</code>——这些标识可能来自插件读回的 JSON，也就是外部输入
             （<code>Jellyfish-Plugins/jellyfish-plugin-session-file/src/main/java/zcd/jellyfish/plugin/sessionfile/SessionStore.java:257-264</code>）。</li>
@@ -1460,9 +1458,9 @@ flowchart TD
       </ol>
     </div>
 
-    <nav class="pager" aria-label="翻页">
-      <a class="prev" href="22-plugin-tools-shell.html"><span class="pager-dir">上一页</span>22 tools 与 shell 插件</a>
-      <a class="next" href="24-plugin-workflow.html"><span class="pager-dir">下一页</span>24 workflow 插件</a>
+        <nav class="pager" aria-label="翻页">
+      <a class="prev" href="18-plugin-tools-shell.html"><span class="pager-dir">上一页</span>18 tools 与 shell 插件</a>
+      <a class="next" href="20-plugin-workflow.html"><span class="pager-dir">下一页</span>20 workflow 插件</a>
     </nav>
 
   </main>

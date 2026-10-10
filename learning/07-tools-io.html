@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>18 工具系统与输入输出 · Jellyfish 源码深度解析</title>
+<title>07 工具系统与输入输出 · Jellyfish 源码深度解析</title>
 <meta name="description" content="Jellyfish 工具系统全貌：工具契约与注册、ToolCatalog 清单冻结与工具激活判定、ToolExecutor 七步执行链、参数改写与自我限流，以及输出信封、落盘、头尾预览、结果老化与失败表达。">
 <link rel="stylesheet" href="assets/style.css">
 <!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
@@ -20,65 +20,63 @@
 
 <div class="layout">
 
-  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <nav class="sidebar" id="sidebar" aria-label="文档导航">
     <div class="sidebar-title">文档目录</div>
     <ul class="nav-list">
       <li><a href="index.html">首页 · 总览与导航</a></li>
     </ul>
-    <div class="nav-group">入门</div>
+    <div class="nav-group">一、入门</div>
     <ul class="nav-list">
       <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
       <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
       <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
     </ul>
-    <div class="nav-group">内核重点</div>
+    <div class="nav-group">二、内核机制</div>
     <ul class="nav-list">
       <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
       <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
       <li><a href="06-permissions.html">06 权限与审批系统</a></li>
-      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
-      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+      <li><a href="07-tools-io.html" aria-current="page">07 工具系统与输入输出</a></li>
+      <li><a href="08-commands.html">08 命令系统</a></li>
+      <li><a href="09-config.html">09 配置体系</a></li>
+      <li><a href="10-session-context.html">10 会话持久化与上下文</a></li>
+      <li><a href="11-subagents.html">11 子代理与多 Agent 协作</a></li>
+      <li><a href="12-assembly.html">12 装配与依赖注入</a></li>
+      <li><a href="13-observability.html">13 可观测性与运行观测</a></li>
     </ul>
-    <div class="nav-group">外壳与实战</div>
+    <div class="nav-group">三、外壳</div>
     <ul class="nav-list">
-      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
-      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
-      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+      <li><a href="14-tui.html">14 终端界面（TamboUI）</a></li>
+      <li><a href="15-cli-server.html">15 CLI 与 HTTP Server</a></li>
     </ul>
-    <div class="nav-group">拓展</div>
+    <div class="nav-group">四、插件</div>
     <ul class="nav-list">
-      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
-      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
-      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
-      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
-      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+      <li><a href="16-plugins.html">16 PF4J 插件化架构</a></li>
+      <li><a href="17-plugin-overview.html">17 官方插件总览</a></li>
+      <li><a href="18-plugin-tools-shell.html">18 tools 与 shell 插件</a></li>
+      <li><a href="19-plugin-session-compact.html">19 session-file 与 compact 插件</a></li>
+      <li><a href="20-plugin-workflow.html">20 workflow 插件</a></li>
+      <li><a href="21-plugin-plan-todo-skills.html">21 plan / todo / skills 插件</a></li>
+      <li><a href="22-plugin-mcp.html">22 MCP 插件</a></li>
+      <li><a href="23-plugin-script.html">23 跨语言脚本插件</a></li>
     </ul>
-    <div class="nav-group">子系统</div>
+    <div class="nav-group">五、工程与参考</div>
     <ul class="nav-list">
-      <li><a href="17-commands.html">17 命令系统</a></li>
-      <li><a href="18-tools-io.html" aria-current="page">18 工具系统与输入输出</a></li>
-      <li><a href="19-config.html">19 配置体系</a></li>
-      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
-    </ul>
-    <div class="nav-group">插件详解</div>
-    <ul class="nav-list">
-      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
-      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
-      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
-      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
-      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
-      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
-      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+      <li><a href="24-testing.html">24 测试体系与构建</a></li>
+      <li><a href="25-pitfalls.html">25 坑点与陷阱清单</a></li>
+      <li><a href="26-comparison.html">26 与主流工具对比</a></li>
+      <li><a href="27-faq-glossary.html">27 常见问题与术语表</a></li>
+      <li><a href="28-learning-path.html">28 学习路径与阅读顺序</a></li>
     </ul>
   </nav>
 
   <main class="content">
 
     <nav class="breadcrumb" aria-label="面包屑">
-      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>18 工具系统与输入输出</span>
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>07 工具系统与输入输出</span>
     </nav>
 
-    <h1>18 工具系统与输入输出</h1>
+    <h1>07 工具系统与输入输出</h1>
     <p class="page-sub">
       工具是这套内核里唯一的「能力单元」，而它只有两个方向：进来的是参数，出去的是文本。
       这一页讲清这两个方向的契约、执行链与全部限额，并把输出侧的落盘 / 信封 / 老化接到同一条线上。
@@ -422,7 +420,7 @@ flowchart TD
   I --> J["6 ToolOutputLimiter.limit<br/>唯一硬截断点"]
   J --> K["7 落会话 + 两个事件埋点"]
     </div>
-    <p class="figure-cap">图 18-1　七步顺序不可重排；步骤 2 必须在 3 之前、步骤 5 必须在 6 之前</p>
+    <p class="figure-cap">图 07-1　七步顺序不可重排；步骤 2 必须在 3 之前、步骤 5 必须在 6 之前</p>
 
     <p>
       先看链路的头部。这里最容易看漏的是「参数改写之前就把埋点发出去」这件事的顺序：
@@ -706,7 +704,7 @@ flowchart TD
     <p>
       一个工具可能返回几兆输出。全塞进上下文会瞬间打爆 token 预算，所以内核有一条
       「超限就落盘 + 回灌一个信封」的机制。这一节给的是<strong>完整体系</strong>；
-      第 <a href="08-session-context.html">08 页</a>已经从会话与上下文的角度讲过这套机制，
+      第 <a href="10-session-context.html">10 页</a>已经从会话与上下文的角度讲过这套机制，
       这里补的是它作为「工具系统的出口」这一面。
     </p>
 
@@ -789,7 +787,7 @@ flowchart LR
   H -->|"超过 maxChars 转溢写"| I["renderEnvelope（含 _partial）"]
   I --> F
     </div>
-    <p class="figure-cap">图 18-2　两条入口，同一条出口：信封是回灌给模型的唯一格式</p>
+    <p class="figure-cap">图 07-2　两条入口，同一条出口：信封是回灌给模型的唯一格式</p>
 
     <p>
       事后截断那条路走 <code>limitText</code>。它同时展示了「预算是算出来的」这条不变式：
@@ -1171,7 +1169,7 @@ flowchart LR
       字符串结果按行做头尾切分，结构化结果按 JSON 子树截断，
       两者都保证「回灌的仍是合法 JSON 信封」
       （<code>Jellyfish/docs/constraints.md:735-739</code>，详版见
-      <a href="11-pitfalls.html">11 页</a> 的 D3）。
+      <a href="25-pitfalls.html">25 页</a> 的 D3）。
       配套的一条纪律是：<code>output</code> 在结果整形那一步<strong>保持原始类型</strong>，
       不得提前序列化成文本——截断要知道类型才能选对算法。
     </p>
@@ -1210,7 +1208,7 @@ flowchart LR
       <strong>现象</strong>：「屏幕上没看到」和「上下文里还有」同时为真，排查时互相矛盾。
       <strong>根因</strong>：四者<strong>都不删历史</strong>，各自管的东西不同。
       <strong>规避</strong>：判断依据永远看 <code>usage</code> 与日志，不要看屏幕
-      （详版见 <a href="11-pitfalls.html">11 页</a> 的 D4）。
+      （详版见 <a href="25-pitfalls.html">25 页</a> 的 D4）。
     </p>
 
     <h3>9.3 孤儿 <code>tool</code> 结果 / 悬空 <code>toolCalls</code> 会被厂商 400</h3>
@@ -1222,7 +1220,7 @@ flowchart LR
       （<code>Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/prompt/ToolPairing.java:30-40</code>）。
       这正是为什么工具结果不能随便丢：它不是一个孤立的字符串，而是配对结构的一半。
       <strong>规避</strong>：改裁剪或取消逻辑时，第一件要确认的事就是配对没被破坏
-      （详版见 <a href="11-pitfalls.html">11 页</a> 的 D5）。
+      （详版见 <a href="25-pitfalls.html">25 页</a> 的 D5）。
     </p>
 
     <h3>9.4 落盘目录在主目录，不是项目目录</h3>
@@ -1232,8 +1230,8 @@ flowchart LR
       （<code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ToolOutputSettings.java:39</code>），
       因此「换个项目跑就找不到上次的输出」是正常的；交给需要绝对路径的工具时要先展开
       （文件工具认 <code>~</code>，其它工具不认）。
-      这一档的完整参数表见第 <a href="08-session-context.html">08 页</a> 第 3 节与
-      <a href="11-pitfalls.html">11 页</a> 的 D2。
+      这一档的完整参数表见第 <a href="10-session-context.html">10 页</a> 第 3 节与
+      <a href="25-pitfalls.html">25 页</a> 的 D2。
     </p>
 
     <div class="conclusion">
@@ -1253,9 +1251,9 @@ flowchart LR
       </ol>
     </div>
 
-    <nav class="pager" aria-label="翻页">
-      <a class="prev" href="17-commands.html"><span class="pager-dir">上一页</span>17 命令系统</a>
-      <a class="next" href="19-config.html"><span class="pager-dir">下一页</span>19 配置体系</a>
+        <nav class="pager" aria-label="翻页">
+      <a class="prev" href="06-permissions.html"><span class="pager-dir">上一页</span>06 权限与审批系统</a>
+      <a class="next" href="08-commands.html"><span class="pager-dir">下一页</span>08 命令系统</a>
     </nav>
 
   </main>

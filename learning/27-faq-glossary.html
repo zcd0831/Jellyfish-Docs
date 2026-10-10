@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>14 常见问题与术语表 · Jellyfish 源码深度解析</title>
+<title>27 常见问题与术语表 · Jellyfish 源码深度解析</title>
 <meta name="description" content="Jellyfish 术语表（50+ 条）与高频疑问速查：harness、turn、run、spill、失效信号、boundary、vendorBody、ask/approval 等，含源码位置与指向页面。">
 <link rel="stylesheet" href="assets/style.css">
 <!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
@@ -20,65 +20,63 @@
 
 <div class="layout">
 
-  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <nav class="sidebar" id="sidebar" aria-label="文档导航">
     <div class="sidebar-title">文档目录</div>
     <ul class="nav-list">
       <li><a href="index.html">首页 · 总览与导航</a></li>
     </ul>
-    <div class="nav-group">入门</div>
+    <div class="nav-group">一、入门</div>
     <ul class="nav-list">
       <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
       <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
       <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
     </ul>
-    <div class="nav-group">内核重点</div>
+    <div class="nav-group">二、内核机制</div>
     <ul class="nav-list">
       <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
       <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
       <li><a href="06-permissions.html">06 权限与审批系统</a></li>
-      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
-      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+      <li><a href="07-tools-io.html">07 工具系统与输入输出</a></li>
+      <li><a href="08-commands.html">08 命令系统</a></li>
+      <li><a href="09-config.html">09 配置体系</a></li>
+      <li><a href="10-session-context.html">10 会话持久化与上下文</a></li>
+      <li><a href="11-subagents.html">11 子代理与多 Agent 协作</a></li>
+      <li><a href="12-assembly.html">12 装配与依赖注入</a></li>
+      <li><a href="13-observability.html">13 可观测性与运行观测</a></li>
     </ul>
-    <div class="nav-group">外壳与实战</div>
+    <div class="nav-group">三、外壳</div>
     <ul class="nav-list">
-      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
-      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
-      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+      <li><a href="14-tui.html">14 终端界面（TamboUI）</a></li>
+      <li><a href="15-cli-server.html">15 CLI 与 HTTP Server</a></li>
     </ul>
-    <div class="nav-group">拓展</div>
+    <div class="nav-group">四、插件</div>
     <ul class="nav-list">
-      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
-      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
-      <li><a href="14-faq-glossary.html" aria-current="page">14 常见问题与术语表</a></li>
-      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
-      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+      <li><a href="16-plugins.html">16 PF4J 插件化架构</a></li>
+      <li><a href="17-plugin-overview.html">17 官方插件总览</a></li>
+      <li><a href="18-plugin-tools-shell.html">18 tools 与 shell 插件</a></li>
+      <li><a href="19-plugin-session-compact.html">19 session-file 与 compact 插件</a></li>
+      <li><a href="20-plugin-workflow.html">20 workflow 插件</a></li>
+      <li><a href="21-plugin-plan-todo-skills.html">21 plan / todo / skills 插件</a></li>
+      <li><a href="22-plugin-mcp.html">22 MCP 插件</a></li>
+      <li><a href="23-plugin-script.html">23 跨语言脚本插件</a></li>
     </ul>
-    <div class="nav-group">子系统</div>
+    <div class="nav-group">五、工程与参考</div>
     <ul class="nav-list">
-      <li><a href="17-commands.html">17 命令系统</a></li>
-      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
-      <li><a href="19-config.html">19 配置体系</a></li>
-      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
-    </ul>
-    <div class="nav-group">插件详解</div>
-    <ul class="nav-list">
-      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
-      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
-      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
-      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
-      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
-      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
-      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+      <li><a href="24-testing.html">24 测试体系与构建</a></li>
+      <li><a href="25-pitfalls.html">25 坑点与陷阱清单</a></li>
+      <li><a href="26-comparison.html">26 与主流工具对比</a></li>
+      <li><a href="27-faq-glossary.html" aria-current="page">27 常见问题与术语表</a></li>
+      <li><a href="28-learning-path.html">28 学习路径与阅读顺序</a></li>
     </ul>
   </nav>
 
   <main class="content">
 
     <nav class="breadcrumb" aria-label="面包屑">
-      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>14 常见问题与术语表</span>
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>27 常见问题与术语表</span>
     </nav>
 
-    <h1>14 常见问题与术语表</h1>
+    <h1>27 常见问题与术语表</h1>
     <p class="page-sub">
       阅读过程中随时回来查。术语按主题分组，每条给一句释义 + 源码位置 + 深入阅读的页面。
     </p>
@@ -114,7 +112,7 @@ flowchart TB
   SESS -->|"经扩展点"| PERSIST["会话持久化插件"]
   TE -->|"经扩展点"| PLUG["插件<br/>ExtensionRegistry / EventChannel"]
     </div>
-    <p class="figure-cap">图 14-1　术语关系：从外壳到插件的一条主线，所有术语都挂在这条线上</p>
+    <p class="figure-cap">图 27-1　术语关系：从外壳到插件的一条主线，所有术语都挂在这条线上</p>
 
     <!-- ============================================================ -->
     <h2>A. 架构与装配</h2>
@@ -157,7 +155,7 @@ flowchart TB
             <td><strong>装配期 vs 运行期</strong></td>
             <td>装配期 = <code>bootstrap()</code> 之前/期间（读配置、建对象图）；运行期 = 回合在跑。
                 某些配置在装配期就被读走，<strong>改完必须重启</strong>。</td>
-            <td><a href="11-pitfalls.html">11 页 A8</a></td>
+            <td><a href="25-pitfalls.html">25 页 A8</a></td>
           </tr>
         </tbody>
       </table>
@@ -278,7 +276,7 @@ flowchart TB
           <tr>
             <td><strong>扩展点</strong></td>
             <td>插件接入内核的 27 个位置。<strong>类型即地址</strong>——不用字符串 ID，请求的 Class 对象就是地址。</td>
-            <td><code>api/extension/</code>、<a href="07-plugins.html">07 页</a></td>
+            <td><code>api/extension/</code>、<a href="16-plugins.html">16 页</a></td>
           </tr>
           <tr>
             <td><strong><code>ExtensionRegistry</code></strong></td>
@@ -330,7 +328,7 @@ flowchart TB
             <td><strong>boundary（压缩边界）</strong></td>
             <td><strong>本项目的非标准用法</strong>：一个消息下标。边界之前的消息已被摘要替代，
                 组装时从边界之后开始取历史。压缩 = <strong>把 boundary 往前推一格</strong>，历史一条不删。</td>
-            <td><code>PromptAssembler.effectiveBoundary</code>、<a href="08-session-context.html">08 页</a></td>
+            <td><code>PromptAssembler.effectiveBoundary</code>、<a href="10-session-context.html">10 页</a></td>
           </tr>
           <tr>
             <td><strong>裁剪（crop）</strong></td>
@@ -482,7 +480,7 @@ flowchart TB
             <td><strong>失效信号（<code>UiInvalidatedEvent</code>）</strong></td>
             <td>跨线程刷新的机制：非渲染线程只写数据 + 发这个<strong>幂等</strong>信号，
                 渲染线程下一帧才动界面。<strong>幂等是可丢判据成立的前提。</strong></td>
-            <td><code>UiContributions.java:207-220</code>、<a href="09-tui.html">09 页</a></td>
+            <td><code>UiContributions.java:207-220</code>、<a href="14-tui.html">14 页</a></td>
           </tr>
           <tr>
             <td><strong><code>InflightTurn</code></strong></td>
@@ -500,7 +498,7 @@ flowchart TB
             <td><code>turn_start</code> / <code>text</code> / <code>thinking</code> / <code>tool_start</code> /
                 <code>tool_output</code> / <code>tool_done</code> / <code>done</code> / <code>cancelled</code> /
                 <code>turn_blocked</code> / <code>error</code>（<strong>前缀不统一</strong>：只有首尾两个带 <code>turn_</code>）。</td>
-            <td><code>SseTurnListener.java:120-155</code>、<a href="10-cli-server.html">10 页</a></td>
+            <td><code>SseTurnListener.java:120-155</code>、<a href="15-cli-server.html">15 页</a></td>
           </tr>
           <tr>
             <td><strong><code>-p</code> / 位置参数</strong></td>
@@ -536,13 +534,13 @@ flowchart TB
     <p>
       如果变的是<strong>jar 本身</strong>（新增 / 删除 / 替换），必须<strong>重启进程</strong>——
       PF4J 管理器明确「不做 jar 热部署」。<code>/reload</code> 只管「已加载插件的配置段变化」与「启用 / 禁用名单变化」。
-      见 <a href="11-pitfalls.html">11 页 B1</a>。
+      见 <a href="25-pitfalls.html">25 页 B1</a>。
     </p>
 
     <h3>Q5. 为什么我按 <code>Enter</code> 没反应？</h3>
     <p>
       TUI 的发送键是 <strong><code>Ctrl+S</code></strong>，<code>Enter</code> 是换行。
-      原因是多数终端不解码修饰键，做不出「<code>Enter</code> 发送 / <code>Shift+Enter</code> 换行」。见 <a href="09-tui.html">09 页</a>。
+      原因是多数终端不解码修饰键，做不出「<code>Enter</code> 发送 / <code>Shift+Enter</code> 换行」。见 <a href="14-tui.html">14 页</a>。
     </p>
 
     <h3>Q6. 为什么它一直卡着不动？</h3>
@@ -551,14 +549,14 @@ flowchart TB
       <li><strong>在等审批</strong>：TUI 会弹框；<code>-cli</code> 无审批者会立即拒绝（不会卡）。
           如果是 TUI 卡着，看是否有弹框被别的输出挡住。</li>
       <li><strong>配了 <code>timeout: 0</code>（永不超时）</strong>：<code>ask.timeoutSeconds</code> 或
-          <code>permission.approvalTimeoutSeconds</code> 写 0 会永久等待，且<strong>不自愈</strong>。见 <a href="11-pitfalls.html">11 页 C1</a>。</li>
+          <code>permission.approvalTimeoutSeconds</code> 写 0 会永久等待，且<strong>不自愈</strong>。见 <a href="25-pitfalls.html">25 页 C1</a>。</li>
       <li><strong>SSE / 网络空闲超时</strong>：流式有 300 秒空闲超时，超时会走 <code>streamFailure</code>，不会无限等。</li>
     </ul>
 
     <h3>Q7. 上下文里的内容我看不到了，是丢了吗？</h3>
     <p>
       大概率没丢。有四层「上限」，口径完全不同：消息区 500 条（屏幕）、裁剪（本次请求）、老化（本轮 tool 结果形态）、
-      压缩（后续边界）。<strong>四者都不删历史。</strong>见 <a href="08-session-context.html">08 页</a>与 <a href="11-pitfalls.html">11 页 D4</a>。
+      压缩（后续边界）。<strong>四者都不删历史。</strong>见 <a href="10-session-context.html">10 页</a>与 <a href="25-pitfalls.html">25 页 D4</a>。
     </p>
 
     <h3>Q8. 我想让它并行干活，怎么做到？</h3>
@@ -576,14 +574,14 @@ flowchart TB
       <li><strong>是否标了 <code>cache_control</code></strong>（Claude）——不标命中率恒为 0。</li>
       <li><strong>压缩频率</strong>——每次压缩是一次额外 LLM 调用（有 cache-safe fork 优化）。</li>
     </ol>
-    <p>见 <a href="08-session-context.html">08 页</a>与 <a href="11-pitfalls.html">11 页 F 组</a>。</p>
+    <p>见 <a href="10-session-context.html">10 页</a>与 <a href="25-pitfalls.html">25 页 F 组</a>。</p>
 
     <h3>Q10. <code>-server</code> 开了之后别人能读我的会话吗？</h3>
     <p>
       缺省只绑 <code>127.0.0.1</code>，本机之外访问不到。但如果你用 <code>--host 0.0.0.0</code> 暴露出去，
       <strong>不配密钥就谁都能读</strong>。好在内核会拦住这种情况——<strong>绑非回环地址 + 无密钥 = 拒绝启动</strong>退 3。
       配密钥请用环境变量 <code>JELLYFISH_SERVER_API_KEY</code>，不要用 <code>--api-key</code>（会进 <code>ps</code>）。
-      见 <a href="10-cli-server.html">10 页</a>。
+      见 <a href="15-cli-server.html">15 页</a>。
     </p>
 
     <h3>Q11. 同一份 <code>agents.json</code>，CLI 能用，TUI 却被拒，为什么？</h3>
@@ -612,7 +610,7 @@ flowchart TB
     <h3>Q13. 怎么加一个新工具？</h3>
     <p>
       写一个 PF4J 插件，实现 <code>ToolCallRequest</code> 的 handler 并注册。
-      <strong>不需要改内核一行代码。</strong>细节见 <a href="07-plugins.html">07 页</a>与 <code>Jellyfish-Plugins</code> 仓库的插件开发教程。
+      <strong>不需要改内核一行代码。</strong>细节见 <a href="16-plugins.html">16 页</a>与 <code>Jellyfish-Plugins</code> 仓库的插件开发教程。
       注意两个约束：插件 pom 里 <code>jellyfish-api</code> / <code>pf4j</code> 必须标 <code>provided</code>；
       权限判定的通配符不存在，所以工具名要设计得能被精确列举。
     </p>
@@ -643,9 +641,9 @@ flowchart TB
       </ol>
     </div>
 
-    <nav class="pager" aria-label="翻页">
-      <a class="prev" href="13-learning-path.html"><span class="pager-dir">上一页</span>13 学习路径与阅读顺序</a>
-      <a class="next" href="15-observability.html"><span class="pager-dir">下一页</span>15 可观测性与运行观测</a>
+        <nav class="pager" aria-label="翻页">
+      <a class="prev" href="26-comparison.html"><span class="pager-dir">上一页</span>26 与主流工具对比</a>
+      <a class="next" href="28-learning-path.html"><span class="pager-dir">下一页</span>28 学习路径与阅读顺序</a>
     </nav>
 
   </main>

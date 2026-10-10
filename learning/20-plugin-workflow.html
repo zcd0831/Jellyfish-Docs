@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>24 workflow 插件 · Jellyfish 源码深度解析</title>
+<title>20 workflow 插件 · Jellyfish 源码深度解析</title>
 <meta name="description" content="逐类拆解 jellyfish-plugin-workflow：声明式 spec 的数据模型、解析期校验与环检测、按依赖分层的调度与 when 语义、经 SubAgentPort 派生与聚合、台账与编排面板，以及它为什么必须住在内核之外。">
 <link rel="stylesheet" href="assets/style.css">
 <!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
@@ -20,65 +20,63 @@
 
 <div class="layout">
 
-  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <nav class="sidebar" id="sidebar" aria-label="文档导航">
     <div class="sidebar-title">文档目录</div>
     <ul class="nav-list">
       <li><a href="index.html">首页 · 总览与导航</a></li>
     </ul>
-    <div class="nav-group">入门</div>
+    <div class="nav-group">一、入门</div>
     <ul class="nav-list">
       <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
       <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
       <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
     </ul>
-    <div class="nav-group">内核重点</div>
+    <div class="nav-group">二、内核机制</div>
     <ul class="nav-list">
       <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
       <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
       <li><a href="06-permissions.html">06 权限与审批系统</a></li>
-      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
-      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+      <li><a href="07-tools-io.html">07 工具系统与输入输出</a></li>
+      <li><a href="08-commands.html">08 命令系统</a></li>
+      <li><a href="09-config.html">09 配置体系</a></li>
+      <li><a href="10-session-context.html">10 会话持久化与上下文</a></li>
+      <li><a href="11-subagents.html">11 子代理与多 Agent 协作</a></li>
+      <li><a href="12-assembly.html">12 装配与依赖注入</a></li>
+      <li><a href="13-observability.html">13 可观测性与运行观测</a></li>
     </ul>
-    <div class="nav-group">外壳与实战</div>
+    <div class="nav-group">三、外壳</div>
     <ul class="nav-list">
-      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
-      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
-      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+      <li><a href="14-tui.html">14 终端界面（TamboUI）</a></li>
+      <li><a href="15-cli-server.html">15 CLI 与 HTTP Server</a></li>
     </ul>
-    <div class="nav-group">拓展</div>
+    <div class="nav-group">四、插件</div>
     <ul class="nav-list">
-      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
-      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
-      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
-      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
-      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+      <li><a href="16-plugins.html">16 PF4J 插件化架构</a></li>
+      <li><a href="17-plugin-overview.html">17 官方插件总览</a></li>
+      <li><a href="18-plugin-tools-shell.html">18 tools 与 shell 插件</a></li>
+      <li><a href="19-plugin-session-compact.html">19 session-file 与 compact 插件</a></li>
+      <li><a href="20-plugin-workflow.html" aria-current="page">20 workflow 插件</a></li>
+      <li><a href="21-plugin-plan-todo-skills.html">21 plan / todo / skills 插件</a></li>
+      <li><a href="22-plugin-mcp.html">22 MCP 插件</a></li>
+      <li><a href="23-plugin-script.html">23 跨语言脚本插件</a></li>
     </ul>
-    <div class="nav-group">子系统</div>
+    <div class="nav-group">五、工程与参考</div>
     <ul class="nav-list">
-      <li><a href="17-commands.html">17 命令系统</a></li>
-      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
-      <li><a href="19-config.html">19 配置体系</a></li>
-      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
-    </ul>
-    <div class="nav-group">插件详解</div>
-    <ul class="nav-list">
-      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
-      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
-      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
-      <li><a href="24-plugin-workflow.html" aria-current="page">24 workflow 插件</a></li>
-      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
-      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
-      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+      <li><a href="24-testing.html">24 测试体系与构建</a></li>
+      <li><a href="25-pitfalls.html">25 坑点与陷阱清单</a></li>
+      <li><a href="26-comparison.html">26 与主流工具对比</a></li>
+      <li><a href="27-faq-glossary.html">27 常见问题与术语表</a></li>
+      <li><a href="28-learning-path.html">28 学习路径与阅读顺序</a></li>
     </ul>
   </nav>
 
   <main class="content">
 
     <nav class="breadcrumb" aria-label="面包屑">
-      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>24 workflow 插件</span>
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>20 workflow 插件</span>
     </nav>
 
-    <h1>24 workflow 插件</h1>
+    <h1>20 workflow 插件</h1>
     <p class="page-sub">
       内置的 <code>task</code> 只能「一件事一个子代理」；一次调研要并行问三个方向、再拿这三份结论去写方案时，
       它就无能为力了。<code>jellyfish-plugin-workflow</code> 把这份「几件事、什么顺序、怎么合起来」变成一份
@@ -104,7 +102,7 @@
     <p>
       先给结论：<strong>内核只提供「派生一个子代理」这个原语，不解释任何编排</strong>。
       <code>task</code> 工具把原语包装成一次调用——一句话进去、一个子代理的结论出来。
-      20 页把这条链路的五跳讲透了（见 <a href="20-subagents.html">20 页</a>）；本页只关心它<em>缺</em>什么。
+      11 页把这条链路的五跳讲透了（见 <a href="11-subagents.html">11 页</a>）；本页只关心它<em>缺</em>什么。
     </p>
 
     <p>
@@ -180,7 +178,7 @@ flowchart LR
   ENG --> TOOL
   TOOL -->|"首行结论 + 聚合正文 + 失败清单"| LLM
     </div>
-    <p class="figure-cap">图 24-1　一次 <code>workflow</code> 调用经过的全部站点：插件只占工具、提示词、面板三个扩展点，派生动作用的是端口</p>
+    <p class="figure-cap">图 20-1　一次 <code>workflow</code> 调用经过的全部站点：插件只占工具、提示词、面板三个扩展点，派生动作用的是端口</p>
 
     <!-- ============================================================ -->
     <h2>2. 插件构成：5 个协作者 + 1 个入口</h2>
@@ -607,7 +605,7 @@ flowchart TD
   B --> C
   C --> D
     </div>
-    <p class="figure-cap">图 24-2　第一层两个步骤同时派生，第二层等两者都结束才开始；第三层只在第二层失败时才会跑</p>
+    <p class="figure-cap">图 20-2　第一层两个步骤同时派生，第二层等两者都结束才开始；第三层只在第二层失败时才会跑</p>
 
     <p>
       <code>when</code> 的判断逻辑集中在一个 <code>switch</code> 里，它只读<strong>直接依赖</strong>的结局：
@@ -686,7 +684,7 @@ stateDiagram-v2
   RUNNING --> FAILED: FAILED / REJECTED / CANCELLED
   PENDING --> SKIPPED: when 被拦下，或回合已取消
     </div>
-    <p class="figure-cap">图 24-3　步骤的五个状态：SKIPPED 不是失败，但它<em>也不是成功</em>，因此会继续拦下游的 <code>on_success</code></p>
+    <p class="figure-cap">图 20-3　步骤的五个状态：SKIPPED 不是失败，但它<em>也不是成功</em>，因此会继续拦下游的 <code>on_success</code></p>
 
     <p>
       <strong>一步失败之后整条编排的走向</strong>，可以拆成三句：失败只影响它自己的下游（由各步 <code>when</code> 决定），
@@ -722,7 +720,7 @@ stateDiagram-v2
       把委派做成扩展点插件仍然调不动它。委派因此与 <code>emit</code> / <code>submit</code> / <code>present</code> 同类——
       是插件往外发起的<strong>出向边</strong>（
       <code>Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/subagent/SubAgentPort.java:6-9</code>，
-      20 页第 6 节也把它列为多 Agent 协作的形态 ②）。
+      11 页第 6 节也把它列为多 Agent 协作的形态 ②）。
     </p>
 
     <p>
@@ -810,7 +808,7 @@ stateDiagram-v2
         <code>await()</code> 是阻塞在调用方线程上的阻塞等待，<code>DelegationHandle</code> 的注释把这条写成刻意的取舍：
         「编排工具已经占着一条工具执行线程，它本来就要等结果才能回灌给模型」，反过来让内核回调插件则会把执行资源的生死交给插件。
         因此等待是「编排方等内核」，不是「内核等插件」；一个跑十分钟的编排，那条工具线程也占十分钟。
-        同口径的还有 <code>task</code>（见 <a href="20-subagents.html">20 页</a>）。
+        同口径的还有 <code>task</code>（见 <a href="11-subagents.html">11 页</a>）。
       </p>
     </div>
 
@@ -1183,8 +1181,8 @@ stateDiagram-v2
       （<code>Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowPlugin.java:46-49</code>），
       <code>src/main/resources/</code> 下也只有 <code>plugin.properties</code> 一个文件——
       <strong><code>/workflow</code> 这样的命令不存在</strong>。编排的入口只有模型主动调用工具，
-      而工具调用的准入、审批、回灌走的是内核既有的那条路（见 <a href="18-tools-io.html">18 页</a>、
-      <a href="17-commands.html">17 页</a>）。
+      而工具调用的准入、审批、回灌走的是内核既有的那条路（见 <a href="07-tools-io.html">07 页</a>、
+      <a href="08-commands.html">08 页</a>）。
     </p>
 
     <p>
@@ -1346,7 +1344,7 @@ stateDiagram-v2
         或者把 B 的结论写进 A 的任务里 → 什么都没注入，因为同层步骤在 <code>blockReason</code> 与
         <code>promptFor</code> 执行时对方还没跑。
         <strong>根因</strong>：材料只从<em>直接 <code>needs</code></em> 流向本步，而同层意味着「依赖都相同或已决」。
-        <strong>规避</strong>：要传递结论就写成前后两层（这也是并行调研 + 汇总的标准形状，见图 24-2）。
+        <strong>规避</strong>：要传递结论就写成前后两层（这也是并行调研 + 汇总的标准形状，见图 20-2）。
       </p>
     </div>
 
@@ -1442,9 +1440,9 @@ stateDiagram-v2
       </ol>
     </div>
 
-    <nav class="pager" aria-label="翻页">
-      <a class="prev" href="23-plugin-session-compact.html"><span class="pager-dir">上一页</span>23 session-file 与 compact 插件</a>
-      <a class="next" href="25-plugin-plan-todo-skills.html"><span class="pager-dir">下一页</span>25 plan / todo / skills 插件</a>
+        <nav class="pager" aria-label="翻页">
+      <a class="prev" href="19-plugin-session-compact.html"><span class="pager-dir">上一页</span>19 session-file 与 compact 插件</a>
+      <a class="next" href="21-plugin-plan-todo-skills.html"><span class="pager-dir">下一页</span>21 plan / todo / skills 插件</a>
     </nav>
 
   </main>

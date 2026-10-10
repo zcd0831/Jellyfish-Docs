@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>19 配置体系 · Jellyfish 源码深度解析</title>
+<title>09 配置体系 · Jellyfish 源码深度解析</title>
 <meta name="description" content="Jellyfish 配置体系全链路：四类配置与根类、双源路径与合并粒度、Reader→Binder 的读取绑定、环境变量插值、未知字段告警、项目级信任闸、RuntimeConfig 快照与 refresh 时机、/reload 顺序、模型三级解析。">
 <link rel="stylesheet" href="assets/style.css">
 <!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
@@ -20,65 +20,63 @@
 
 <div class="layout">
 
-  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <nav class="sidebar" id="sidebar" aria-label="文档导航">
     <div class="sidebar-title">文档目录</div>
     <ul class="nav-list">
       <li><a href="index.html">首页 · 总览与导航</a></li>
     </ul>
-    <div class="nav-group">入门</div>
+    <div class="nav-group">一、入门</div>
     <ul class="nav-list">
       <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
       <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
       <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
     </ul>
-    <div class="nav-group">内核重点</div>
+    <div class="nav-group">二、内核机制</div>
     <ul class="nav-list">
       <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
       <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
       <li><a href="06-permissions.html">06 权限与审批系统</a></li>
-      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
-      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+      <li><a href="07-tools-io.html">07 工具系统与输入输出</a></li>
+      <li><a href="08-commands.html">08 命令系统</a></li>
+      <li><a href="09-config.html" aria-current="page">09 配置体系</a></li>
+      <li><a href="10-session-context.html">10 会话持久化与上下文</a></li>
+      <li><a href="11-subagents.html">11 子代理与多 Agent 协作</a></li>
+      <li><a href="12-assembly.html">12 装配与依赖注入</a></li>
+      <li><a href="13-observability.html">13 可观测性与运行观测</a></li>
     </ul>
-    <div class="nav-group">外壳与实战</div>
+    <div class="nav-group">三、外壳</div>
     <ul class="nav-list">
-      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
-      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
-      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+      <li><a href="14-tui.html">14 终端界面（TamboUI）</a></li>
+      <li><a href="15-cli-server.html">15 CLI 与 HTTP Server</a></li>
     </ul>
-    <div class="nav-group">拓展</div>
+    <div class="nav-group">四、插件</div>
     <ul class="nav-list">
-      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
-      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
-      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
-      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
-      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+      <li><a href="16-plugins.html">16 PF4J 插件化架构</a></li>
+      <li><a href="17-plugin-overview.html">17 官方插件总览</a></li>
+      <li><a href="18-plugin-tools-shell.html">18 tools 与 shell 插件</a></li>
+      <li><a href="19-plugin-session-compact.html">19 session-file 与 compact 插件</a></li>
+      <li><a href="20-plugin-workflow.html">20 workflow 插件</a></li>
+      <li><a href="21-plugin-plan-todo-skills.html">21 plan / todo / skills 插件</a></li>
+      <li><a href="22-plugin-mcp.html">22 MCP 插件</a></li>
+      <li><a href="23-plugin-script.html">23 跨语言脚本插件</a></li>
     </ul>
-    <div class="nav-group">子系统</div>
+    <div class="nav-group">五、工程与参考</div>
     <ul class="nav-list">
-      <li><a href="17-commands.html">17 命令系统</a></li>
-      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
-      <li><a href="19-config.html" aria-current="page">19 配置体系</a></li>
-      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
-    </ul>
-    <div class="nav-group">插件详解</div>
-    <ul class="nav-list">
-      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
-      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
-      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
-      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
-      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
-      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
-      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+      <li><a href="24-testing.html">24 测试体系与构建</a></li>
+      <li><a href="25-pitfalls.html">25 坑点与陷阱清单</a></li>
+      <li><a href="26-comparison.html">26 与主流工具对比</a></li>
+      <li><a href="27-faq-glossary.html">27 常见问题与术语表</a></li>
+      <li><a href="28-learning-path.html">28 学习路径与阅读顺序</a></li>
     </ul>
   </nav>
 
   <main class="content">
 
     <nav class="breadcrumb" aria-label="面包屑">
-      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>19 配置体系</span>
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>09 配置体系</span>
     </nav>
 
-    <h1>19 配置体系</h1>
+    <h1>09 配置体系</h1>
     <p class="page-sub">
       一份配置从磁盘到「这一轮用哪个模型」要经过几道手？本页把 <a href="02-quickstart.html">02 页</a>
       分散讲过的五份文件、插值、告警、信任闸串成一条完整链路，并补上「谁在什么时候读」
@@ -207,7 +205,7 @@ flowchart TD
   MERGE --> SNAP["RuntimeSnapshot：volatile 单点发布"]
   SNAP --> USE["ModelManager / AgentManager / PluginRuntimeConfig / RunScheduler"]
     </div>
-    <p class="figure-cap">图 19-1　完整链路：路径来自应用级 → 项目级先过信任闸 → 读文本 → 插值绑定 → 合并 → 快照</p>
+    <p class="figure-cap">图 09-1　完整链路：路径来自应用级 → 项目级先过信任闸 → 读文本 → 插值绑定 → 合并 → 快照</p>
 
     <p>
       <strong>三种合并粒度，判据来源不同，混起来最容易配错。</strong>调度的唯一入口是
@@ -619,7 +617,7 @@ flowchart LR
   S5 --> S6["⑥ modelManager.refreshCatalogs()：必须在插件之后"]
   S6 --> S7["⑦ 广播 ConfigReloadedEvent"]
     </div>
-    <p class="figure-cap">图 19-2　<code>/reload</code> 的固定顺序：每一步都在为下一步准备输入</p>
+    <p class="figure-cap">图 09-2　<code>/reload</code> 的固定顺序：每一步都在为下一步准备输入</p>
 
     <p>
       另外两条纪律：<strong>整个重载 <code>synchronized</code> 单飞</strong>（并发重载会让插件被停两次、启动两次，
@@ -628,7 +626,7 @@ flowchart LR
       （<code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ConfigReloader.java:39</code>）。
       命令层同步等结果、失败原样告知
       （<code>Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/command/SystemCommands.java:698-706</code>）。
-      <strong><code>config.json</code> 不参与热更新，新增 / 删除插件 jar 仍需重启进程</strong>（见 <a href="07-plugins.html">07 页</a>）。
+      <strong><code>config.json</code> 不参与热更新，新增 / 删除插件 jar 仍需重启进程</strong>（见 <a href="16-plugins.html">16 页</a>）。
     </p>
 
     <!-- ============================================================ -->
@@ -760,7 +758,7 @@ flowchart LR
         （<code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/RuntimeConfig.java:249-258</code>），
         信任键是「绝对路径 + SHA-256 指纹」，内容一变即失效。
         <strong>规避</strong>：本次生效用 <code>--trust-project-config</code>，持久用 TUI 确认框选「记住」；
-        参见 <a href="11-pitfalls.html">11 页</a> A5。
+        参见 <a href="25-pitfalls.html">25 页</a> A5。
       </p>
     </div>
 
@@ -809,9 +807,9 @@ flowchart LR
       </ol>
     </div>
 
-    <nav class="pager" aria-label="翻页">
-      <a class="prev" href="18-tools-io.html"><span class="pager-dir">上一页</span>18 工具系统与输入输出</a>
-      <a class="next" href="20-subagents.html"><span class="pager-dir">下一页</span>20 子代理与多 Agent 协作</a>
+        <nav class="pager" aria-label="翻页">
+      <a class="prev" href="08-commands.html"><span class="pager-dir">上一页</span>08 命令系统</a>
+      <a class="next" href="10-session-context.html"><span class="pager-dir">下一页</span>10 会话持久化与上下文</a>
     </nav>
 
   </main>

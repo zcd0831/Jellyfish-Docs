@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>13 学习路径与阅读顺序 · Jellyfish 源码深度解析</title>
+<title>28 学习路径与阅读顺序 · Jellyfish 源码深度解析</title>
 <meta name="description" content="按依赖自底向上的三阶段阅读路线：先跑起来、再顺一条工具调用读到底、最后向外扩展。每阶段附自测问题与源码阅读清单。">
 <link rel="stylesheet" href="assets/style.css">
 <!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
@@ -20,65 +20,63 @@
 
 <div class="layout">
 
-  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <nav class="sidebar" id="sidebar" aria-label="文档导航">
     <div class="sidebar-title">文档目录</div>
     <ul class="nav-list">
       <li><a href="index.html">首页 · 总览与导航</a></li>
     </ul>
-    <div class="nav-group">入门</div>
+    <div class="nav-group">一、入门</div>
     <ul class="nav-list">
       <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
       <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
       <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
     </ul>
-    <div class="nav-group">内核重点</div>
+    <div class="nav-group">二、内核机制</div>
     <ul class="nav-list">
       <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
       <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
       <li><a href="06-permissions.html">06 权限与审批系统</a></li>
-      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
-      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+      <li><a href="07-tools-io.html">07 工具系统与输入输出</a></li>
+      <li><a href="08-commands.html">08 命令系统</a></li>
+      <li><a href="09-config.html">09 配置体系</a></li>
+      <li><a href="10-session-context.html">10 会话持久化与上下文</a></li>
+      <li><a href="11-subagents.html">11 子代理与多 Agent 协作</a></li>
+      <li><a href="12-assembly.html">12 装配与依赖注入</a></li>
+      <li><a href="13-observability.html">13 可观测性与运行观测</a></li>
     </ul>
-    <div class="nav-group">外壳与实战</div>
+    <div class="nav-group">三、外壳</div>
     <ul class="nav-list">
-      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
-      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
-      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+      <li><a href="14-tui.html">14 终端界面（TamboUI）</a></li>
+      <li><a href="15-cli-server.html">15 CLI 与 HTTP Server</a></li>
     </ul>
-    <div class="nav-group">拓展</div>
+    <div class="nav-group">四、插件</div>
     <ul class="nav-list">
-      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
-      <li><a href="13-learning-path.html" aria-current="page">13 学习路径与阅读顺序</a></li>
-      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
-      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
-      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+      <li><a href="16-plugins.html">16 PF4J 插件化架构</a></li>
+      <li><a href="17-plugin-overview.html">17 官方插件总览</a></li>
+      <li><a href="18-plugin-tools-shell.html">18 tools 与 shell 插件</a></li>
+      <li><a href="19-plugin-session-compact.html">19 session-file 与 compact 插件</a></li>
+      <li><a href="20-plugin-workflow.html">20 workflow 插件</a></li>
+      <li><a href="21-plugin-plan-todo-skills.html">21 plan / todo / skills 插件</a></li>
+      <li><a href="22-plugin-mcp.html">22 MCP 插件</a></li>
+      <li><a href="23-plugin-script.html">23 跨语言脚本插件</a></li>
     </ul>
-    <div class="nav-group">子系统</div>
+    <div class="nav-group">五、工程与参考</div>
     <ul class="nav-list">
-      <li><a href="17-commands.html">17 命令系统</a></li>
-      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
-      <li><a href="19-config.html">19 配置体系</a></li>
-      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
-    </ul>
-    <div class="nav-group">插件详解</div>
-    <ul class="nav-list">
-      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
-      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
-      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
-      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
-      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
-      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
-      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+      <li><a href="24-testing.html">24 测试体系与构建</a></li>
+      <li><a href="25-pitfalls.html">25 坑点与陷阱清单</a></li>
+      <li><a href="26-comparison.html">26 与主流工具对比</a></li>
+      <li><a href="27-faq-glossary.html">27 常见问题与术语表</a></li>
+      <li><a href="28-learning-path.html" aria-current="page">28 学习路径与阅读顺序</a></li>
     </ul>
   </nav>
 
   <main class="content">
 
     <nav class="breadcrumb" aria-label="面包屑">
-      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>13 学习路径与阅读顺序</span>
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>28 学习路径与阅读顺序</span>
     </nav>
 
-    <h1>13 学习路径与阅读顺序</h1>
+    <h1>28 学习路径与阅读顺序</h1>
     <p class="page-sub">
       一个 8.5 万行的 Java 仓库，逐文件读是读不完的。这一页给一条<strong>可执行</strong>的路线：
       三阶段、每阶段有明确目标和自测题。
@@ -99,10 +97,10 @@ flowchart LR
   P1["阶段一<br/>跑起来<br/>约 1 小时"] --> P2["阶段二<br/>顺一条工具调用<br/>读到底<br/>约 4-6 小时"]
   P2 --> P3["阶段三<br/>向外扩展<br/>按需"]
   P1 -.- A1["02 快速上手"]
-  P2 -.- A2["03 → 04 → 06 → 05 → 08"]
-  P3 -.- A3["07 插件<br/>09 TUI<br/>10 CLI/Server"]
+  P2 -.- A2["03 → 04 → 06 → 05 → 10"]
+  P3 -.- A3["16 插件<br/>14 TUI<br/>15 CLI/Server"]
     </div>
-    <p class="figure-cap">图 13-1　三阶段路线：先让它跑，再钻透一条主干道，最后按需扩展</p>
+    <p class="figure-cap">图 28-1　三阶段路线：先让它跑，再钻透一条主干道，最后按需扩展</p>
 
     <!-- ============================================================ -->
     <h2>阶段一：跑起来（约 1 小时）</h2>
@@ -207,7 +205,7 @@ sequenceDiagram
   L-->>H: ReActResult（completed / truncated / cancelled / blocked）
   H-->>U: 事件回灌外壳，投影到屏幕
     </div>
-    <p class="figure-cap">图 13-2　一条主干道：沿着它读，每一站都是一个核心模块</p>
+    <p class="figure-cap">图 28-2　一条主干道：沿着它读，每一站都是一个核心模块</p>
 
     <h3>精读清单（按顺序）</h3>
 
@@ -255,7 +253,7 @@ sequenceDiagram
         <li>为什么裁剪只裁本次请求、不写回会话？</li>
         <li>为什么 <code>flushAll()</code> 必须早于 <code>pluginManager.close()</code>？</li>
       </ol>
-      <p>全部对应 <a href="04-agent-loop.html">04</a> / <a href="06-permissions.html">06</a> / <a href="05-llm-api.html">05</a> / <a href="08-session-context.html">08</a> 四页。</p>
+      <p>全部对应 <a href="04-agent-loop.html">04</a> / <a href="06-permissions.html">06</a> / <a href="05-llm-api.html">05</a> / <a href="10-session-context.html">10</a> 四页。</p>
     </div>
 
     <!-- ============================================================ -->
@@ -272,14 +270,14 @@ sequenceDiagram
             <td>想给 Jellyfish 加能力</td>
             <td><code>api/plugin/JellyfishPlugin.java</code>、<code>api/plugin/PluginContext.java</code>（526 行，接口即文档）、
                 <code>infra/plugin/JellyfishPluginManager.java</code>、官方插件仓库里的一个简单插件（如 <code>jellyfish-plugin-todo</code>）</td>
-            <td><a href="07-plugins.html">07</a></td>
+            <td><a href="16-plugins.html">16</a></td>
           </tr>
           <tr>
             <td><strong>改 TUI</strong></td>
             <td>想改界面 / 加面板</td>
             <td><code>tui/TuiApp.java</code> 的四个回调、<code>ChatShell.java</code>（区域）、<code>ChatLayout.java</code>（高度账本）、
                 <code>TranscriptProjector.java</code>（投影）</td>
-            <td><a href="09-tui.html">09</a></td>
+            <td><a href="14-tui.html">14</a></td>
           </tr>
           <tr>
             <td><strong>做一次集成</strong></td>
@@ -300,14 +298,14 @@ sequenceDiagram
             <td>账单太高或容易超窗</td>
             <td><code>core/prompt/ContextWindow.java</code>、<code>TokenEstimator.java</code>、<code>ToolResultAger.java</code>、
                 <code>CacheKeepAlive.java</code>、<code>CacheBreakWatcher.java</code>、<code>core/compact/ConversationCompactor.java</code></td>
-            <td><a href="08-session-context.html">08</a></td>
+            <td><a href="10-session-context.html">10</a></td>
           </tr>
           <tr>
             <td><strong>做服务化部署</strong></td>
             <td>要把 Jellyfish 当后端用</td>
             <td><code>server/JellyfishServer.java</code>（路由）、<code>http/ApiKeyGuard.java</code>、<code>http/OriginGuard.java</code>、
                 <code>ChatHandler.java</code>（SSE）、<code>ApprovalBridge.java</code> / <code>AskBridge.java</code></td>
-            <td><a href="10-cli-server.html">10</a></td>
+            <td><a href="15-cli-server.html">15</a></td>
           </tr>
         </tbody>
       </table>
@@ -435,7 +433,7 @@ sequenceDiagram
       <span class="callout-title">四个常见的低效读法</span>
       <ul>
         <li><strong>从 <code>jellyfish-api</code> 的 144 个类开始逐个读。</strong>那是「契约清单」，不是「知识」。
-            正确做法：需要哪个扩展点就查那一页表（<a href="07-plugins.html">07 页</a>）。</li>
+            正确做法：需要哪个扩展点就查那一页表（<a href="16-plugins.html">16 页</a>）。</li>
         <li><strong>一开始就读 <code>ConversationCompactor.java</code>（1139 行）。</strong>
             压缩是最复杂的一块，但它建立在「boundary（边界）」「PromptAssembler」「缓存前缀」三个概念之上。
             顺序错了会读得很痛苦。</li>
@@ -478,9 +476,9 @@ sequenceDiagram
       </ol>
     </div>
 
-    <nav class="pager" aria-label="翻页">
-      <a class="prev" href="12-comparison.html"><span class="pager-dir">上一页</span>12 与主流工具对比</a>
-      <a class="next" href="14-faq-glossary.html"><span class="pager-dir">下一页</span>14 常见问题与术语表</a>
+        <nav class="pager" aria-label="翻页">
+      <a class="prev" href="27-faq-glossary.html"><span class="pager-dir">上一页</span>27 常见问题与术语表</a>
+      <a class="next" href="index.html"><span class="pager-dir">下一页</span>首页 · 总览与导航</a>
     </nav>
 
   </main>

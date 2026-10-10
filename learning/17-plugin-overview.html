@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>21 官方插件总览 · Jellyfish 源码深度解析</title>
-<meta name="description" content="13 个官方插件逐一定位：职责与扩展点、身份识别、依赖分层、扫描与启停名单语义、安装分发，以及 22–27 页的阅读路线。">
+<title>17 官方插件总览 · Jellyfish 源码深度解析</title>
+<meta name="description" content="13 个官方插件逐一定位：职责与扩展点、身份识别、依赖分层、扫描与启停名单语义、安装分发，以及 18–23 页的阅读路线。">
 <link rel="stylesheet" href="assets/style.css">
 <!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
 </head>
@@ -20,65 +20,63 @@
 
 <div class="layout">
 
-  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <nav class="sidebar" id="sidebar" aria-label="文档导航">
     <div class="sidebar-title">文档目录</div>
     <ul class="nav-list">
       <li><a href="index.html">首页 · 总览与导航</a></li>
     </ul>
-    <div class="nav-group">入门</div>
+    <div class="nav-group">一、入门</div>
     <ul class="nav-list">
       <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
       <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
       <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
     </ul>
-    <div class="nav-group">内核重点</div>
+    <div class="nav-group">二、内核机制</div>
     <ul class="nav-list">
       <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
       <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
       <li><a href="06-permissions.html">06 权限与审批系统</a></li>
-      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
-      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+      <li><a href="07-tools-io.html">07 工具系统与输入输出</a></li>
+      <li><a href="08-commands.html">08 命令系统</a></li>
+      <li><a href="09-config.html">09 配置体系</a></li>
+      <li><a href="10-session-context.html">10 会话持久化与上下文</a></li>
+      <li><a href="11-subagents.html">11 子代理与多 Agent 协作</a></li>
+      <li><a href="12-assembly.html">12 装配与依赖注入</a></li>
+      <li><a href="13-observability.html">13 可观测性与运行观测</a></li>
     </ul>
-    <div class="nav-group">外壳与实战</div>
+    <div class="nav-group">三、外壳</div>
     <ul class="nav-list">
-      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
-      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
-      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+      <li><a href="14-tui.html">14 终端界面（TamboUI）</a></li>
+      <li><a href="15-cli-server.html">15 CLI 与 HTTP Server</a></li>
     </ul>
-    <div class="nav-group">拓展</div>
+    <div class="nav-group">四、插件</div>
     <ul class="nav-list">
-      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
-      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
-      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
-      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
-      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+      <li><a href="16-plugins.html">16 PF4J 插件化架构</a></li>
+      <li><a href="17-plugin-overview.html" aria-current="page">17 官方插件总览</a></li>
+      <li><a href="18-plugin-tools-shell.html">18 tools 与 shell 插件</a></li>
+      <li><a href="19-plugin-session-compact.html">19 session-file 与 compact 插件</a></li>
+      <li><a href="20-plugin-workflow.html">20 workflow 插件</a></li>
+      <li><a href="21-plugin-plan-todo-skills.html">21 plan / todo / skills 插件</a></li>
+      <li><a href="22-plugin-mcp.html">22 MCP 插件</a></li>
+      <li><a href="23-plugin-script.html">23 跨语言脚本插件</a></li>
     </ul>
-    <div class="nav-group">子系统</div>
+    <div class="nav-group">五、工程与参考</div>
     <ul class="nav-list">
-      <li><a href="17-commands.html">17 命令系统</a></li>
-      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
-      <li><a href="19-config.html">19 配置体系</a></li>
-      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
-    </ul>
-    <div class="nav-group">插件详解</div>
-    <ul class="nav-list">
-      <li><a href="21-plugin-overview.html" aria-current="page">21 官方插件总览</a></li>
-      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
-      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
-      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
-      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
-      <li><a href="26-plugin-mcp.html">26 MCP 插件</a></li>
-      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+      <li><a href="24-testing.html">24 测试体系与构建</a></li>
+      <li><a href="25-pitfalls.html">25 坑点与陷阱清单</a></li>
+      <li><a href="26-comparison.html">26 与主流工具对比</a></li>
+      <li><a href="27-faq-glossary.html">27 常见问题与术语表</a></li>
+      <li><a href="28-learning-path.html">28 学习路径与阅读顺序</a></li>
     </ul>
   </nav>
 
   <main class="content">
 
     <nav class="breadcrumb" aria-label="面包屑">
-      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>21 官方插件总览</span>
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>17 官方插件总览</span>
     </nav>
 
-    <h1>21 官方插件总览</h1>
+    <h1>17 官方插件总览</h1>
     <p class="page-sub">
       内核只留机制、能力全在插件——那到底有哪些插件、各干什么、怎么组合？这一页给出一份与源码逐条对齐的清单，
       以及一套「拿到任意一个 jar 就能认出它」的方法。
@@ -88,7 +86,7 @@
       <h2>学习目标</h2>
       <ul>
         <li>说清 13 个官方插件各自把什么动作变成能力，并能按职责把它们分成基础能力 / 上层编排 / 跨语言桥三类；</li>
-        <li>拿到一张「插件 → 职责 → 提供什么扩展点 → 后续页号」对照表，据此按需跳读 22–27 页；</li>
+        <li>拿到一张「插件 → 职责 → 提供什么扩展点 → 后续页号」对照表，据此按需跳读 18–23 页；</li>
         <li>从 <code>plugin.properties</code> 的几个键认出任意一个插件的身份，并知道漏写 <code>plugin.class</code> 会看到什么错误；</li>
         <li>解释「13 个插件之间零声明依赖」这一事实的含义，以及 <code>plugin.requires=*</code> 为什么不是版本门控；</li>
         <li>知道 <code>plugins.roots</code> 的来源与顺序语义，说清启用 / 禁用名单的判定链；</li>
@@ -153,55 +151,55 @@
             <td><code>jellyfish-plugin-tools</code>（<code>Jellyfish-Plugins/pom.xml:20</code>）</td>
             <td>五个文件工具 + <code>ask_user</code> 提问工具 + 输入框的 <code>@</code> 文件引用 + 按路径收口的闸门</td>
             <td><code>ToolCallRequest</code> ×6、<code>PermissionCheckRequest</code>、<code>InputReferenceRequest</code>、<code>PromptContributionRequest</code></td>
-            <td><a href="22-plugin-tools-shell.html">22</a></td>
+            <td><a href="18-plugin-tools-shell.html">18</a></td>
           </tr>
           <tr>
             <td><code>jellyfish-plugin-shell</code>（<code>Jellyfish-Plugins/pom.xml:36</code>）</td>
             <td><code>shell</code> 工具（<code>/bin/sh -c</code> 执行命令原文）+ 命令策略 + <code>!命令</code> 输入指令</td>
             <td><code>ToolCallRequest</code>、<code>PermissionCheckRequest</code>、<code>InputDirectiveRequest</code></td>
-            <td><a href="22-plugin-tools-shell.html">22</a></td>
+            <td><a href="18-plugin-tools-shell.html">18</a></td>
           </tr>
           <tr>
             <td><code>jellyfish-plugin-session-file</code>（<code>Jellyfish-Plugins/pom.xml:21</code>）</td>
             <td>会话持久化：一个会话一个 JSON 文件，并用 git 管理历史</td>
             <td><code>SessionPersistRequest</code>、<code>SessionDeleteRequest</code>、<code>SessionRestoreRequest</code></td>
-            <td><a href="23-plugin-session-compact.html">23</a></td>
+            <td><a href="19-plugin-session-compact.html">19</a></td>
           </tr>
           <tr>
             <td><code>jellyfish-plugin-compact</code>（<code>Jellyfish-Plugins/pom.xml:24</code>）</td>
             <td>会话压缩策略：摘要指令正文 + 保留条数与摘要上限两个参数</td>
             <td><code>CompactionStrategyRequest</code></td>
-            <td><a href="23-plugin-session-compact.html">23</a></td>
+            <td><a href="19-plugin-session-compact.html">19</a></td>
           </tr>
           <tr>
             <td><code>jellyfish-plugin-todo</code>（<code>Jellyfish-Plugins/pom.xml:22</code>）</td>
             <td>会话待办：五个工具 + 只读 <code>/todo</code> + 提示词 / 状态栏 / 左栏面板贡献</td>
             <td><code>ToolCallRequest</code> ×5、<code>CommandRequest</code>、<code>TurnContextRequest</code>、<code>PromptContributionRequest</code>、<code>StatusLineContributionRequest</code>、<code>PanelContributionRequest</code>、<code>SessionDeleteRequest</code></td>
-            <td><a href="25-plugin-plan-todo-skills.html">25</a></td>
+            <td><a href="21-plugin-plan-todo-skills.html">21</a></td>
           </tr>
           <tr>
             <td><code>jellyfish-plugin-project</code>（<code>Jellyfish-Plugins/pom.xml:23</code>）</td>
             <td>项目约定：探测工作目录下的 <code>AGENTS.md</code>，小文件内联原文、大文件只给路径；<code>/init</code> 让模型读仓库后写出它</td>
             <td><code>PromptContributionRequest</code>、<code>CommandRequest</code>、订阅 <code>SessionClosedEvent</code></td>
-            <td>—（<code>/init</code> 见 <a href="17-commands.html">17 页</a>）</td>
+            <td>—（<code>/init</code> 见 <a href="08-commands.html">08 页</a>）</td>
           </tr>
           <tr>
             <td><code>jellyfish-plugin-workflow</code>（<code>Jellyfish-Plugins/pom.xml:26</code>）</td>
             <td>编排：一份声明式 spec 派生一批子代理，按依赖并发执行并聚合结果</td>
             <td><code>ToolCallRequest</code>、<code>PromptContributionRequest</code>、<code>PanelContributionRequest</code>；出向走 <code>SubAgentPort</code></td>
-            <td><a href="24-plugin-workflow.html">24</a></td>
+            <td><a href="20-plugin-workflow.html">20</a></td>
           </tr>
           <tr>
             <td><code>jellyfish-plugin-skills</code>（<code>Jellyfish-Plugins/pom.xml:28</code>）</td>
             <td>发现 <code>SKILL.md</code> 目录，元信息常驻 system prompt、正文由模型按需加载</td>
             <td><code>CommandRequest</code>、<code>ToolCallRequest</code>、<code>PromptContributionRequest</code></td>
-            <td><a href="25-plugin-plan-todo-skills.html">25</a></td>
+            <td><a href="21-plugin-plan-todo-skills.html">21</a></td>
           </tr>
           <tr>
             <td><code>jellyfish-plugin-plan</code>（<code>Jellyfish-Plugins/pom.xml:30</code>）</td>
             <td>plan 模式：按用户声明的只读白名单拦截写类工具，<code>/plan [on|off]</code> 在会话内切换</td>
             <td><code>PermissionCheckRequest</code>、<code>CommandRequest</code>、<code>CommandOptionRequest</code>、<code>StatusLineContributionRequest</code>、<code>TurnContextRequest</code></td>
-            <td><a href="25-plugin-plan-todo-skills.html">25</a></td>
+            <td><a href="21-plugin-plan-todo-skills.html">21</a></td>
           </tr>
           <tr>
             <td><code>jellyfish-plugin-resmon</code>（<code>Jellyfish-Plugins/pom.xml:32</code>）</td>
@@ -213,19 +211,19 @@
             <td><code>jellyfish-plugin-mcp</code>（<code>Jellyfish-Plugins/pom.xml:34</code>）</td>
             <td>MCP 客户端：stdio 连接外部 MCP server，把它的工具以 <code>mcp__&lt;server&gt;__&lt;tool&gt;</code> 接入</td>
             <td><code>CommandRequest</code>、动态 <code>ToolCallRequest</code>、<code>PermissionCheckRequest</code></td>
-            <td><a href="26-plugin-mcp.html">26</a></td>
+            <td><a href="22-plugin-mcp.html">22</a></td>
           </tr>
           <tr>
             <td><code>jellyfish-plugin-python</code>（<code>Jellyfish-Plugins/pom.xml:38</code>）</td>
             <td>Python 脚本插件运行时：把 <code>scripts/python/&lt;id&gt;/</code> 下的脚本目录变成标准插件（单脚本一 worker 进程）</td>
             <td>由 <code>ScriptBridgePlugin</code> 按脚本清单注册工具 / 命令 / 提示词</td>
-            <td><a href="27-plugin-script.html">27</a></td>
+            <td><a href="23-plugin-script.html">23</a></td>
           </tr>
           <tr>
             <td><code>jellyfish-plugin-node</code>（<code>Jellyfish-Plugins/pom.xml:39</code>）</td>
             <td>Node 脚本插件运行时：与 Python 同构（同一套协议与进程模型）</td>
             <td>同上（同一个机制层基类）</td>
-            <td><a href="27-plugin-script.html">27</a></td>
+            <td><a href="23-plugin-script.html">23</a></td>
           </tr>
         </tbody>
       </table>
@@ -430,7 +428,7 @@ jellyfish.tags=files,tools</code></pre>
         另外别在 <code>plugin.id</code> 里用 <code>::</code>——保留分隔符会让回收范围误伤其它插件的注册，
         因此解析期就拦下
         （<code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/JellyfishPluginDescriptorFinder.java:71-84</code>）。
-        <a href="11-pitfalls.html">11 页</a>把这条列为 B5。
+        <a href="25-pitfalls.html">25 页</a>把这条列为 B5。
       </p>
     </div>
 
@@ -481,7 +479,7 @@ flowchart TD
   plan -.->|"白名单里写的是别家注册的工具名"| tools
   workflow -.->|"经 SubAgentPort 委派，与 task 同一条路径"| core
     </div>
-    <p class="figure-cap">图 21-1　13 个插件的三层分工：全部只向内核注册，彼此之间不声明依赖</p>
+    <p class="figure-cap">图 17-1　13 个插件的三层分工：全部只向内核注册，彼此之间不声明依赖</p>
 
     <h3>上层编排为什么不需要新扩展点</h3>
 
@@ -626,7 +624,7 @@ flowchart TD
         设计意图是「重载的语义就是回到配置说的样子」，代价是它不认运行期的手动开关。
         <br>
         <strong>规避</strong>：想「不限制」就整段删掉该键，别写空数组；也别在手动启停之后立刻 <code>/reload</code>。
-        <a href="11-pitfalls.html">11 页</a>把这条列为 B4。
+        <a href="25-pitfalls.html">25 页</a>把这条列为 B4。
       </p>
     </div>
 
@@ -794,7 +792,7 @@ cp Jellyfish-Plugins/jellyfish-plugin-node/target/jellyfish-plugin-node-0.1.1.ja
         <br>
         <strong>规避</strong>：换了 jar 就重启进程。<code>jellyfish.json</code> 里改启用 / 禁用名单与逐插件配置段，
         才走 <code>/reload</code>。<a href="02-quickstart.html">02 页</a>与
-        <a href="07-plugins.html">07 页</a>都提过这条界线；插件机制本身（生命周期、扩展点、类加载隔离）在 07 页，
+        <a href="16-plugins.html">16 页</a>都提过这条界线；插件机制本身（生命周期、扩展点、类加载隔离）在 16 页，
         本页只负责「有哪些插件、怎么装」。
       </p>
     </div>
@@ -811,7 +809,7 @@ cp Jellyfish-Plugins/jellyfish-plugin-node/target/jellyfish-plugin-node-0.1.1.ja
     </div>
 
     <!-- ============================================================ -->
-    <h2>7. 路线图：22–27 页各讲什么</h2>
+    <h2>7. 路线图：18–23 页各讲什么</h2>
 
     <p>
       本页是插件详解章节的开篇：给清单、给分类、给识别方法。具体某个插件怎么实现的，按下面这张表跳读，
@@ -825,32 +823,32 @@ cp Jellyfish-Plugins/jellyfish-plugin-node/target/jellyfish-plugin-node-0.1.1.ja
         </thead>
         <tbody>
           <tr>
-            <td><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></td>
+            <td><a href="18-plugin-tools-shell.html">18 tools 与 shell 插件</a></td>
             <td><code>jellyfish-plugin-tools</code>、<code>jellyfish-plugin-shell</code></td>
-            <td><a href="18-tools-io.html">18 页</a>（工具系统与输入输出）、<a href="06-permissions.html">06 页</a>（审批语义）</td>
+            <td><a href="07-tools-io.html">07 页</a>（工具系统与输入输出）、<a href="06-permissions.html">06 页</a>（审批语义）</td>
           </tr>
           <tr>
-            <td><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></td>
+            <td><a href="19-plugin-session-compact.html">19 session-file 与 compact 插件</a></td>
             <td><code>jellyfish-plugin-session-file</code>、<code>jellyfish-plugin-compact</code></td>
-            <td><a href="08-session-context.html">08 页</a>（会话持久化与上下文）</td>
+            <td><a href="10-session-context.html">10 页</a>（会话持久化与上下文）</td>
           </tr>
           <tr>
-            <td><a href="24-plugin-workflow.html">24 workflow 插件</a></td>
+            <td><a href="20-plugin-workflow.html">20 workflow 插件</a></td>
             <td><code>jellyfish-plugin-workflow</code></td>
-            <td><a href="20-subagents.html">20 页</a>（子代理与多 Agent 协作）</td>
+            <td><a href="11-subagents.html">11 页</a>（子代理与多 Agent 协作）</td>
           </tr>
           <tr>
-            <td><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></td>
+            <td><a href="21-plugin-plan-todo-skills.html">21 plan / todo / skills 插件</a></td>
             <td><code>jellyfish-plugin-plan</code>、<code>jellyfish-plugin-todo</code>、<code>jellyfish-plugin-skills</code></td>
-            <td><a href="06-permissions.html">06 页</a>（权限拦截）、<a href="17-commands.html">17 页</a>（命令系统）</td>
+            <td><a href="06-permissions.html">06 页</a>（权限拦截）、<a href="08-commands.html">08 页</a>（命令系统）</td>
           </tr>
           <tr>
-            <td><a href="26-plugin-mcp.html">26 MCP 插件</a></td>
+            <td><a href="22-plugin-mcp.html">22 MCP 插件</a></td>
             <td><code>jellyfish-plugin-mcp</code></td>
             <td>本页第三节「桥接层」</td>
           </tr>
           <tr>
-            <td><a href="27-plugin-script.html">27 跨语言脚本插件</a></td>
+            <td><a href="23-plugin-script.html">23 跨语言脚本插件</a></td>
             <td><code>jellyfish-plugin-python</code>、<code>jellyfish-plugin-node</code>、<code>jellyfish-script</code></td>
             <td>本页第三节「跨语言桥」</td>
           </tr>
@@ -860,7 +858,7 @@ cp Jellyfish-Plugins/jellyfish-plugin-node/target/jellyfish-plugin-node-0.1.1.ja
 
     <p>
       有两个插件本套文档没有设专页：<code>jellyfish-plugin-project</code>（它对外的能力主要是
-      <code>/init</code> 命令，已在 <a href="17-commands.html">17 页</a>讲过）与
+      <code>/init</code> 命令，已在 <a href="08-commands.html">08 页</a>讲过）与
       <code>jellyfish-plugin-resmon</code>（只读 <code>/resmon</code> + 右栏面板）。
       它们的形态与上表里的插件没有本质区别：同样是「<code>start()</code> 里注册扩展点 + 配置段可选」。
     </p>
@@ -947,9 +945,9 @@ cp Jellyfish-Plugins/jellyfish-plugin-node/target/jellyfish-plugin-node-0.1.1.ja
       </ol>
     </div>
 
-    <nav class="pager" aria-label="翻页">
-      <a class="prev" href="20-subagents.html"><span class="pager-dir">上一页</span>20 子代理与多 Agent 协作</a>
-      <a class="next" href="22-plugin-tools-shell.html"><span class="pager-dir">下一页</span>22 tools 与 shell 插件</a>
+        <nav class="pager" aria-label="翻页">
+      <a class="prev" href="16-plugins.html"><span class="pager-dir">上一页</span>16 PF4J 插件化架构</a>
+      <a class="next" href="18-plugin-tools-shell.html"><span class="pager-dir">下一页</span>18 tools 与 shell 插件</a>
     </nav>
 
   </main>

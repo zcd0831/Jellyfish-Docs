@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>26 MCP 插件 · Jellyfish 源码深度解析</title>
+<title>22 MCP 插件 · Jellyfish 源码深度解析</title>
 <meta name="description" content="Jellyfish 的 MCP 插件如何把外部 MCP server 接成内核工具：stdio 换行分帧、JSON-RPC 握手与请求配对、mcp__server__tool 命名展开、content 数组映射、审批闸门与退避重连。">
 <link rel="stylesheet" href="assets/style.css">
 <!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
@@ -20,67 +20,65 @@
 
 <div class="layout">
 
-  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <nav class="sidebar" id="sidebar" aria-label="文档导航">
     <div class="sidebar-title">文档目录</div>
     <ul class="nav-list">
       <li><a href="index.html">首页 · 总览与导航</a></li>
     </ul>
-    <div class="nav-group">入门</div>
+    <div class="nav-group">一、入门</div>
     <ul class="nav-list">
       <li><a href="01-overview.html">01 项目概览与设计哲学</a></li>
       <li><a href="02-quickstart.html">02 环境准备与快速上手</a></li>
       <li><a href="03-architecture.html">03 整体架构与三外壳装配</a></li>
     </ul>
-    <div class="nav-group">内核重点</div>
+    <div class="nav-group">二、内核机制</div>
     <ul class="nav-list">
       <li><a href="04-agent-loop.html">04 Agent Loop 内核</a></li>
       <li><a href="05-llm-api.html">05 多厂商 LLM API 抽象层</a></li>
       <li><a href="06-permissions.html">06 权限与审批系统</a></li>
-      <li><a href="07-plugins.html">07 PF4J 插件化架构</a></li>
-      <li><a href="08-session-context.html">08 会话持久化与上下文</a></li>
+      <li><a href="07-tools-io.html">07 工具系统与输入输出</a></li>
+      <li><a href="08-commands.html">08 命令系统</a></li>
+      <li><a href="09-config.html">09 配置体系</a></li>
+      <li><a href="10-session-context.html">10 会话持久化与上下文</a></li>
+      <li><a href="11-subagents.html">11 子代理与多 Agent 协作</a></li>
+      <li><a href="12-assembly.html">12 装配与依赖注入</a></li>
+      <li><a href="13-observability.html">13 可观测性与运行观测</a></li>
     </ul>
-    <div class="nav-group">外壳与实战</div>
+    <div class="nav-group">三、外壳</div>
     <ul class="nav-list">
-      <li><a href="09-tui.html">09 终端界面（TamboUI）</a></li>
-      <li><a href="10-cli-server.html">10 CLI 与 HTTP Server</a></li>
-      <li><a href="11-pitfalls.html">11 坑点与陷阱清单</a></li>
+      <li><a href="14-tui.html">14 终端界面（TamboUI）</a></li>
+      <li><a href="15-cli-server.html">15 CLI 与 HTTP Server</a></li>
     </ul>
-    <div class="nav-group">拓展</div>
+    <div class="nav-group">四、插件</div>
     <ul class="nav-list">
-      <li><a href="12-comparison.html">12 与主流工具对比</a></li>
-      <li><a href="13-learning-path.html">13 学习路径与阅读顺序</a></li>
-      <li><a href="14-faq-glossary.html">14 常见问题与术语表</a></li>
-      <li><a href="15-observability.html">15 可观测性与运行观测</a></li>
-      <li><a href="16-testing.html">16 测试体系与构建</a></li>
+      <li><a href="16-plugins.html">16 PF4J 插件化架构</a></li>
+      <li><a href="17-plugin-overview.html">17 官方插件总览</a></li>
+      <li><a href="18-plugin-tools-shell.html">18 tools 与 shell 插件</a></li>
+      <li><a href="19-plugin-session-compact.html">19 session-file 与 compact 插件</a></li>
+      <li><a href="20-plugin-workflow.html">20 workflow 插件</a></li>
+      <li><a href="21-plugin-plan-todo-skills.html">21 plan / todo / skills 插件</a></li>
+      <li><a href="22-plugin-mcp.html" aria-current="page">22 MCP 插件</a></li>
+      <li><a href="23-plugin-script.html">23 跨语言脚本插件</a></li>
     </ul>
-    <div class="nav-group">子系统</div>
+    <div class="nav-group">五、工程与参考</div>
     <ul class="nav-list">
-      <li><a href="17-commands.html">17 命令系统</a></li>
-      <li><a href="18-tools-io.html">18 工具系统与输入输出</a></li>
-      <li><a href="19-config.html">19 配置体系</a></li>
-      <li><a href="20-subagents.html">20 子代理与多 Agent 协作</a></li>
-    </ul>
-    <div class="nav-group">插件详解</div>
-    <ul class="nav-list">
-      <li><a href="21-plugin-overview.html">21 官方插件总览</a></li>
-      <li><a href="22-plugin-tools-shell.html">22 tools 与 shell 插件</a></li>
-      <li><a href="23-plugin-session-compact.html">23 session-file 与 compact 插件</a></li>
-      <li><a href="24-plugin-workflow.html">24 workflow 插件</a></li>
-      <li><a href="25-plugin-plan-todo-skills.html">25 plan / todo / skills 插件</a></li>
-      <li><a href="26-plugin-mcp.html" aria-current="page">26 MCP 插件</a></li>
-      <li><a href="27-plugin-script.html">27 跨语言脚本插件</a></li>
+      <li><a href="24-testing.html">24 测试体系与构建</a></li>
+      <li><a href="25-pitfalls.html">25 坑点与陷阱清单</a></li>
+      <li><a href="26-comparison.html">26 与主流工具对比</a></li>
+      <li><a href="27-faq-glossary.html">27 常见问题与术语表</a></li>
+      <li><a href="28-learning-path.html">28 学习路径与阅读顺序</a></li>
     </ul>
   </nav>
 
   <main class="content">
 
     <nav class="breadcrumb" aria-label="面包屑">
-      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>26 MCP 插件</span>
+      <a href="index.html">Jellyfish 源码深度解析</a><span class="sep">/</span><span>22 MCP 插件</span>
     </nav>
 
-    <h1>26 MCP 插件 <span class="tag focus">重点</span></h1>
+    <h1>22 MCP 插件 <span class="tag focus">重点</span></h1>
     <p class="page-sub">
-      <a href="12-comparison.html">12 页</a>把 MCP 当成一种「外部能力来源」横向比过；这一页讲它的
+      <a href="26-comparison.html">26 页</a>把 MCP 当成一种「外部能力来源」横向比过；这一页讲它的
       <strong>接入实现</strong>：一个进程内插件怎么把一个不受信的第三方子进程，伪装成内核里的普通工具，
       而且不让它绕开审批、不让它拖死内核。
     </p>
@@ -127,7 +125,7 @@ plugin.requires=*</code></pre>
     <p>
       注意 <code>plugin.id</code> 的注释（<code>plugin.properties:3</code>）：「<code>plugin.id</code> 同时是注册表的
       owner：插件卸载时按它批量回收工具、权限拦截与命令」。这句话是后面所有「谁负责收干净」问题的答案——
-      回收不是这里手写的，而是 <a href="07-plugins.html">07 页</a>讲的 <code>PluginOwnerNamespace</code> 前缀回收。
+      回收不是这里手写的，而是 <a href="16-plugins.html">16 页</a>讲的 <code>PluginOwnerNamespace</code> 前缀回收。
     </p>
 
     <div class="mermaid">
@@ -143,7 +141,7 @@ flowchart LR
   I["McpRegistry<br/>状态与只读标记"] --> H
   I --> J["McpPermissionContribution<br/>写类工具要审批"]
     </div>
-    <p class="figure-cap">图 26-1　一条调用链与两条控制链：清单从 server 流进注册表，权限标记从注册表流进审批闸门</p>
+    <p class="figure-cap">图 22-1　一条调用链与两条控制链：清单从 server 流进注册表，权限标记从注册表流进审批闸门</p>
 
     <div class="callout design">
       <span class="callout-title">设计依据：为什么 MCP 是插件，不是内核内置的一个「工具来源」</span>
@@ -477,7 +475,7 @@ flowchart LR
       </p>
       <p>
         因此 <code>McpServerConnection.java:92-100</code> 的注释把这条写成纪律：
-        「立关闭旗」与「请求入表」必须在同一把锁内（与 <a href="07-plugins.html">07 页</a>那处
+        「立关闭旗」与「请求入表」必须在同一把锁内（与 <a href="16-plugins.html">16 页</a>那处
         「检查与入表同一把锁」是同一条），于是关停之后才到达的调用是<strong>显式失败</strong>，
         而不是「等一个永远不会来的应答」（<code>McpServerConnection.java:744-751</code>）。
       </p>
@@ -762,7 +760,7 @@ stateDiagram-v2
   FAILED --> STOPPED: close 后状态保持 FAILED
   DISABLED --> STOPPED: stop
     </div>
-    <p class="figure-cap">图 26-2　一个 server 的状态机（取值来自 <code>McpRegistry.State</code>，<code>McpRegistry.java:33-59</code>）</p>
+    <p class="figure-cap">图 22-2　一个 server 的状态机（取值来自 <code>McpRegistry.State</code>，<code>McpRegistry.java:33-59</code>）</p>
 
     <p>
       状态机里有一处刻意的区分：<code>RECONNECTING</code> 与 <code>CONNECTING</code> 分开
@@ -937,7 +935,7 @@ stateDiagram-v2
           于是 MCP 连接跨 <code>/reload</code> 残留（<code>McpPlugin.java:118-119</code> 的字段注释）。</li>
       <li><strong>关连接排在 <code>awaitConnector</code> 之前</strong>：连接线程此刻可能正卡在握手等应答上，
           而叫醒在途请求的正是 <code>close()</code>——先等就会白等到超时。</li>
-      <li><strong>等连接线程本身</strong>：<a href="07-plugins.html">07 页</a>讲的 AGENTS.md 约定是
+      <li><strong>等连接线程本身</strong>：<a href="16-plugins.html">16 页</a>讲的 AGENTS.md 约定是
           「产生注册的后台线程必须在 <code>stop()</code> 返回前停下来」，而等待是<strong>有界</strong>的
           （2 秒，<code>McpPlugin.java:242-257</code>），因为一个卡在进程启动或读管道上的线程无法被强杀
           ——那种情况只能如实告警。</li>
@@ -1217,7 +1215,7 @@ Jellyfish-Plugins/jellyfish-plugin-mcp/src/main/java/zcd/jellyfish/plugin/mcp/Mc
       </p>
       <p>
         整体替换的代价是注册表在极短窗口内少了几个名字——而那个窗口里最坏的结果只是
-        「模型看不到这个工具」。<a href="07-plugins.html">07 页</a>讲的 <code>TypeRegistry</code>
+        「模型看不到这个工具」。<a href="16-plugins.html">16 页</a>讲的 <code>TypeRegistry</code>
         还有一层好处：跨 owner 重名是「压链」而不是报错，所以这里整体关掉再整体装回，
         被覆盖的注册项不会丢。
       </p>
@@ -1432,7 +1430,7 @@ Jellyfish-Plugins/jellyfish-plugin-mcp/src/main/java/zcd/jellyfish/plugin/mcp/Mc
       </p>
       <p>
         这带来一个容易忽略的结论：<strong>MCP 工具的文本输出会被套上内核的落盘信封</strong>
-        （见 <a href="18-tools-io.html">18 页</a>），与 <code>shell</code> 输出的待遇完全一致——
+        （见 <a href="07-tools-io.html">07 页</a>），与 <code>shell</code> 输出的待遇完全一致——
         插件的作者不需要知道信封长什么样。
       </p>
     </div>
@@ -1510,7 +1508,7 @@ Jellyfish-Plugins/jellyfish-plugin-mcp/src/main/java/zcd/jellyfish/plugin/mcp/Mc
       「不支持」为什么会写成「回一条明确的错误」，类注释给了立场（<code>McpServerConnection.java:31-37</code>）：
       这两个能力是「server 反过来向客户端要东西」（要一次模型补全 / 要用户回答），
       而本项目的能力边界是「插件只能注册回调、订阅事件、发布事件」。这与
-      <a href="07-plugins.html">07 页</a>讲的插件反向通道是同一条边界。
+      <a href="16-plugins.html">16 页</a>讲的插件反向通道是同一条边界。
     </p>
 
     <h3>8.2 权限：只加一道「写类工具要审批」的闸门</h3>
@@ -1556,7 +1554,7 @@ Jellyfish-Plugins/jellyfish-plugin-mcp/src/main/java/zcd/jellyfish/plugin/mcp/Mc
         插件只能收紧，因此要的是「让人看一眼再决定」：只读工具免打扰、其余弹一次批准框。
       </p>
       <p>
-        它与 <a href="22-plugin-tools-shell.html">22 页</a>里 shell 插件的分类器是同一种便利机制
+        它与 <a href="18-plugin-tools-shell.html">18 页</a>里 shell 插件的分类器是同一种便利机制
         ——区分只读与写入，而不是替用户下结论。裁决的构造入口是
         <code>PermissionVerdict.ask</code>（<code>PermissionVerdict.java:77</code>）与
         <code>PermissionVerdict.abstain</code>（<code>PermissionVerdict.java:67</code>）。
@@ -1574,7 +1572,7 @@ Jellyfish-Plugins/jellyfish-plugin-mcp/src/main/java/zcd/jellyfish/plugin/mcp/Mc
       <p>
         两条推论：<strong>一</strong>，MCP 工具的参数内容、路径、网络目标，这个插件一概不管，
         它只转发——想按路径或命令收紧，那是 <a href="06-permissions.html">06 页</a>的核心策略
-        与 <a href="22-plugin-tools-shell.html">22 页</a>路径闸门的地盘；
+        与 <a href="18-plugin-tools-shell.html">18 页</a>路径闸门的地盘；
         <strong>二</strong>，在 <code>-cli</code> / <code>-server</code> 下没有审批者，
         <code>ASK</code> 等于拒绝，因此这两个模式里<strong>写类 MCP 工具实际不可用</strong>
         （<code>Jellyfish-Plugins/README.md:658</code>）。
@@ -1630,7 +1628,7 @@ Jellyfish-Plugins/jellyfish-plugin-mcp/src/main/java/zcd/jellyfish/plugin/mcp/Mc
     <p>
       如果不这样设计——比如把 MCP 工具放在一个平行的「外部工具表」里——那么权限、清单、
       截断、取消、埋点这五套机制都要再实现一遍（并且要保证两套的行为一致）。这也是
-      <a href="07-plugins.html">07 页</a>那条主线「工具即能力、能力全在插件」的必然结论：
+      <a href="16-plugins.html">16 页</a>那条主线「工具即能力、能力全在插件」的必然结论：
       既然是同一张表，就不该有「外部工具」这个概念。
     </p>
 
@@ -1731,7 +1729,7 @@ Jellyfish-Plugins/jellyfish-plugin-mcp/src/main/java/zcd/jellyfish/plugin/mcp/Mc
       <p>
         换 server 的 jar / 配置后的行为差异也要记住：配置段的改动由 <code>/reload</code> 触发插件重启，
         而<strong>任何「改完就生效」的期待都要落到 <code>/reload</code> 上</strong>——
-        <a href="07-plugins.html">07 页</a>讲了这套重载的判定算法与它不覆盖的范围。
+        <a href="16-plugins.html">16 页</a>讲了这套重载的判定算法与它不覆盖的范围。
       </p>
     </div>
 
@@ -1806,7 +1804,7 @@ Jellyfish-Plugins/jellyfish-plugin-mcp/src/main/java/zcd/jellyfish/plugin/mcp/Mc
       Jackson 则是<strong>自带并 shade 进插件包</strong>的（<code>pom.xml:32-41</code>）：
       「插件看不到内核的 <code>ObjectMapperWrapper</code>（那在 <code>jellyfish-infra</code> 里），
       因此自带一份」，护栏只禁止自带内核契约与 PF4J。
-      这一条与 <a href="07-plugins.html">07 页</a>的「三层护栏」合起来看才完整：
+      这一条与 <a href="16-plugins.html">16 页</a>的「三层护栏」合起来看才完整：
       少任何一层都会出现类型同一性问题。
     </p>
 
@@ -1847,9 +1845,9 @@ Jellyfish-Plugins/jellyfish-plugin-mcp/src/main/java/zcd/jellyfish/plugin/mcp/Mc
       </ol>
     </div>
 
-    <nav class="pager" aria-label="翻页">
-      <a class="prev" href="25-plugin-plan-todo-skills.html"><span class="pager-dir">上一页</span>25 plan / todo / skills 插件</a>
-      <a class="next" href="27-plugin-script.html"><span class="pager-dir">下一页</span>27 跨语言脚本插件</a>
+        <nav class="pager" aria-label="翻页">
+      <a class="prev" href="21-plugin-plan-todo-skills.html"><span class="pager-dir">上一页</span>21 plan / todo / skills 插件</a>
+      <a class="next" href="23-plugin-script.html"><span class="pager-dir">下一页</span>23 跨语言脚本插件</a>
     </nav>
 
   </main>
