@@ -188,7 +188,7 @@ flowchart TD
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:723-739（三段语义、优先级、三外壳行为表）、Jellyfish/docs/constraints.md:439-445（fail-open 的边界与「查不到身份」返回全拦 + <code>ConfigWarningEvent</code>）、Jellyfish/docs/constraints.md:420-423（模式类授权名单不回内核）</div>
+    <div class="src-block">Jellyfish/README.md:728-744（三段语义、优先级、三外壳行为表）、Jellyfish/docs/constraints.md:439-445（fail-open 的边界与「查不到身份」返回全拦 + <code>ConfigWarningEvent</code>）、Jellyfish/docs/constraints.md:420-423（模式类授权名单不回内核）</div>
 
     <h2>审批在三种外壳下的行为</h2>
 
@@ -252,7 +252,7 @@ flowchart TD
         <code>GET /approvals</code> 这个只读发现入口，否则只能等超时被拒。</li>
     </ul>
 
-    <div class="src-block">Jellyfish/README.md:731-739（三外壳行为表）、Jellyfish/README.md:267-292（TUI 审批框原文、参数原样显示、<code>Esc</code> 的含义）、Jellyfish/README.md:1038-1053（<code>/approvals</code> 与 <code>/sessions/{id}/approvals</code>、头槽位与队列上限 8、<code>GET /approvals</code> 的用途）、Jellyfish/docs/constraints.md:467-481（审批 fail-closed、头槽位规则、读侧两个口、「有没有审批者」只是静态语义）</div>
+    <div class="src-block">Jellyfish/README.md:736-744（三外壳行为表）、Jellyfish/README.md:271-296（TUI 审批框原文、参数原样显示、<code>Esc</code> 的含义）、Jellyfish/README.md:1043-1058（<code>/approvals</code> 与 <code>/sessions/{id}/approvals</code>、头槽位与队列上限 8、<code>GET /approvals</code> 的用途）、Jellyfish/docs/constraints.md:467-481（审批 fail-closed、头槽位规则、读侧两个口、「有没有审批者」只是静态语义）</div>
 
     <h2><code>permission</code> 段：审批超时</h2>
 
@@ -311,7 +311,7 @@ flowchart TD
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:887-899（<code>permission</code> 段字段表与「写 0 的代价」「负数非法」「超过 3600 告警」）、Jellyfish/docs/constraints.md:471-477（<code>ApprovalChannel.waitForever</code>、三条出口、启动告警）</div>
+    <div class="src-block">Jellyfish/README.md:892-904（<code>permission</code> 段字段表与「写 0 的代价」「负数非法」「超过 3600 告警」）、Jellyfish/docs/constraints.md:471-477（<code>ApprovalChannel.waitForever</code>、三条出口、启动告警）</div>
 
     <h2><code>ask_user</code>：向用户提问</h2>
 
@@ -409,7 +409,7 @@ flowchart TD
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:293-319（提问框原文、选项折行规则、与审批的区别、<code>ask.timeoutSeconds</code>）、Jellyfish/README.md:900-912（<code>ask</code> 段字段表与「刻意分开」「写 0 的代价」「负数回退」）、Jellyfish/docs/constraints.md:489-518（机制在内核工具在插件、不是审批不涉及权限、不是 fail-closed、头槽位与审批同口径、子代理回合当场拒绝、三外壳、选项区不复用命令候选渲染、<code>AskChannel.waitForever</code>）、Jellyfish/README.md:1040-1057（<code>ask_required</code> 与 <code>POST /asks/{id}</code>、两种请求体、400 的语义）</div>
+    <div class="src-block">Jellyfish/README.md:297-323（提问框原文、选项折行规则、与审批的区别、<code>ask.timeoutSeconds</code>）、Jellyfish/README.md:905-917（<code>ask</code> 段字段表与「刻意分开」「写 0 的代价」「负数回退」）、Jellyfish/docs/constraints.md:489-518（机制在内核工具在插件、不是审批不涉及权限、不是 fail-closed、头槽位与审批同口径、子代理回合当场拒绝、三外壳、选项区不复用命令候选渲染、<code>AskChannel.waitForever</code>）、Jellyfish/README.md:1045-1062（<code>ask_required</code> 与 <code>POST /asks/{id}</code>、两种请求体、400 的语义）</div>
 
     <h2>输入指令 <code>!命令</code></h2>
 
@@ -464,7 +464,7 @@ flowchart TD
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:254-270（<code>!命令</code> 行、两条口径、实时输出与恰好一条终态、队列满报错）、Jellyfish/docs/constraints.md:804-846（输入框语法归插件、执行体是工具执行器、<code>!</code> 的结果落成 user 消息、异步执行与关闭顺序、终态语义、队列满抛 <code>JellyfishException</code>）、Jellyfish-Plugins/README.md:163-190（shell 插件的 <code>!命令</code> 一节）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellInputDirective.java:32-44（<code>!</code> 只把命令原文翻译成一次 <code>shell</code> 工具调用、不执行）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/PluginConfig.java:120-134（shell 插件解析的全部配置键里没有 <code>!</code> 专属项）</div>
+    <div class="src-block">Jellyfish/README.md:258-274（<code>!命令</code> 行、两条口径、实时输出与恰好一条终态、队列满报错）、Jellyfish/docs/constraints.md:805-847（输入框语法归插件、执行体是工具执行器、<code>!</code> 的结果落成 user 消息、异步执行与关闭顺序、终态语义、队列满抛 <code>JellyfishException</code>）、Jellyfish-Plugins/README.md:163-190（shell 插件的 <code>!命令</code> 一节）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellInputDirective.java:32-44（<code>!</code> 只把命令原文翻译成一次 <code>shell</code> 工具调用、不执行）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/PluginConfig.java:120-134（shell 插件解析的全部配置键里没有 <code>!</code> 专属项）</div>
 
     <h2><code>shell</code> 的命令策略与六道判定</h2>
 
@@ -495,6 +495,14 @@ flowchart TD
         <li><strong>只读表</strong>：所有段都命中只读表（<code>ls</code>、<code>git status</code>、<code>cat</code>……）→ <strong>免审批</strong>；<strong>否则 → 升级为人工审批</strong>。</li>
       </ol>
 
+      <p>
+        <strong>「全部」只有一种写法：整条 <code>*</code>。</strong>三个表都认它，含义随表而定——<code>allowedCommands</code> 里是
+        「准入不再拦任何命令」（等于白名单不表态），<code>commandPolicy.trustedCommands</code> 里是「一律免审批」，
+        <code>commandPolicy.readOnlyCommands</code> 里是「一律按只读放行」。它<strong>只解除自己所在的那一道门</strong>：
+        拒绝形状、命令替换 / 重定向升级问人照旧生效。条目里带别的字符时仍按 1 / 2 token 前缀规则匹配，
+        因此 <code>git *</code> 这类半个通配按<strong>字面量</strong>匹配、<strong>永不命中</strong>，配置解析时会为它发一条告警。
+      </p>
+
       <p><strong>配置</strong></p>
       <div class="table-scroll field-table">
         <table>
@@ -507,7 +515,7 @@ flowchart TD
               <td>字符串数组</td>
               <td><span class="tag optional">选填</span></td>
               <td><code>[]</code></td>
-              <td><strong>非空即默认拒绝</strong>的准入白名单，支持 <code>git status</code> 这种两 token 形式（单 token 覆盖该命令的全部子命令）。<strong>它只管准入，不管审批</strong>，也<strong>不受 <code>commandPolicy.enabled</code> 影响</strong></td>
+              <td><strong>非空即默认拒绝</strong>的准入白名单，支持 <code>git status</code> 这种两 token 形式（单 token 覆盖该命令的全部子命令），也支持<strong>整条 <code>*</code></strong>（匹配全部命令）。<strong>它只管准入，不管审批</strong>，也<strong>不受 <code>commandPolicy.enabled</code> 影响</strong></td>
               <td><code>["git status", "mvn test"]</code></td>
             </tr>
             <tr>
@@ -523,7 +531,7 @@ flowchart TD
               <td>字符串数组</td>
               <td><span class="tag optional">选填</span></td>
               <td><code>[]</code></td>
-              <td><strong>可信命令表，命中即免审批</strong>。粒度与白名单一致</td>
+              <td><strong>可信命令表，命中即免审批</strong>。粒度与白名单一致，也支持<strong>整条 <code>*</code></strong>（一律免审批）</td>
               <td><code>["mvn test"]</code></td>
             </tr>
             <tr>
@@ -531,7 +539,7 @@ flowchart TD
               <td>字符串数组</td>
               <td><span class="tag optional">选填</span></td>
               <td><code>[]</code></td>
-              <td><strong>追加</strong>在内置只读表之后。内置表<strong>不可替换</strong>，只能追加</td>
+              <td><strong>追加</strong>在内置只读表之后。内置表<strong>不可替换</strong>，只能追加；也支持<strong>整条 <code>*</code></strong>（一律按只读放行，等于把审批整体关掉）</td>
               <td><code>["my-readonly-tool"]</code></td>
             </tr>
             <tr>
@@ -585,10 +593,11 @@ flowchart TD
         <code>mvn test</code> <strong>每次都要批准</strong>——白名单只回答「能不能跑」。
       </p>
 
-      <p><strong>三条最容易踩的口径</strong></p>
+      <p><strong>四条最容易踩的口径</strong></p>
       <ul>
         <li><strong>白名单只管准入，不管审批</strong>：<code>allowedCommands</code> 里的 <code>mvn test</code> 每次仍然弹批准框。要它静默执行，就把同一条前缀<strong>也</strong>写进 <code>trustedCommands</code>。</li>
         <li><strong>可信表才是免审批</strong>：「允许跑但每次都要我批准」这种姿态仍然写得出来——只配白名单、不配可信表即可。</li>
+        <li><strong>想一次放行全部命令</strong>：整条 <code>*</code> 是「匹配全部」的写法——<code>allowedCommands: ["*"]</code> 表示准入不再拦任何命令（等于白名单不表态），再把 <code>trustedCommands</code> 也写成 <code>["*"]</code> 就是「一律免审批」。它只解除自己所在的那一道门（拒绝形状、命令替换 / 重定向升级问人照旧），<strong>只适合你自己完全掌控的机器</strong>。</li>
         <li><strong><code>commandPolicy.enabled=false</code> 会连第 5 步一起关掉</strong>：它关的是「分类器」这个便利机制，只读表、重定向 / 命令替换检查与「其余命令问人」都不再表态；白名单、可信表、拒绝形状照旧生效。</li>
       </ul>
 
@@ -621,7 +630,7 @@ flowchart TD
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish-Plugins/README.md:191-204（五个字段表）、Jellyfish-Plugins/README.md:205-253（六道判定、三条关键口径、边界与已知限制、端到端测试 profile）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/PluginConfig.java:120-134（配置键与缺省值）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:102-104（内置拒绝形状五条）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:271-274（拒绝形状按命令原文匹配）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:514-522（子串匹配判据 <code>command.contains(pattern)</code>）、Jellyfish-Plugins/jellyfish-plugin-shell/src/test/java/zcd/jellyfish/plugin/shell/CommandPolicyTest.java:182（<code>["shutdown -h"]</code> 的用例）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:191-204（五个字段表）、Jellyfish-Plugins/README.md:205-263（六道判定、三条关键口径、边界与已知限制、端到端测试 profile）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/PluginConfig.java:120-134（配置键与缺省值）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:125-127（内置拒绝形状五条）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:295-298（拒绝形状按命令原文匹配）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:555-563（子串匹配判据 <code>command.contains(pattern)</code>）、Jellyfish-Plugins/jellyfish-plugin-shell/src/test/java/zcd/jellyfish/plugin/shell/CommandPolicyTest.java:226（<code>["shutdown -h"]</code> 的用例）</div>
 
     <h2>无人值守模式下的放行口</h2>
 
@@ -645,7 +654,7 @@ flowchart TD
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish-Plugins/README.md:247-249（<code>-cli</code> / <code>-server</code> 下免审批只剩两个放行口）、Jellyfish-Plugins/README.md:658（MCP：这两个模式下写类工具实际不可用）、Jellyfish-Plugins/README.md:154-156（<code>pathPolicy</code> 的 <code>ask</code> 在无审批界面外壳里等于拒绝）、Jellyfish/README.md:1095-1100（「<code>-cli</code> 下工具调用总被拒绝？」）、Jellyfish-Plugins/README.md:712（plan 在 <code>-cli</code> / <code>-server</code> 下同样有效）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:257-259（<code>-cli</code> / <code>-server</code> 下免审批只剩两个放行口）、Jellyfish-Plugins/README.md:668（MCP：这两个模式下写类工具实际不可用）、Jellyfish-Plugins/README.md:154-156（<code>pathPolicy</code> 的 <code>ask</code> 在无审批界面外壳里等于拒绝）、Jellyfish/README.md:1100-1105（「<code>-cli</code> 下工具调用总被拒绝？」）、Jellyfish-Plugins/README.md:722（plan 在 <code>-cli</code> / <code>-server</code> 下同样有效）</div>
 
     <h2>plan 模式：一套「先看，别改」的工作方式</h2>
 
@@ -714,7 +723,7 @@ flowchart TD
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish-Plugins/README.md:677-714（plan 模式：三个命令、<code>readOnlyTools</code> 表、按会话存、子代理继承、fail-closed、不换清单只拦执行、<code>-cli</code> / <code>-server</code> 有效、装插件才有 <code>/plan</code>）、Jellyfish/docs/constraints.md:483-487（插件侧的模式实现要求：白名单为空即全禁、拒绝文案要点明配置键、告警只在因白名单为空而拒绝时发、开关放会话扩展条目、子代理不自动继承由插件决定）、Jellyfish/README.md:813-817（模式类授权由插件提供）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:687-724（plan 模式：三个命令、<code>readOnlyTools</code> 表、按会话存、子代理继承、fail-closed、不换清单只拦执行、<code>-cli</code> / <code>-server</code> 有效、装插件才有 <code>/plan</code>）、Jellyfish/docs/constraints.md:483-487（插件侧的模式实现要求：白名单为空即全禁、拒绝文案要点明配置键、告警只在因白名单为空而拒绝时发、开关放会话扩展条目、子代理不自动继承由插件决定）、Jellyfish/README.md:818-822（模式类授权由插件提供）</div>
 
     <h2>路径闸门与 MCP 审批</h2>
 
@@ -829,7 +838,7 @@ flowchart TD
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish-Plugins/README.md:593-676（MCP：配置字段表、只读与审批、刷新期无空窗、同名按最严、无人值守下写类不可用）、Jellyfish-Plugins/README.md:677（plan 的 <code>readOnlyTools</code> 与 MCP 同名键无关）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:603-686（MCP：配置字段表、只读与审批、刷新期无空窗、同名按最严、无人值守下写类不可用）、Jellyfish-Plugins/README.md:687（plan 的 <code>readOnlyTools</code> 与 MCP 同名键无关）</div>
 
     <h2>常见问题</h2>
 
@@ -865,7 +874,7 @@ flowchart TD
         而且插件抛错或返回 <code>null</code> 一律按 <code>DENY</code> 处理。细节见 <a href="12-plugin-dev.html">12 从零开发一个插件</a>。</dd>
     </dl>
 
-    <div class="src-block">Jellyfish/README.md:1094-1105（<code>-cli</code> 下工具被拒与 <code>ask_user</code> 的行为）、Jellyfish/docs/constraints.md:467-481（审批 fail-closed 与永不超时的代价）、Jellyfish/docs/constraints.md:507-512（子代理回合必须当场拒绝）、Jellyfish/docs/constraints.md:441-445（查不到身份即全拦）</div>
+    <div class="src-block">Jellyfish/README.md:1099-1110（<code>-cli</code> 下工具被拒与 <code>ask_user</code> 的行为）、Jellyfish/docs/constraints.md:467-481（审批 fail-closed 与永不超时的代价）、Jellyfish/docs/constraints.md:507-512（子代理回合必须当场拒绝）、Jellyfish/docs/constraints.md:441-445（查不到身份即全拦）</div>
 
     <div class="conclusion">
       <h2>关键结论</h2>

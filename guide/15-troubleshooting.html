@@ -332,7 +332,7 @@ mvn -q -Pscript-it test</code></pre>
         </dd>
       </dl>
     </div>
-    <div class="src-block">Jellyfish/README.md:32-57（环境要求与构建）、Jellyfish/README.md:1085-1090（-tui 退 3 与裸跑）、Jellyfish/README.md:110-137（三种模式与参数）、Jellyfish/README.md:140-168（输出与退出码）、Jellyfish-Plugins/README.md:1034-1048（内核升级后的检查清单）</div>
+    <div class="src-block">Jellyfish/README.md:32-57（环境要求与构建）、Jellyfish/README.md:1090-1095（-tui 退 3 与裸跑）、Jellyfish/README.md:110-137（三种模式与参数）、Jellyfish/README.md:140-168（输出与退出码）、Jellyfish-Plugins/README.md:1044-1058（内核升级后的检查清单）</div>
 
     <h2>B. 模型与配置</h2>
 
@@ -555,7 +555,7 @@ mvn -q -Pscript-it test</code></pre>
         </dd>
       </dl>
     </div>
-    <div class="src-block">Jellyfish/README.md:1077-1132（常见问题）、Jellyfish/README.md:517-590（models.json 全字段：type / apiKey / baseUrl / maxTokensField）、Jellyfish/README.md:617-690（vendorBody、思考强度与六条坑）、Jellyfish/README.md:41-53（快速开始：最小 models.json）、Jellyfish/README.md:953-980（双源合并与项目级配置的信任）、Jellyfish/CHANGELOG.md（0.1.1：配置字段名告警）</div>
+    <div class="src-block">Jellyfish/README.md:1082-1137（常见问题）、Jellyfish/README.md:522-595（models.json 全字段：type / apiKey / baseUrl / maxTokensField）、Jellyfish/README.md:622-695（vendorBody、思考强度与六条坑）、Jellyfish/README.md:41-53（快速开始：最小 models.json）、Jellyfish/README.md:958-985（双源合并与项目级配置的信任）、Jellyfish/CHANGELOG.md（0.1.1：配置字段名告警）</div>
 
     <h2>C. 插件</h2>
 
@@ -732,7 +732,7 @@ plugin.requires=*</code></pre>
         </dd>
       </dl>
     </div>
-    <div class="src-block">Jellyfish-Plugins/README.md:1053-1077（常见问题）、Jellyfish-Plugins/README.md:836-892（plugin.properties 与 POM 约定）、Jellyfish-Plugins/README.md:593-673（MCP：状态、退避、白名单）、Jellyfish-Plugins/README.md:1000-1048（打包安装与内核升级检查）、Jellyfish/README.md:460-483（插件安装与加载）、Jellyfish/README.md:808-836（plugins.enabled / disabled / configurations）、Jellyfish/docs/constraints.md:283-300（owner 与命名空间、扫描与配置）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/JellyfishPluginDescriptorFinder.java:101-107（<code>plugin.requires</code> 预检：非法表达式归一为 <code>*</code> 并记一条描述符错误）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/DefensiveVersionManager.java:79-90（<code>isValidConstraint</code> 拿基准版本去试解析，非法即抛）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/PF4JPluginManager.java:275-290（描述符体检：有 loadError 即不启动并标记 FAILED）、Jellyfish/jellyfish-infra/src/test/java/zcd/jellyfish/infra/plugin/JellyfishPluginDescriptorFinderTest.java:75-86（<code>0.0.1-SNAPSHOT</code> 被归一为 <code>*</code> 的用例）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:1063-1088（常见问题）、Jellyfish-Plugins/README.md:846-902（plugin.properties 与 POM 约定）、Jellyfish-Plugins/README.md:603-683（MCP：状态、退避、白名单）、Jellyfish-Plugins/README.md:1010-1058（打包安装与内核升级检查）、Jellyfish/README.md:465-488（插件安装与加载）、Jellyfish/README.md:813-841（plugins.enabled / disabled / configurations）、Jellyfish/docs/constraints.md:283-300（owner 与命名空间、扫描与配置）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/JellyfishPluginDescriptorFinder.java:101-107（<code>plugin.requires</code> 预检：非法表达式归一为 <code>*</code> 并记一条描述符错误）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/DefensiveVersionManager.java:79-90（<code>isValidConstraint</code> 拿基准版本去试解析，非法即抛）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/PF4JPluginManager.java:275-290（描述符体检：有 loadError 即不启动并标记 FAILED）、Jellyfish/jellyfish-infra/src/test/java/zcd/jellyfish/infra/plugin/JellyfishPluginDescriptorFinderTest.java:75-86（<code>0.0.1-SNAPSHOT</code> 被归一为 <code>*</code> 的用例）</div>
 
     <h2>D. 审批与权限</h2>
 
@@ -818,6 +818,9 @@ plugin.requires=*</code></pre>
             <li>拒绝形状（<code>rm -rf /</code>、<code>mkfs</code>、<code>dd of=/dev/</code>）排在可信表<strong>之前</strong>，
               把 <code>rm</code> 写进可信表也拦得住；</li>
             <li>「允许跑但每次都要我批准」是能写出来的姿态：只配白名单、不配可信表即可；</li>
+            <li>不想再一条条维护名单时，可以写<strong>整条 <code>*</code></strong>：<code>allowedCommands: ["*"]</code> 表示准入不再拦任何命令，
+              再配 <code>trustedCommands: ["*"]</code> 就是一律免审批（<code>readOnlyCommands: ["*"]</code> 则是「一律按只读放行」）。
+              它只解除自己所在的那一道门（拒绝形状照旧拒），<strong>写作半个通配（如 <code>git *</code>）没有这个效果</strong>——那会被当成字面量、永不命中，解析时会发告警；</li>
             <li>注意 <code>commandPolicy.enabled=false</code> 只关掉分类器这个便利机制，白名单、可信表、拒绝形状照旧生效。</li>
           </ul>
         </dd>
@@ -922,7 +925,7 @@ plugin.requires=*</code></pre>
         </dd>
       </dl>
     </div>
-    <div class="src-block">Jellyfish/README.md:1092-1105（-cli 工具被拒与 ask_user）、Jellyfish/docs/constraints.md:464-479（审批 fail-closed 与超时）、Jellyfish/docs/constraints.md:481-520（plan 模式要求与 ask_user）、Jellyfish-Plugins/README.md:124-166（pathPolicy）、Jellyfish-Plugins/README.md:196-242（shell 六道判定与五个字段）、Jellyfish-Plugins/README.md:677-713（plan 模式）、Jellyfish/README.md:889-912（permission / ask 段字段表）、Jellyfish-Spring-Boot-Starter/README.md:214-263（starter 审批与提问开关）</div>
+    <div class="src-block">Jellyfish/README.md:1097-1110（-cli 工具被拒与 ask_user）、Jellyfish/docs/constraints.md:464-479（审批 fail-closed 与超时）、Jellyfish/docs/constraints.md:481-520（plan 模式要求与 ask_user）、Jellyfish-Plugins/README.md:124-166（pathPolicy）、Jellyfish-Plugins/README.md:196-252（shell 六道判定与五个字段）、Jellyfish-Plugins/README.md:687-723（plan 模式）、Jellyfish/README.md:894-917（permission / ask 段字段表）、Jellyfish-Spring-Boot-Starter/README.md:214-263（starter 审批与提问开关）</div>
 
     <h2>E. 上下文与会话</h2>
 
@@ -1055,7 +1058,7 @@ plugin.requires=*</code></pre>
         </dd>
       </dl>
     </div>
-    <div class="src-block">Jellyfish/README.md:405-422（会话与压缩）、Jellyfish/README.md:842-884（react / toolOutput / cache 字段表）、Jellyfish/README.md:1107-1116（read_file 单行与落盘路径）、Jellyfish/README.md:665-690（六条坑）、Jellyfish/docs/constraints.md:1135-1140（压缩：只有插件提供策略才可用）、Jellyfish-Plugins/README.md:405-421（resmon：sessions 是唯一无自我约束的增长点）</div>
+    <div class="src-block">Jellyfish/README.md:409-427（会话与压缩）、Jellyfish/README.md:847-889（react / toolOutput / cache 字段表）、Jellyfish/README.md:1112-1121（read_file 单行与落盘路径）、Jellyfish/README.md:670-695（六条坑）、Jellyfish/docs/constraints.md:1139-1144（压缩：只有插件提供策略才可用）、Jellyfish-Plugins/README.md:415-431（resmon：sessions 是唯一无自我约束的增长点）</div>
 
     <h2>F. TUI 显示</h2>
 
@@ -1153,7 +1156,7 @@ plugin.requires=*</code></pre>
         </dd>
       </dl>
     </div>
-    <div class="src-block">Jellyfish/README.md:171-250（TUI 用法、按键、鼠标、日志文件）、Jellyfish/README.md:330-347（面板宽度、浮层与 pluginPanels）、Jellyfish/README.md:1121-1126（思考文本要两边都开）、Jellyfish/README.md:131（--show-thinking 只归 -cli）</div>
+    <div class="src-block">Jellyfish/README.md:171-254（TUI 用法、按键、鼠标、日志文件）、Jellyfish/README.md:334-351（面板宽度、浮层与 pluginPanels）、Jellyfish/README.md:1126-1131（思考文本要两边都开）、Jellyfish/README.md:131（--show-thinking 只归 -cli）</div>
 
     <h2>G. Server</h2>
 
@@ -1325,7 +1328,7 @@ curl -sN -X POST localhost:9096/sessions/$SID/chat \
         </dd>
       </dl>
     </div>
-    <div class="src-block">Jellyfish/README.md:993-1074（Server 模式：绑定、密钥、Origin、接口速查与会话语义）、Jellyfish/README.md:127-131（--port / --host）、Jellyfish/docs/constraints.md:1105-1210（鉴权口径、SSE 事件表、会话语义、错误体）、Jellyfish-Spring-Boot-Starter/README.md:282-294（多用户护栏的命令闸门）</div>
+    <div class="src-block">Jellyfish/README.md:998-1079（Server 模式：绑定、密钥、Origin、接口速查与会话语义）、Jellyfish/README.md:127-131（--port / --host）、Jellyfish/docs/constraints.md:1109-1214（鉴权口径、SSE 事件表、会话语义、错误体）、Jellyfish-Spring-Boot-Starter/README.md:282-294（多用户护栏的命令闸门）</div>
 
     <h2>H. Spring Boot 整合</h2>
 

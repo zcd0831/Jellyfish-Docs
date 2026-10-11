@@ -150,7 +150,7 @@
 }</code></pre>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:515-549（models.json：完整示例、表里没列出的字段就是不支持的、双源与 /reload）、Jellyfish/README.md:72-99（快速开始里的最小 models.json）</div>
+    <div class="src-block">Jellyfish/README.md:520-554（models.json：完整示例、表里没列出的字段就是不支持的、双源与 /reload）、Jellyfish/README.md:72-99（快速开始里的最小 models.json）</div>
 
     <h2><code>providers.&lt;name&gt;</code> 的八个字段</h2>
 
@@ -251,7 +251,7 @@
       </p>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:550-577（<code>providers.&lt;name&gt;</code> 字段表与三条硬规则、重定向与 baseUrl）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/Provider.java（字段与清洗时机）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm/OpenAiLlmClient.java、DeepSeekLlmClient.java、ClaudeLlmClient.java、GeminiLlmClient.java、MiniMaxLlmClient.java（各家 <code>DEFAULT_BASE_URL</code>）、Jellyfish-Spring-Template/src/main/resources/jellyfish/models.json（仓库内现成的 DeepSeek 示例配置）</div>
+    <div class="src-block">Jellyfish/README.md:555-582（<code>providers.&lt;name&gt;</code> 字段表与三条硬规则、重定向与 baseUrl）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/Provider.java（字段与清洗时机）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm/OpenAiLlmClient.java、DeepSeekLlmClient.java、ClaudeLlmClient.java、GeminiLlmClient.java、MiniMaxLlmClient.java（各家 <code>DEFAULT_BASE_URL</code>）、Jellyfish-Spring-Template/src/main/resources/jellyfish/models.json（仓库内现成的 DeepSeek 示例配置）</div>
 
     <h2><code>type</code> 的合法取值</h2>
 
@@ -339,7 +339,7 @@
       <code>maxTokensField</code> 按 <code>id</code> 带过来——否则一次元数据刷新会悄悄清掉配置里还写着的参数。
     </p>
 
-    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/support/ProviderTypes.java（五个常量与两个别名）、Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/LlmModule.java（七个 <code>@StringKey</code> 注册位）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm/LlmClientFactory.java（内建类型优先、插件类型后问、<code>unknownType</code> 报错文案）、Jellyfish/README.md:550-577（插件提供 type 的两条硬规则、目录发现整体替换且不落盘）、Jellyfish/docs/constraints.md:1085-1097（目录发现只换规格）</div>
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/support/ProviderTypes.java（五个常量与两个别名）、Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/LlmModule.java（七个 <code>@StringKey</code> 注册位）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm/LlmClientFactory.java（内建类型优先、插件类型后问、<code>unknownType</code> 报错文案）、Jellyfish/README.md:555-582（插件提供 type 的两条硬规则、目录发现整体替换且不落盘）、Jellyfish/docs/constraints.md:1089-1101（目录发现只换规格）</div>
 
     <h2><code>models[]</code> 的七个字段</h2>
 
@@ -473,7 +473,7 @@
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:578-593（<code>models[]</code> 字段表、<code>maxTokensField</code> 只有模型级、400 陷阱）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/Model.java（两个合法取值与构造期校验、只对 OpenAI 兼容客户端有意义）、Jellyfish/docs/constraints.md:613-614（模型未配 <code>contextLength</code> 时不裁剪）、Jellyfish/docs/constraints.md:1090-1096（<code>maxTokensField</code> 由配置决定且构造期校验）</div>
+    <div class="src-block">Jellyfish/README.md:583-598（<code>models[]</code> 字段表、<code>maxTokensField</code> 只有模型级、400 陷阱）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/Model.java（两个合法取值与构造期校验、只对 OpenAI 兼容客户端有意义）、Jellyfish/docs/constraints.md:613-614（模型未配 <code>contextLength</code> 时不裁剪）、Jellyfish/docs/constraints.md:1094-1100（<code>maxTokensField</code> 由配置决定且构造期校验）</div>
 
     <h2><code>sampling</code>：内核定义的七项参数</h2>
 
@@ -596,7 +596,7 @@
     <code>null</code>（没写）的含义是「沿用」而不是「清空」——代价是<strong>模型级无法单独关掉 provider 级已配的某项</strong>，
     要关掉就把那一项从 provider 级拿下来。</p>
 
-    <div class="src-block">Jellyfish/README.md:594-614（<code>sampling</code> 字段表与各厂商映射、两条口径、为什么其余参数不在这里）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/SamplingSettings.java（七项校验与 <code>warnings()</code>、<code>merge</code> 的「沿用」语义）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm/AbstractOpenAiCompatibleLlmClient.java（不下发 <code>top_k</code>、「哪家认哪项由客户端判断」）、Jellyfish/docs/constraints.md:1074-1091（一个参数只能有一个入口、厂商知识不在内核里）</div>
+    <div class="src-block">Jellyfish/README.md:599-619（<code>sampling</code> 字段表与各厂商映射、两条口径、为什么其余参数不在这里）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/SamplingSettings.java（七项校验与 <code>warnings()</code>、<code>merge</code> 的「沿用」语义）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm/AbstractOpenAiCompatibleLlmClient.java（不下发 <code>top_k</code>、「哪家认哪项由客户端判断」）、Jellyfish/docs/constraints.md:1078-1095（一个参数只能有一个入口、厂商知识不在内核里）</div>
 
     <h2><code>vendorBody</code> 与 <code>vendorHeaders</code>：直通字段</h2>
 
@@ -746,7 +746,7 @@
       头值可能就是密钥。
     </p>
 
-    <div class="src-block">Jellyfish/README.md:615-668（<code>vendorBody</code> / <code>vendorHeaders</code>：直通、深合并、保留键表、六个被丢弃的头）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/support/VendorBody.java（保留键集合、<code>MAX_DEPTH=8</code>、配置期清洗 / 请求期只做深合并、DEBUG 只打键名）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/support/VendorHeaders.java（六个保留头、token 与可见 ASCII 校验、只记头名）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/Provider.java（构造期清洗）</div>
+    <div class="src-block">Jellyfish/README.md:620-673（<code>vendorBody</code> / <code>vendorHeaders</code>：直通、深合并、保留键表、六个被丢弃的头）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/support/VendorBody.java（保留键集合、<code>MAX_DEPTH=8</code>、配置期清洗 / 请求期只做深合并、DEBUG 只打键名）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/support/VendorHeaders.java（六个保留头、token 与可见 ASCII 校验、只记头名）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/Provider.java（构造期清洗）</div>
 
     <h2>思考强度怎么配</h2>
 
@@ -876,7 +876,7 @@
       </p>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:625-660（<code>vendorBody</code> 与思考强度：四家键名取值表、DeepSeek 三协议对照）、Jellyfish/README.md:669-689（坑 第 5 条：想看见思考文本要两边都开）、Jellyfish/README.md:1121-1128（常见问题：配了思考强度却没反应的四类原因）</div>
+    <div class="src-block">Jellyfish/README.md:630-665（<code>vendorBody</code> 与思考强度：四家键名取值表、DeepSeek 三协议对照）、Jellyfish/README.md:674-694（坑 第 5 条：想看见思考文本要两边都开）、Jellyfish/README.md:1126-1133（常见问题：配了思考强度却没反应的四类原因）</div>
 
     <h2><code>cache</code>：让缓存更可能是热的</h2>
 
@@ -954,7 +954,7 @@
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:550-577（<code>cache</code> 两项与缺省）、Jellyfish/README.md:671-689（坑 第 4 条：<code>keepAliveSeconds</code> 要花钱，以及两个坑）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ProviderCacheSettings.java（缺省值、上限 3600、每个空闲期最多续 3 次的理由）</div>
+    <div class="src-block">Jellyfish/README.md:555-582（<code>cache</code> 两项与缺省）、Jellyfish/README.md:676-694（坑 第 4 条：<code>keepAliveSeconds</code> 要花钱，以及两个坑）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ProviderCacheSettings.java（缺省值、上限 3600、每个空闲期最多续 3 次的理由）</div>
 
     <h2>七个坑</h2>
 
@@ -1001,7 +1001,7 @@
       </li>
     </ol>
 
-    <div class="src-block">Jellyfish/README.md:669-689（坑 · 七条逐条）</div>
+    <div class="src-block">Jellyfish/README.md:674-694（坑 · 七条逐条）</div>
 
     <h2>多厂商完整配置示例</h2>
 
@@ -1108,7 +1108,7 @@ java -jar /path/to/jellyfish-cli-0.1.1.jar -cli -p "/model deepseek/deepseek-rea
       模型解析是三级回落：<strong>会话显式 → <code>agent.model</code> → 全局默认</strong>。
     </p>
 
-    <div class="src-block">Jellyfish/README.md:515-549（示例配置与字段语义）、Jellyfish/README.md:72-99（最小示例：gpt-4o / 128000 / 4096）、Jellyfish/README.md:367-387（<code>/model [provider/model]</code> 与离线可用命令）、Jellyfish/README.md:120-139（<code>--model</code> 必须含 <code>/</code>）、Jellyfish/docs/constraints.md:429-434（模型解析三级回落）、Jellyfish-Spring-Template/src/main/resources/jellyfish/models.json（DeepSeek 示例配置）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm/ClaudeLlmClient.java:56-69、GeminiLlmClient.java:28-40（两家客户端的常量清单里只有 baseUrl / 协议版本 / 输出上限，没有上下文窗口）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/model/ModelManager.java:170（内置类型不做目录发现）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/Model.java:93-101（<code>contextLength</code> 是原始类型 <code>int</code>）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/ModelDescriptor.java:39-50（0 ＝未知）</div>
+    <div class="src-block">Jellyfish/README.md:520-554（示例配置与字段语义）、Jellyfish/README.md:72-99（最小示例：gpt-4o / 128000 / 4096）、Jellyfish/README.md:371-391（<code>/model [provider/model]</code> 与离线可用命令）、Jellyfish/README.md:120-139（<code>--model</code> 必须含 <code>/</code>）、Jellyfish/docs/constraints.md:429-434（模型解析三级回落）、Jellyfish-Spring-Template/src/main/resources/jellyfish/models.json（DeepSeek 示例配置）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm/ClaudeLlmClient.java:56-69、GeminiLlmClient.java:28-40（两家客户端的常量清单里只有 baseUrl / 协议版本 / 输出上限，没有上下文窗口）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/model/ModelManager.java:170（内置类型不做目录发现）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/Model.java:93-101（<code>contextLength</code> 是原始类型 <code>int</code>）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/ModelDescriptor.java:39-50（0 ＝未知）</div>
 
     <h2>常见问题</h2>
 
@@ -1151,7 +1151,7 @@ java -jar /path/to/jellyfish-cli-0.1.1.jar -cli -p "/model deepseek/deepseek-rea
       </li>
     </ul>
 
-    <div class="src-block">Jellyfish/README.md:1075-1131（常见问题：没配模型、改了配置不生效、配了思考强度却没反应）、Jellyfish/README.md:511-514（哪些改动要重启）、Jellyfish/README.md:669-689（坑 · 七条）、Jellyfish/README.md:615-668（DeepSeek 三协议对照：MiniMax 走 Chat Completions 那一列）</div>
+    <div class="src-block">Jellyfish/README.md:1080-1136（常见问题：没配模型、改了配置不生效、配了思考强度却没反应）、Jellyfish/README.md:516-519（哪些改动要重启）、Jellyfish/README.md:674-694（坑 · 七条）、Jellyfish/README.md:620-673（DeepSeek 三协议对照：MiniMax 走 Chat Completions 那一列）</div>
 
     <div class="conclusion">
       <h2>关键结论</h2>

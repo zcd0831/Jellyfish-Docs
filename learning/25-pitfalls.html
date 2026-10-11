@@ -360,7 +360,7 @@ flowchart TD
         <tbody>
           <tr><th style="width:88px">现象</th><td>以为 <code>@file</code> 会把文件内容塞进 prompt</td></tr>
           <tr><th>根因</th><td><code>@</code> 只把<strong>路径</strong>写进消息，真正读取由模型调用 <code>read_file</code> 完成——
-              好处是权限判定与 <code>max_bytes</code> 限制照旧生效（<code>InputReferenceCompletion</code>、<code>docs/constraints.md:815</code>）。
+              好处是权限判定与 <code>max_bytes</code> 限制照旧生效（<code>InputReferenceCompletion</code>、<code>docs/constraints.md:816</code>）。
               含空格的路径要写 <code>@my\ file.txt</code>（<code>InputReferenceEscapes</code>）</td></tr>
           <tr><th>规避</th><td>这就是设计意图，不是 bug；指望「大文件被自动读进来」会失望</td></tr>
         </tbody>
@@ -388,7 +388,7 @@ flowchart TD
       <table>
         <tbody>
           <tr><th style="width:88px">现象</th><td>对工具输出做 <code>substring</code> 封顶后，模型拿到的 JSON 解析失败</td></tr>
-          <tr><th>根因</th><td><code>docs/constraints.md:734-739</code> 明确禁止对可能是 JSON 的输出做 <code>substring</code>；
+          <tr><th>根因</th><td><code>docs/constraints.md:735-740</code> 明确禁止对可能是 JSON 的输出做 <code>substring</code>；
               Server 侧还必须按「待发条数」封顶实时输出</td></tr>
           <tr><th>规避</th><td>用结构化的信封（<code>ToolOutputEnvelope</code>）而不是字符串截断</td></tr>
         </tbody>
@@ -658,7 +658,7 @@ flowchart TD
           <tr><td>子代理是「只读」的</td><td>约束是<strong>「委派不得提权」</strong>；只读能力由插件自己声明</td><td><code>SubAgentLauncher.java:394-430</code></td></tr>
           <tr><td><code>ask_user</code> 没人应答 = 拒绝</td><td><strong>fail-open</strong>，返回「不可用」让模型继续（审批才是 fail-closed）</td><td><code>AskChannel.java:204-206</code></td></tr>
           <tr><td><code>agingPercent = 0</code> 是关闭老化</td><td>是<strong>切换口径</strong>；关闭要写 <code>toolOutput.keepRecentMessages = 0</code></td><td><code>AgingStrategy.java:57, 63, 65</code></td></tr>
-          <tr><td><code>@file</code> 会把文件内容内联进 prompt</td><td>只写<strong>路径</strong>，读取由模型调 <code>read_file</code> 完成</td><td><code>docs/constraints.md:815</code></td></tr>
+          <tr><td><code>@file</code> 会把文件内容内联进 prompt</td><td>只写<strong>路径</strong>，读取由模型调 <code>read_file</code> 完成</td><td><code>docs/constraints.md:816</code></td></tr>
           <tr><td>屏幕上没有的消息就不在上下文里</td><td>500 条只是<strong>屏幕</strong>上限；上下文由 <code>PromptAssembler</code> 另算</td><td><code>TranscriptProjector.java:135</code></td></tr>
           <tr><td>TUI 里 <code>Enter</code> 是发送</td><td><code>Enter</code> 换行，<strong><code>Ctrl+S</code> 发送</strong></td><td><code>InputKeyMapper.java:9-14</code></td></tr>
           <tr><td>工具执行失败会抛异常</td><td>只<strong>回灌一段文本</strong>；权限拒绝同理，只转成 <code>"权限拒绝：…"</code></td><td><code>ToolExecutor.java:392-395</code></td></tr>

@@ -851,7 +851,7 @@ public interface JellyfishComponent extends JellyfishRuntime {</code></pre>
       最后在 <code>finally</code> 里 <code>shutdown()</code>（<code>Jellyfish/jellyfish-cli/src/main/java/zcd/jellyfish/cli/Launcher.java:135</code>）。
       这几步的相对顺序<strong>不是外壳的心血来潮</strong>：运行时信息必须在 <code>bootstrap()</code> 之前写入
       （插件在 <code>start()</code> 里就会读它，这条写在
-      <code>Jellyfish/docs/constraints.md:897-898</code>），信任表态也必须在装载配置之前。
+      <code>Jellyfish/docs/constraints.md:898-899</code>），信任表态也必须在装载配置之前。
     </p>
 
     <p>

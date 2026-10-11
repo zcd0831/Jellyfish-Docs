@@ -1120,7 +1120,7 @@ sequenceDiagram
       <code>/ui</code> 不在命令域里，问命令域只会得到空清单，于是它会退化成「回填命令名、
       下次发送才弹页」，与 <code>/resume</code> 的「选中即弹」行为不一致。
       外壳侧的答复方是 <code>ShellCommand.options</code>，顺序与提交路径一致
-      （<code>Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiApp.java:809-817</code>）。
+      （<code>Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiApp.java:815-823</code>）。
     </p>
 
     <!-- ============================================================ -->
@@ -1289,7 +1289,7 @@ sequenceDiagram
       而 <code>/thinking</code> 不生效。
     </p>
 
-    <div class="src-block">Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiApp.java:898-921（分流判定：外壳命令优先于「回合进行中」）</div>
+    <div class="src-block">Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiApp.java:904-927（分流判定：外壳命令优先于「回合进行中」）</div>
 
 <pre><code class="language-java">    /**
      * 提交入口的分流判定。

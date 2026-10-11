@@ -125,7 +125,7 @@ flowchart TB
           <tr><td>顶部面板</td><td>标题与全局信息</td><td><code>ChatShell</code></td></tr>
           <tr><td>左右栏</td><td>插件贡献的面板（通过 <code>PanelContribution</code>）</td><td><code>DockPanel</code>、<code>UiContributions</code></td></tr>
           <tr><td><strong>消息区</strong></td><td>对话正文（markdown 渲染）、工具轨迹、思考文本</td><td><code>TranscriptProjector</code> → <strong>单个 <code>richText</code></strong></td></tr>
-          <tr><td>DOCK</td><td>命令输出与插件面板；<strong>命令输出优先</strong></td><td><code>ChatShell</code></td></tr>
+          <tr><td>DOCK</td><td>命令输出与插件面板；<strong>命令输出优先</strong>（<strong>压缩的完成 / 失败结果也进这块面板</strong>，见 <code>TuiApp.java:605-606</code>）</td><td><code>ChatShell</code></td></tr>
           <tr><td>浮层 Overlay</td><td>命令补全 / 选择器 / 审批 / 提问弹框</td><td><code>Overlay</code>、<code>ApprovalPrompt</code>、<code>AskPrompt</code>、<code>CommandChoicePickerView</code></td></tr>
           <tr><td>输入框</td><td>多行编辑（<code>Ctrl+S</code> 发送）</td><td><code>ChatInputView</code></td></tr>
           <tr><td>状态栏</td><td>一行：模型 / 会话 / token 用量 / 插件状态行</td><td><code>StatusBarView</code></td></tr>
@@ -190,14 +190,14 @@ flowchart TB
           <tr><td><code>onStart</code></td><td>挂接审批 / 提问通道、启动时的一次性工作</td><td><code>:465</code></td></tr>
           <tr><td><code>onStop</code></td><td>收尾</td><td><code>:478</code></td></tr>
           <tr><td><strong><code>render</code></strong></td><td>每帧：交付插件贡献 → 取 UI 快照 → 算布局 → 建 Overlay → 画</td><td><code>:490</code>（<code>:497-499, 516, 534, 618</code>）</td></tr>
-          <tr><td>按键处理</td><td><code>InputKeys</code>；滚动兜底 <code>ScrollFallback</code></td><td><code>:1677</code>、<code>:2080</code></td></tr>
+          <tr><td>按键处理</td><td><code>InputKeys</code>；滚动兜底 <code>ScrollFallback</code></td><td><code>:1683</code>、<code>:2086</code></td></tr>
         </tbody>
       </table>
     </div>
 
     <p><code>render</code> 回调内部的分工值得单独看，它其实就是一帧的流水线：</p>
 
-    <div class="src-block">Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiApp.java:490-620（结构）</div>
+    <div class="src-block">Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiApp.java:490-626（结构）</div>
 
 <pre><code class="language-text">render():                       // 一帧的流水线（顺序有依赖，不能调换）
   1. drainShell()               // :499           把 ShellIngress 里的插件贡献取走（每帧一次）
@@ -433,8 +433,8 @@ sequenceDiagram
         <thead><tr><th></th><th>审批弹框</th><th>提问弹框</th></tr></thead>
         <tbody>
           <tr><td>来源</td><td><code>ApprovalChannel.pendingApproval()</code></td><td><code>AskChannel</code></td></tr>
-          <tr><td>每帧读</td><td><code>TuiApp.java:704-706</code></td><td>同类机制</td></tr>
-          <tr><td>按键</td><td><code>handleApproval</code>（<code>:1870-1895</code>）→ <code>resolve</code>（<code>:1903-1907</code>）</td><td>选项 2–6 个（由工具 schema 约束）</td></tr>
+          <tr><td>每帧读</td><td><code>TuiApp.java:710-712</code></td><td>同类机制</td></tr>
+          <tr><td>按键</td><td><code>handleApproval</code>（<code>:1876-1901</code>）→ <code>resolve</code>（<code>:1909-1913</code>）</td><td>选项 2–6 个（由工具 schema 约束）</td></tr>
           <tr><td><code>Esc</code></td><td><strong>拒绝 + 中断回合</strong></td><td>—</td></tr>
           <tr><td>无人应答</td><td><strong>拒绝</strong>（fail-closed）</td><td><strong>返回「不可用」让模型继续</strong>（fail-open）</td></tr>
         </tbody>
@@ -703,7 +703,7 @@ int available = Math.max(MIN_BODY_WIDTH, totalWidth - prefixWidth);        // :6
 
 <footer class="footer">
   Jellyfish 源码深度解析 · 本页源码依据：<code>TuiApp.java</code>、<code>ChatShell.java</code>、<code>ChatLayout.java</code>、
-  <code>TranscriptProjector.java</code>、<code>ChatState.java</code>、<code>UiCache.java</code>、<code>InflightTurn.java</code>、
+  <code>TranscriptProjector.java</code>、<code>ChatState.java</code>、<code>ShellOutput.java</code>、<code>UiCache.java</code>、<code>InflightTurn.java</code>、
   <code>ChatInputView.java</code>、<code>InputKeyMapper.java</code>、<code>StatusBarView.java</code>、<code>ApprovalPrompt.java</code>、
   <code>AskPrompt.java</code>、<code>UiContributions.java</code>、<code>JellyfishApplication.java</code>、<code>docs/constraints.md</code>、<code>README.md</code>。
 </footer>

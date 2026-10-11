@@ -876,7 +876,7 @@ flowchart TD
     <!-- ============================================================ -->
     <h2>8. shell 插件：注册面的三件事</h2>
 
-    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellPlugin.java:52-67（工具 + 权限处理器 + 输入指令）</div>
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellPlugin.java:52-68（工具 + 权限处理器 + 输入指令）</div>
 
 <pre><code class="language-java">    public void start(PluginContext context) {
         PluginConfig config = PluginConfig.from(context);
@@ -891,8 +891,9 @@ flowchart TD
         this.runner = created;
         LOG.info("命令行插件已启动: timeout={}s maxTimeout={}s idleTimeout={}s allowed={} trusted={}",
                 Integer.valueOf(config.timeoutSeconds()), Integer.valueOf(config.maxTimeoutSeconds()),
-                Integer.valueOf(config.idleTimeoutSeconds()), Integer.valueOf(config.allowedCommands().size()),
-                Integer.valueOf(config.commandPolicy().trustedCommandCount()));
+                Integer.valueOf(config.idleTimeoutSeconds()),
+                PluginConfig.tableSummary(config.allowedCommands()),
+                config.commandPolicy().trustedSummary());
     }
 </code></pre>
 
@@ -1205,7 +1206,7 @@ sequenceDiagram
       这条纪律的目的写在注释里：<strong>否则用户看到的是「jellyfish 都退出了，那条命令还在跑」</strong>，
       而它可能正是插件热部署或关闭的原因。注意「杀进程在锁外做」——杀一棵进程树要等 SIGTERM 的宽限期，
       占着锁会让正在收尾的调用线程排队等它。<code>ShellPlugin.stop()</code> 做的就是取走执行器再调 <code>killAll()</code>
-      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellPlugin.java:69-76</code>），
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellPlugin.java:70-77</code>），
       而执行器字段声明为 <code>volatile</code>：<code>start()</code> 与 <code>stop()</code> 由 PF4J 在不同线程上调用，
       读到陈旧 <code>null</code> 的后果是「一次都没杀」
       （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellPlugin.java:43-49</code>）。
@@ -1364,7 +1365,7 @@ sequenceDiagram
             <td><code>commandPolicy.readOnlyCommands</code></td>
             <td>要不要问人（只读查询不打扰）</td>
             <td>内置表 + 用户追加</td>
-            <td><code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:90-94</code></td>
+            <td><code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:113-117</code></td>
           </tr>
         </tbody>
       </table>
@@ -1377,16 +1378,46 @@ sequenceDiagram
       <code>stat</code>、<code>file</code>，以及两 token 形式的 <code>git status</code> / <code>git log</code> /
       <code>git diff</code> / <code>git show</code> / <code>git rev-parse</code> / <code>npm ls</code> /
       <code>pnpm ls</code>
-      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:90-94</code>）。
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:113-117</code>）。
       刻意保守的三条也写在注释里：<code>find</code> 不在（<code>find -delete</code>）、<code>git fetch</code> /
       <code>git push</code> 不在（会改远端与本地 ref）、<code>npm test</code> / <code>mvn test</code> 不在
       （执行仓库里的任意代码）——这三个都是「看起来无害」的典型误判点
-      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:47-50</code>）。
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:53-56</code>）。
     </p>
+
+    <p>
+      三只旋钮共用<strong>同一套匹配</strong>：单 token 条目匹配该命令本身（因此覆盖它的全部子命令），
+      带空格的条目精确匹配前两个 token；而<strong>「全部」只有一种写法——整条 <code>*</code></strong>。
+      后者含义随表而定：写进白名单是「准入不再拦任何命令」（等价于白名单不表态），
+      写进可信表是「一律免审批」，写进只读表是「一律按只读放行」。它<strong>只解除自己所在的那一道门</strong>：
+      拒绝形状、命令替换 / 重定向升级问人照旧。含 <code>*</code> 却不是整条 <code>*</code> 的条目
+      （如 <code>git *</code>）按<strong>字面量</strong>匹配、永不命中，解析时会发一条配置告警
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/PluginConfig.java:303-313</code>）——
+      这是刻意的：单 token 的 <code>git</code> 本来就覆盖它的全部子命令，再引入一套通配语法只会让人猜哪个更宽
+      （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:87-102</code>）。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:497-510（三张表共用的匹配：单 token / 两 token / 整条 <code>*</code>）</div>
+
+<pre><code class="language-java">    private static boolean matchesPrefix(List&lt;String&gt; table, String command) {
+        String first = firstToken(command);
+        String firstTwo = firstTwoTokens(command);
+        for (String prefix : table) {
+            if (WILDCARD_ALL.equals(prefix)) {
+                // 通配条不参与前缀比较：它独立成条，命中时命令长什么样都不必再看
+                return true;
+            }
+            if (prefix.indexOf(' ') &lt; 0 ? prefix.equals(first) : prefix.equals(firstTwo)) {
+                return true;
+            }
+        }
+        return false;
+    }
+</code></pre>
 
     <p>裁定的顺序即优先级，逐段判定是核心：</p>
 
-    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:264-291（白名单 → 拒绝形状 → 可信表 → 分类器）</div>
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:288-315（白名单 → 拒绝形状 → 可信表 → 分类器）</div>
 
 <pre><code class="language-java">        if (!allowedCommands.isEmpty()) {
             for (String segment : segments.parts) {
@@ -1429,7 +1460,7 @@ sequenceDiagram
       不是「连灾难形状也放行」。<strong>④ 命令替换与重定向独立于只读表</strong>——
       <code>echo evil &gt; ~/.bashrc</code> 的第一个 token 是只读的 <code>echo</code>，
       只看前缀无法察觉后半段的动作，因此含这些构造时一律升级为问人。以上四条见
-      <code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:234-250</code>。
+      <code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:258-274</code>。
     </p>
 
     <div class="callout warn">
@@ -1438,12 +1469,12 @@ sequenceDiagram
         <code>FOO=bar cmd</code>、别名、<code>sh -c</code> 嵌套仍然能绕过前缀判定。因此 <code>CommandPolicy</code>
         的价值不是「挡住攻击」，而是<strong>避免用户因为嫌烦而把 <code>shell</code> 从 <code>askTools</code> 里整个拿掉</strong>
         ——那才是真正的风险；真正的边界是审批本身加上白名单
-        （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:43-45</code>）。
+        （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:49-51</code>）。
         三档裁定的另一半意义在于「不必每次都点批准」：只读查询不该打扰人，写类命令要人看一眼；若只有「放行 / 拒绝」两态，
         用户最终会把授权整个关掉
         （<code>Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellPermissionContribution.java:17-19</code>）。
         三种外壳对 <code>askTools</code> 的态度不同：<code>-cli</code> 没有审批界面，<code>askTools</code> 里的工具
-        一律按拒绝处理（<code>Jellyfish/docs/constraints.md:1204</code>）。
+        一律按拒绝处理（<code>Jellyfish/docs/constraints.md:1208</code>）。
       </p>
     </div>
 
@@ -1470,7 +1501,8 @@ sequenceDiagram
       因为它是语义不兼容而不是可调策略。<br>
       <strong>规避</strong>：管危险动作的仍然是 <code>askTools</code> / <code>deniedTools</code> /
       <code>allowedCommands</code> 这套；服务模式下没有审批界面，因此要按「无人值守」来配——
-      要么把 <code>shell</code> 放进 <code>deniedTools</code>，要么把允许的命令收进 <code>allowedCommands</code> 白名单。
+      要么把 <code>shell</code> 放进 <code>deniedTools</code>，要么把允许的命令收进 <code>allowedCommands</code> 白名单
+      （不想一条条维护就写<strong>整条 <code>*</code></strong>，两张表都可以；含义见上一节）。
     </p>
 
     <h3>12.2 输出落盘保护的是磁盘，不是 CPU</h3>
@@ -1557,6 +1589,11 @@ sequenceDiagram
         <li>
           命令策略（白名单 + 可信表 + 分类器）只回答「能不能跑」与「要不要问人」，它<strong>不是安全边界</strong>；
           真正的边界是审批与白名单，因此 <code>shell</code> 最该做的事是待在 <code>askTools</code> 里。
+        </li>
+        <li>
+          三张表共用同一套匹配：单 token（覆盖该命令的全部子命令）、两 token 精确前缀，以及<strong>整条 <code>*</code></strong>
+          ——后者是「匹配全部命令」的唯一写法，含义随表而定；<code>git *</code> 这类半个通配按字面量匹配、永不命中，
+          解析时会发告警（不替用户猜意图，因为猜错的方向都是放宽权限）。
         </li>
       </ol>
     </div>

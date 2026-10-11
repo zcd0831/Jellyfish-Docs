@@ -133,7 +133,7 @@
       </p>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:507-513（「改完不用重启」与「<code>config.json</code> 不参与热更新」）、Jellyfish/docs/constraints.md「插件扫描与配置」（新增 / 删除 jar 需重启、插件配置段按差异重启）、Jellyfish-Plugins/README.md「构建与安装」（扫描目录与插件集合只在启动期确定）、Jellyfish-Plugins/README.md「打包、安装与调试」</div>
+    <div class="src-block">Jellyfish/README.md:512-518（「改完不用重启」与「<code>config.json</code> 不参与热更新」）、Jellyfish/docs/constraints.md「插件扫描与配置」（新增 / 删除 jar 需重启、插件配置段按差异重启）、Jellyfish-Plugins/README.md「构建与安装」（扫描目录与插件集合只在启动期确定）、Jellyfish-Plugins/README.md「打包、安装与调试」</div>
 
     <h2>2. 热重载：<code>/reload</code> 到底做了什么</h2>
 
@@ -219,7 +219,7 @@ flowchart LR
           <a href="14-spring-boot.html">14 整合到 Spring Boot</a>。</li>
       </ul>
     </div>
-    <div class="src-block">Jellyfish/docs/constraints.md「热更新」（七步顺序、单飞不回滚、与关闭共用一把锁、PF4J 实例缓存）、Jellyfish/README.md:507-513（<code>/reload</code> 的行为与三份文件的范围）、Jellyfish-Plugins/README.md「常见问题」（「改了插件配置段要重启吗？」）</div>
+    <div class="src-block">Jellyfish/docs/constraints.md「热更新」（七步顺序、单飞不回滚、与关闭共用一把锁、PF4J 实例缓存）、Jellyfish/README.md:512-518（<code>/reload</code> 的行为与三份文件的范围）、Jellyfish-Plugins/README.md「常见问题」（「改了插件配置段要重启吗？」）</div>
 
     <h2>3. 插件生命周期：<code>start</code> / <code>stop</code> 的契约</h2>
 
@@ -1138,7 +1138,7 @@ def refresh_watch(ctx):
         <code>Jellyfish-Spring-Template/</code> 六处的 <code>.github/</code>、<code>CONTRIBUTING*</code>、<code>RELEASE*</code>、
         <code>docs/</code> 与各自 <code>AGENTS.md</code> 全文：没有任何 PR 模板、评审清单、分支模型或发版步骤；
         <code>Jellyfish/docs/</code> 下只有 <code>constraints.md</code> 一份，<code>Jellyfish-Skills/</code> 根连 <code>AGENTS.md</code> 都没有；
-        且 <code>Jellyfish-Plugins/CHANGELOG.md:79</code> 写明官方插件<strong>不发布到 Maven Central</strong>，所以也没有「发版步骤」这条路。
+        且 <code>Jellyfish-Plugins/CHANGELOG.md:89</code> 写明官方插件<strong>不发布到 Maven Central</strong>，所以也没有「发版步骤」这条路。
         <strong>不要</strong>照本页的描述去做实际提交，
         请先与仓库维护者确认（仓库地址见 <code>Jellyfish-Plugins/README.md</code> 与 <code>Jellyfish/README.md</code> 的「去哪里找插件」）。
       </p>
@@ -1232,7 +1232,7 @@ git commit -m "feat(mytool): 新增 mytool 插件与 /mytool 命令"</code></pre
           <code>Jellyfish/</code> 与 <code>Jellyfish-Plugins/</code> 的那一层。<code>Jellyfish-Plugins/</code> 里<strong>没有</strong>这个脚本，
           但那两份文档写的都是 <code>./cpPlugins.sh</code>，早期注释让人以为要在插件仓库根执行；
           两份文档的注释现已明确写成「在聚合工作目录根执行（本仓库内没有这个脚本）」（<code>Jellyfish-Plugins/README.md:34</code>、
-          <code>Jellyfish-Plugins/AGENTS.md:25</code>），另 <code>Jellyfish-Plugins/README.md:893</code> 要求「新增插件……往 <code>cpPlugins.sh</code> 加一行」。
+          <code>Jellyfish-Plugins/AGENTS.md:25</code>），另 <code>Jellyfish-Plugins/README.md:903</code> 要求「新增插件……往 <code>cpPlugins.sh</code> 加一行」。
           那份脚本每一行都带 <code>Jellyfish-Plugins/</code> 前缀
           （例如 <code>cp Jellyfish-Plugins/jellyfish-plugin-tools/target/jellyfish-plugin-tools-0.1.1.jar ~/.jellyfish/plugins</code>），
           <strong>要在聚合目录根跑</strong>；在 <code>Jellyfish-Plugins/</code> 里敲只会得到 <code>No such file or directory</code>。
@@ -1244,7 +1244,7 @@ git commit -m "feat(mytool): 新增 mytool 插件与 /mytool 命令"</code></pre
           （本地仓库 <code>mvn install</code>，或你们自己的私服）。</li>
       </ul>
     </div>
-    <div class="src-block">Jellyfish-Plugins/AGENTS.md「Git 约定」「行为准则」「技术架构」（一个插件一个子模块）、Jellyfish-Plugins/README.md「<code>pom.xml</code>」第三条（父 <code>pom.xml</code> 与 <code>cpPlugins.sh</code>）、Jellyfish-Plugins/README.md「插件一览」、Jellyfish-Plugins/pom.xml（<code>&lt;modules&gt;</code> 原文）、Jellyfish-Plugins/CHANGELOG.md:79（官方插件不发布到 Maven Central）、Jellyfish-Plugins/README.md:34 与 Jellyfish-Plugins/AGENTS.md:25（都写 <code>./cpPlugins.sh</code>，而插件仓库根无此文件——两处原文并列，以工作目录根那份为准）、Jellyfish-Plugins/README.md:893（「新增插件……往 <code>cpPlugins.sh</code> 加一行」）、工作目录根 <code>cpPlugins.sh:1-13</code>（13 行 <code>cp</code> 均带 <code>Jellyfish-Plugins/</code> 前缀）、<code>Jellyfish-Plugins/AGENTS.md:128</code>「Git 约定」与 <code>Jellyfish-Plugins/AGENTS.md:140</code>「行为准则」（唯一的协作规范）、「没有贡献流程文档」的检查范围：聚合工作目录根与 <code>Jellyfish/</code> + <code>Jellyfish-Plugins/</code> + <code>Jellyfish-Skills/</code> + <code>Jellyfish-Spring-Boot-Starter/</code> + <code>Jellyfish-Spring-Template/</code> 的 <code>.github/</code>、<code>CONTRIBUTING*</code>、<code>RELEASE*</code>、<code>docs/</code> 与各自 <code>AGENTS.md</code>（均不存在；<code>Jellyfish/docs/</code> 下只有 <code>constraints.md</code>）</div>
+    <div class="src-block">Jellyfish-Plugins/AGENTS.md「Git 约定」「行为准则」「技术架构」（一个插件一个子模块）、Jellyfish-Plugins/README.md「<code>pom.xml</code>」第三条（父 <code>pom.xml</code> 与 <code>cpPlugins.sh</code>）、Jellyfish-Plugins/README.md「插件一览」、Jellyfish-Plugins/pom.xml（<code>&lt;modules&gt;</code> 原文）、Jellyfish-Plugins/CHANGELOG.md:89（官方插件不发布到 Maven Central）、Jellyfish-Plugins/README.md:34 与 Jellyfish-Plugins/AGENTS.md:25（都写 <code>./cpPlugins.sh</code>，而插件仓库根无此文件——两处原文并列，以工作目录根那份为准）、Jellyfish-Plugins/README.md:903（「新增插件……往 <code>cpPlugins.sh</code> 加一行」）、工作目录根 <code>cpPlugins.sh:1-13</code>（13 行 <code>cp</code> 均带 <code>Jellyfish-Plugins/</code> 前缀）、<code>Jellyfish-Plugins/AGENTS.md:128</code>「Git 约定」与 <code>Jellyfish-Plugins/AGENTS.md:140</code>「行为准则」（唯一的协作规范）、「没有贡献流程文档」的检查范围：聚合工作目录根与 <code>Jellyfish/</code> + <code>Jellyfish-Plugins/</code> + <code>Jellyfish-Skills/</code> + <code>Jellyfish-Spring-Boot-Starter/</code> + <code>Jellyfish-Spring-Template/</code> 的 <code>.github/</code>、<code>CONTRIBUTING*</code>、<code>RELEASE*</code>、<code>docs/</code> 与各自 <code>AGENTS.md</code>（均不存在；<code>Jellyfish/docs/</code> 下只有 <code>constraints.md</code>）</div>
 
     <h2>10. 常见问题</h2>
 

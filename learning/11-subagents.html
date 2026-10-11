@@ -738,7 +738,7 @@ sequenceDiagram
         <li><strong>内核不在关键路径上同步回调上层</strong>（<code>AgentRuntime.java:24-26</code>）：
             等待阻塞在调用方线程上（<code>DelegationHandle.await()</code> 的注释：「等待是『编排方等内核』，
             不是『内核等插件』」），终态通过句柄交给调用方，没有反向调用的环。</li>
-        <li><strong>约束文档把这条路直接封死了</strong>：<code>docs/constraints.md:665-666</code>——
+        <li><strong>约束文档把这条路直接封死了</strong>：<code>docs/constraints.md:666-667</code>——
             「子代理与主会话除了传入的任务之外相互隔离（fresh-only，<strong>没有 fork，且不做</strong>）」。
             与之一致的是 <code>SubAgentSettings</code> 里<strong>没有任何「继承父上下文」的开关</strong>，
             因为「子代理与主会话相互隔离是这块能力的设计前提，不是可调参数」
@@ -1040,7 +1040,7 @@ sequenceDiagram
       <code>ReActLooper.java:727-733</code>）。为什么要有「树」这一层账而不是只有「单 run」，
       约束文档给的理由很实在：树预算是「所有子代理都跑满」的封顶，
       「比这个乘积小时它会先于单 run 预算生效，那时个别子代理没触到自己的上限却被截断，
-      而表现是『某几个步骤失败了』——看不出真正的原因」（<code>docs/constraints.md:673-678</code>）。
+      而表现是『某几个步骤失败了』——看不出真正的原因」（<code>docs/constraints.md:674-679</code>）。
     </p>
 
     <div class="callout pitfall">
@@ -1063,7 +1063,7 @@ sequenceDiagram
         同时验证并发许可、等待区、池上界（后者按 <code>并发 × (深度+1)</code> 在<strong>第一次提交时</strong>定型，
         改了要重启进程才生效）。调大 <code>maxSpawnsPerTurn</code> 时要一起调大
         <code>treeTokenBudget</code>，否则先被截断的是树预算而不是单 run 预算
-        （<code>docs/constraints.md:673-678</code>）。
+        （<code>docs/constraints.md:674-679</code>）。
       </p>
     </div>
 

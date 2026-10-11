@@ -156,7 +156,7 @@
         「先做分档决策，再决定要不要实现」——而不是让新扩展点在脚本侧静默不存在。
       </p>
     </div>
-    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/resources/script/extension-points.json（三段的语义与全部条目）、Jellyfish-Plugins/AGENTS.md「关键不变量」（能力档与 <code>ExtensionPointCoverageTest</code>）、Jellyfish-Plugins/README.md:715-742（脚本不是「与 Java 插件同权」）</div>
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/resources/script/extension-points.json（三段的语义与全部条目）、Jellyfish-Plugins/AGENTS.md「关键不变量」（能力档与 <code>ExtensionPointCoverageTest</code>）、Jellyfish-Plugins/README.md:725-752（脚本不是「与 Java 插件同权」）</div>
 
     <h2>前置条件</h2>
 
@@ -196,7 +196,7 @@
         </tbody>
       </table>
     </div>
-    <div class="src-block">Jellyfish-Plugins/README.md:14-28（环境要求与独立 reactor）、Jellyfish-Plugins/pom.xml（<code>java.version</code> / shade 版本线）、Jellyfish/README.md:458-470（扫描目录与安装）、Jellyfish-Plugins/AGENTS.md「项目描述」</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:14-28（环境要求与独立 reactor）、Jellyfish-Plugins/pom.xml（<code>java.version</code> / shade 版本线）、Jellyfish/README.md:463-475（扫描目录与安装）、Jellyfish-Plugins/AGENTS.md「项目描述」</div>
 
     <h2>最小插件工程结构</h2>
 
@@ -220,7 +220,7 @@
         ├── main/resources/plugin.properties
         └── test/java/com/example/myplugin/MyPluginTest.java</code></pre>
 
-    <div class="src-block">Jellyfish-Plugins/README.md:839-864（最小骨架）、Jellyfish-Plugins/AGENTS.md「技术架构」（源码结构范式）、Jellyfish-Plugins/jellyfish-plugin-tools/（可对照的真实布局）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:849-874（最小骨架）、Jellyfish-Plugins/AGENTS.md「技术架构」（源码结构范式）、Jellyfish-Plugins/jellyfish-plugin-tools/（可对照的真实布局）</div>
 
     <h2><code>plugin.properties</code> 完整内容与逐字段说明</h2>
 
@@ -321,7 +321,7 @@ jellyfish.tags=example</code></pre>
           这就是下一条规矩为什么是硬性的。</li>
       </ul>
     </div>
-    <div class="src-block">Jellyfish-Plugins/README.md:839-864（<code>plugin.properties</code> 原文与两条说明）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/JellyfishPluginDescriptorFinder.java（<code>plugin.class</code> 校验、<code>requires</code> 预检、<code>::</code> 拒绝）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/PluginProperties.java 与 JellyfishPluginDescriptor.java（<code>JELLYFISH_TAGS</code>、<code>FALLBACK_VERSION</code>）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/PluginClasspathGuard.java（包内容护栏）、Jellyfish-Plugins/jellyfish-plugin-tools/src/main/resources/plugin.properties（标签注释）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:849-874（<code>plugin.properties</code> 原文与两条说明）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/JellyfishPluginDescriptorFinder.java（<code>plugin.class</code> 校验、<code>requires</code> 预检、<code>::</code> 拒绝）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/PluginProperties.java 与 JellyfishPluginDescriptor.java（<code>JELLYFISH_TAGS</code>、<code>FALLBACK_VERSION</code>）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/PluginClasspathGuard.java（包内容护栏）、Jellyfish-Plugins/jellyfish-plugin-tools/src/main/resources/plugin.properties（标签注释）</div>
 
     <h2><code>pom.xml</code>：先看仓库原文，再看不依赖父 POM 的那份</h2>
 
@@ -362,7 +362,7 @@ jellyfish.tags=example</code></pre>
         <code>maven-metadata-local.xml</code>，没有任何从中央仓库下载的痕迹），换一台机器就解析不到——仓库之外开发请直接用下面那份。
       </p>
     </div>
-    <div class="src-block">Jellyfish-Plugins/README.md:865-894（README 原文 POM）、Jellyfish-Plugins/pom.xml（无发布 profile）、Jellyfish/README.md:1140-1152（内核发布到中央仓库的五个构件）、Jellyfish-Plugins/jellyfish-plugin-shell/pom.xml（模块级 profile 的用途）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:875-904（README 原文 POM）、Jellyfish-Plugins/pom.xml（无发布 profile）、Jellyfish/README.md:1145-1157（内核发布到中央仓库的五个构件）、Jellyfish-Plugins/jellyfish-plugin-shell/pom.xml（模块级 profile 的用途）</div>
 
     <p><strong>替代方案：不依赖父 POM、可直接用的等价 POM</strong>（<code>&lt;parent&gt;</code> 换成 <code>jellyfish-api</code> 坐标）：</p>
 
@@ -499,7 +499,7 @@ jellyfish.tags=example</code></pre>
         <li><strong>在插件仓库里新增插件，要同时登记两处</strong>：父 <code>pom.xml</code> 的 <code>&lt;modules&gt;</code> 里加一行，往 <code>cpPlugins.sh</code> 加一行 <code>cp</code>。只做一处的结果是「构建过了但没拷进扫描目录」或「构建里根本没有这个模块」。</li>
       </ol>
     </div>
-    <div class="src-block">Jellyfish-Plugins/README.md:865-894（两份 POM 与三条规矩）、Jellyfish-Plugins/pom.xml（<code>maven-compiler-plugin</code> 的 <code>-parameters</code> 说明、shade 版本线、<code>dependencyManagement</code>）、Jellyfish-Plugins/jellyfish-plugin-shell/pom.xml（真实的 shade 写法）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/PluginClasspathGuard.java（护栏原文）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:875-904（两份 POM 与三条规矩）、Jellyfish-Plugins/pom.xml（<code>maven-compiler-plugin</code> 的 <code>-parameters</code> 说明、shade 版本线、<code>dependencyManagement</code>）、Jellyfish-Plugins/jellyfish-plugin-shell/pom.xml（真实的 shade 写法）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/PluginClasspathGuard.java（护栏原文）</div>
 
     <h2>SPI 契约：<code>JellyfishPlugin</code></h2>
 
@@ -556,7 +556,7 @@ jellyfish.tags=example</code></pre>
         而回收仍然只按 owner 一次收干净（含命名空间前缀 <code>pluginId::子标识</code>），因此运行期注册不会留下没人收的登记。
       </p>
     </div>
-    <div class="src-block">Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/plugin/JellyfishPlugin.java（类注释与两个方法的全部语义）、Jellyfish/docs/constraints.md「插件生命周期」「owner 与命名空间」、Jellyfish-Plugins/README.md:895-927（README 的四条口径）</div>
+    <div class="src-block">Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/plugin/JellyfishPlugin.java（类注释与两个方法的全部语义）、Jellyfish/docs/constraints.md「插件生命周期」「owner 与命名空间」、Jellyfish-Plugins/README.md:905-937（README 的四条口径）</div>
 
     <h2><code>PluginContext</code> 方法表</h2>
 
@@ -674,7 +674,7 @@ jellyfish.tags=example</code></pre>
         <li><strong>插件不能新开会话、也不能起回合</strong>：这是结构性约束——<code>SubAgentPort</code> 与 <code>AskPort</code> 是四条出边里的两个例外（不是队列），而 <code>ShellIngress</code> 不注入 <code>SessionManager</code> 与 <code>AgentHarness</code>。回合之外<strong>唯一被允许的形态是「显示」</strong>：<code>present(ShellContribution.notice(...))</code>。</li>
       </ul>
     </div>
-    <div class="src-block">Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/plugin/PluginContext.java（全部方法签名与注释）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/RuntimeInfo.java（四个字段与「静态语义」）、Jellyfish/docs/constraints.md「两个注册式能力面 + 四条插件出边」「插件动作只在顶层回合内」「<code>present</code> 与 <code>ShellContribution</code>」、Jellyfish-Plugins/README.md:928-947（方法表与两条边界）</div>
+    <div class="src-block">Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/plugin/PluginContext.java（全部方法签名与注释）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/RuntimeInfo.java（四个字段与「静态语义」）、Jellyfish/docs/constraints.md「两个注册式能力面 + 四条插件出边」「插件动作只在顶层回合内」「<code>present</code> 与 <code>ShellContribution</code>」、Jellyfish-Plugins/README.md:938-957（方法表与两条边界）</div>
 
     <h2 id="extension-points">扩展点清单：24 个可用 + 4 个明确不做</h2>
 
@@ -791,7 +791,7 @@ jellyfish.tags=example</code></pre>
       </ol>
       <p>另有一条兼容底线：请求类型必须显式定义「0 个 handler 时是什么行为」——老插件不注册它时，调用点必须走与改造前<strong>逐字段一致</strong>的路径。</p>
     </div>
-    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/resources/script/extension-points.json（<code>in</code> 24 项与 <code>excluded</code> 4 项及理由）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/（各请求类的 <code>extends ExtensionRequest&lt;R&gt;</code> 声明与 javadoc）、Jellyfish-Plugins/README.md:948-964（两类与合并规则）、Jellyfish/docs/constraints.md「新增同步扩展点」、Jellyfish-Plugins/examples/scripts/README.md（贡献类型的返回值写法）</div>
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/resources/script/extension-points.json（<code>in</code> 24 项与 <code>excluded</code> 4 项及理由）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/（各请求类的 <code>extends ExtensionRequest&lt;R&gt;</code> 声明与 javadoc）、Jellyfish-Plugins/README.md:958-974（两类与合并规则）、Jellyfish/docs/constraints.md「新增同步扩展点」、Jellyfish-Plugins/examples/scripts/README.md（贡献类型的返回值写法）</div>
 
     <h2>最小可运行插件：一个工具 + 一条命令</h2>
 
@@ -934,12 +934,12 @@ public final class MyPlugin implements JellyfishPlugin {
         <li><strong>内核文档早期版本</strong>的示例写的是
           <code>new ToolDescriptor("hello", "按名字打招呼", /* parametersSchema */ ..., /* order */ 0)</code>——
           <strong>源码里没有带 <code>order</code> 的四参构造器</strong>，第三参是 <code>parameters</code>、第四参是 <code>required</code>。
-          该示例<strong>现已改正</strong>（<code>Jellyfish-Plugins/README.md:910-911</code>）；本页代码用的是真实签名。</li>
+          该示例<strong>现已改正</strong>（<code>Jellyfish-Plugins/README.md:920-921</code>）；本页代码用的是真实签名。</li>
         <li><code>ToolDescriptor</code> 里<strong>没有「是否只读」字段</strong>（它曾经有，现已移除）。想要「某个模式下只准用只读工具」，
           得由那个模式的插件按用户写的名单决定，工具自己无法自称只读。</li>
       </ul>
     </div>
-    <div class="src-block">Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/ToolDescriptor.java（两个构造器与「没有只读字段」的说明）、ToolCallRequest.java、ToolCallResult.java、CommandDescriptor.java、CommandResult.java、CommandRequest.java、CommandArguments.java、ExtensionHandler.java（<code>handle(C) throws Exception</code>）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/plugin/PluginContext.java（<code>handle</code> 重载）、Jellyfish-Plugins/README.md:895-927（README 示例，含那处 <code>order</code> 写法）</div>
+    <div class="src-block">Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/ToolDescriptor.java（两个构造器与「没有只读字段」的说明）、ToolCallRequest.java、ToolCallResult.java、CommandDescriptor.java、CommandResult.java、CommandRequest.java、CommandArguments.java、ExtensionHandler.java（<code>handle(C) throws Exception</code>）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/plugin/PluginContext.java（<code>handle</code> 重载）、Jellyfish-Plugins/README.md:905-937（README 示例，含那处 <code>order</code> 写法）</div>
 
     <h2>读自己的配置</h2>
 
@@ -1032,7 +1032,7 @@ context.emit(new ConfigWarningEvent(
         两者并用才正确：只用 <code>configuration()</code> 会把用户设的全局值一起丢掉。
       </p>
     </div>
-    <div class="src-block">Jellyfish-Plugins/README.md:965-993（读配置的五条口径与代码）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/plugin/PluginContext.java（<code>configuration()</code> / <code>configScope()</code> / <code>globalConfiguration()</code> 的注释）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/event/notification/ConfigWarningEvent.java（两个构造器）、Jellyfish-Plugins/README.md:424-454（<code>maxInlineBytes</code> 只认全局级）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:975-1003（读配置的五条口径与代码）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/plugin/PluginContext.java（<code>configuration()</code> / <code>configScope()</code> / <code>globalConfiguration()</code> 的注释）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/event/notification/ConfigWarningEvent.java（两个构造器）、Jellyfish-Plugins/README.md:434-464（<code>maxInlineBytes</code> 只认全局级）</div>
 
     <h2>打包</h2>
 
@@ -1051,7 +1051,7 @@ mvn -q package -DskipTests -pl my-plugin</code></pre>
         <code>SessionSnapshot</code> 加字段之后，不带 clean 报的是 11 条 <code>NoSuchMethodError</code>。
       </p>
     </div>
-    <div class="src-block">Jellyfish-Plugins/README.md:1017-1031（打包与安装）、Jellyfish-Plugins/AGENTS.md「内核升级后要做的检查」、Jellyfish-Plugins/README.md:1032-1052（第 1 步「必须 clean」）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:1027-1041（打包与安装）、Jellyfish-Plugins/AGENTS.md「内核升级后要做的检查」、Jellyfish-Plugins/README.md:1042-1062（第 1 步「必须 clean」）</div>
 
     <h2>安装与验证</h2>
 
@@ -1099,7 +1099,7 @@ java -jar /path/to/jellyfish-cli-0.1.1.jar -cli -p "/hello 世界"</code></pre>
         所以一个坏插件的正确表现是：<strong>它自己不起，其它插件与内核照常。</strong>
       </p>
     </div>
-    <div class="src-block">Jellyfish-Plugins/README.md:1017-1031（打包、安装与调试）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/PF4JPluginManager.java（<code>warnUnavailable</code> / <code>safeStart</code> 的日志原文）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/JellyfishPluginDescriptorFinder.java（不抛异常的理由）、Jellyfish/README.md:386（插件带来的命令会出现在 <code>/help</code>）、Jellyfish/README.md:1030-1040（Server 的 <code>GET /commands</code>）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:1027-1041（打包、安装与调试）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/PF4JPluginManager.java（<code>warnUnavailable</code> / <code>safeStart</code> 的日志原文）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/JellyfishPluginDescriptorFinder.java（不抛异常的理由）、Jellyfish/README.md:390（插件带来的命令会出现在 <code>/help</code>）、Jellyfish/README.md:1035-1045（Server 的 <code>GET /commands</code>）</div>
 
     <h2>调试</h2>
 
@@ -1149,7 +1149,7 @@ assertEquals("你好，世界！", result.getOutput());</code></pre>
       方法名 <code>{被测试方法}_should_{预期结果}_when_{条件}</code>；<strong>单测不启动 Spring 容器、不访问数据库 / 网络等真实外部资源</strong>——
       要真起进程 / 解释器的走 <code>-P*-it</code> profile；夹具要用<strong>全字段构造器</strong>（否则「后加字段读不回来」的失真会被静默吞掉）。</p>
     </div>
-    <div class="src-block">Jellyfish-Plugins/README.md:1017-1031（单测那一段）、Jellyfish-Plugins/AGENTS.md「单元测试规范」、Jellyfish-Plugins/jellyfish-plugin-tools/src/test/java/zcd/jellyfish/plugin/tools/ToolsPluginLoadingTest.java（<code>new ExtensionRegistry(registry)</code> 的装配）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/extension/ExtensionRegistry.java（<code>handler(type, routeKey)</code> 与 <code>invoke(handler, request)</code> 的签名）、Jellyfish-Plugins/jellyfish-plugin-shell/pom.xml（<code>jellyfish-infra</code> 的 <code>test</code> scope 注释）、Jellyfish-Plugins/README.md:1032-1052（「测试夹具反过来，必须用全字段构造器」）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:1027-1041（单测那一段）、Jellyfish-Plugins/AGENTS.md「单元测试规范」、Jellyfish-Plugins/jellyfish-plugin-tools/src/test/java/zcd/jellyfish/plugin/tools/ToolsPluginLoadingTest.java（<code>new ExtensionRegistry(registry)</code> 的装配）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/extension/ExtensionRegistry.java（<code>handler(type, routeKey)</code> 与 <code>invoke(handler, request)</code> 的签名）、Jellyfish-Plugins/jellyfish-plugin-shell/pom.xml（<code>jellyfish-infra</code> 的 <code>test</code> scope 注释）、Jellyfish-Plugins/README.md:1042-1062（「测试夹具反过来，必须用全字段构造器」）</div>
 
     <div class="feature">
       <h3>加载失败的常见原因清单</h3>
@@ -1177,7 +1177,7 @@ assertEquals("你好，世界！", result.getOutput());</code></pre>
         </dd>
       </dl>
     </div>
-    <div class="src-block">Jellyfish-Plugins/README.md:1053-1077（常见问题前两条）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/JellyfishPluginDescriptorFinder.java、PluginClasspathGuard.java、PF4JPluginManager.java、Jellyfish/docs/constraints.md「插件扫描与配置」「owner 与命名空间」、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/event/RegisterOptions.java（默认不覆盖）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:1063-1088（常见问题前两条）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/JellyfishPluginDescriptorFinder.java、PluginClasspathGuard.java、PF4JPluginManager.java、Jellyfish/docs/constraints.md「插件扫描与配置」「owner 与命名空间」、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/event/RegisterOptions.java（默认不覆盖）</div>
 
     <h2>内核升级后要做的检查</h2>
 
@@ -1220,7 +1220,7 @@ mvn -q -Pscript-it test</code></pre>
         夹具要填满全部字段，否则「后加字段读不回来」的失真会被静默吞掉（往返测试照样全绿，而现场是「文件写出来了，重启后那个属性悄悄回到默认值」）。
       </p>
     </div>
-    <div class="src-block">Jellyfish-Plugins/AGENTS.md「内核升级后要做的检查」（命令与三条注意事项原文）、Jellyfish-Plugins/README.md:1032-1052（同样是这三条 + 两条值类型纪律）</div>
+    <div class="src-block">Jellyfish-Plugins/AGENTS.md「内核升级后要做的检查」（命令与三条注意事项原文）、Jellyfish-Plugins/README.md:1042-1062（同样是这三条 + 两条值类型纪律）</div>
 
     <h2>一张图看完插件的整个生命</h2>
 
@@ -1264,7 +1264,7 @@ flowchart TD
         </dd>
       </dl>
     </div>
-    <div class="src-block">Jellyfish-Plugins/README.md:1053-1077（「装了插件但 <code>/help</code> 里没有它的命令？」的三步排查）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/plugin/PluginContext.java（<code>handle</code> 的「类型 + 路由键」语义）、Jellyfish/docs/constraints.md「插件生命周期」</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:1063-1088（「装了插件但 <code>/help</code> 里没有它的命令？」的三步排查）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/plugin/PluginContext.java（<code>handle</code> 的「类型 + 路由键」语义）、Jellyfish/docs/constraints.md「插件生命周期」</div>
 
     <div class="feature">
       <h3><code>start()</code> 里起了个后台线程，停止时为什么报错</h3>
@@ -1310,7 +1310,7 @@ flowchart TD
         </dd>
       </dl>
     </div>
-    <div class="src-block">Jellyfish/README.md:511-513（<code>/reload</code> 只重启配置段变了的插件）、Jellyfish/README.md:1128-1132（改了配置不生效怎么办）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/JellyfishPluginFactory.java（「上下文在每次 start 时重建：描述符里的配置段那一刻才读，因此重启即拿到新配置」）</div>
+    <div class="src-block">Jellyfish/README.md:516-518（<code>/reload</code> 只重启配置段变了的插件）、Jellyfish/README.md:1133-1137（改了配置不生效怎么办）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/JellyfishPluginFactory.java（「上下文在每次 start 时重建：描述符里的配置段那一刻才读，因此重启即拿到新配置」）</div>
 
     <div class="feature">
       <h3>我想顶替内核自带的 <code>task</code> 工具或某个系统命令</h3>
@@ -1326,7 +1326,7 @@ flowchart TD
         </dd>
       </dl>
     </div>
-    <div class="src-block">Jellyfish-Plugins/README.md:1005-1016（显式声明 override）、Jellyfish/docs/constraints.md「覆盖是一条链，不是就地替换」、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/event/RegisterOptions.java（默认不覆盖）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:1015-1026（显式声明 override）、Jellyfish/docs/constraints.md「覆盖是一条链，不是就地替换」、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/event/RegisterOptions.java（默认不覆盖）</div>
 
     <div class="feature">
       <h3>脚本插件和 Java 插件能不能混着用、互相替换</h3>
@@ -1342,7 +1342,7 @@ flowchart TD
       会被判未知键并拒绝加载）；脚本侧的热路径扩展点（<code>request_tuning</code> / <code>aging_strategy</code>）<strong>不冷启动</strong>，
       只声明这两个贡献的脚本永远不会被拉起。</p>
     </div>
-    <div class="src-block">Jellyfish-Plugins/README.md:715-742（脚本与 Java 同构但只覆盖能力档）、Jellyfish-Plugins/examples/scripts/README.md（「没有只读声明这回事」、「热路径点」两节）、Jellyfish-Plugins/jellyfish-script/src/main/resources/script/extension-points.json（<code>hotPath</code> 标记）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:725-752（脚本与 Java 同构但只覆盖能力档）、Jellyfish-Plugins/examples/scripts/README.md（「没有只读声明这回事」、「热路径点」两节）、Jellyfish-Plugins/jellyfish-script/src/main/resources/script/extension-points.json（<code>hotPath</code> 标记）</div>
 
     <div class="conclusion">
       <h2>关键结论</h2>
