@@ -929,12 +929,12 @@ public final class MyPlugin implements JellyfishPlugin {
     </div>
 
     <div class="callout warn">
-      <span class="callout-title">两处「照抄 README 会编译不过」的地方</span>
+      <span class="callout-title">一处「照抄 README 会编译不过」的地方（上游已修）</span>
       <ul>
-        <li>官方 README 的示例里写的是
+        <li><strong>内核文档早期版本</strong>的示例写的是
           <code>new ToolDescriptor("hello", "按名字打招呼", /* parametersSchema */ ..., /* order */ 0)</code>——
           <strong>源码里没有带 <code>order</code> 的四参构造器</strong>，第三参是 <code>parameters</code>、第四参是 <code>required</code>。
-          以源码为准（本页代码用的是真实签名）。</li>
+          该示例<strong>现已改正</strong>（<code>Jellyfish-Plugins/README.md:910-911</code>）；本页代码用的是真实签名。</li>
         <li><code>ToolDescriptor</code> 里<strong>没有「是否只读」字段</strong>（它曾经有，现已移除）。想要「某个模式下只准用只读工具」，
           得由那个模式的插件按用户写的名单决定，工具自己无法自称只读。</li>
       </ul>

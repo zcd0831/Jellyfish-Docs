@@ -1228,17 +1228,14 @@ git commit -m "feat(mytool): 新增 mytool 插件与 /mytool 命令"</code></pre
 
       <p><strong>常见问题</strong></p>
       <ul>
-        <li><strong><code>cpPlugins.sh</code> 在哪？</strong><code>README.md</code> 与 <code>AGENTS.md</code> 都写着
-          <code>./cpPlugins.sh</code>（「把 <code>target/*.jar</code> 拷进扫描目录，缺省 <code>~/.jellyfish/plugins/</code>」），
-          但<strong>这是上游文档自身的矛盾，不是「查不到」</strong>：那两处原文是
-          <code>Jellyfish-Plugins/README.md:34</code>（<code>./cpPlugins.sh                  # 把 target/*.jar 拷进扫描目录（缺省 ~/.jellyfish/plugins/）</code>）
-          与 <code>Jellyfish-Plugins/AGENTS.md:25</code>（<code>./cpPlugins.sh                      # 把 target/*.jar 拷进 ~/.jellyfish/plugins/</code>），
-          另 <code>Jellyfish-Plugins/README.md:893</code> 要求「新增插件……往 <code>cpPlugins.sh</code> 加一行」——
-          三处都隐含「在插件仓库根执行」，而 <code>Jellyfish-Plugins/</code> 根目录里<strong>并没有这个文件</strong>。
-          真正存在的是<strong>聚合工作目录根</strong>的 <code>cpPlugins.sh</code>，它每一行都带 <code>Jellyfish-Plugins/</code> 前缀
-          （例如 <code>cp Jellyfish-Plugins/jellyfish-plugin-tools/target/jellyfish-plugin-tools-0.1.1.jar ~/.jellyfish/plugins</code>）。
-          <strong>以工作目录根那份为准</strong>：在聚合目录根跑 <code>./cpPlugins.sh</code>；
-          按插件仓库文档的写法在 <code>Jellyfish-Plugins/</code> 里敲，只会得到 <code>No such file or directory</code>。
+        <li><strong><code>cpPlugins.sh</code> 在哪？</strong>在<strong>聚合工作目录根</strong>——同时容纳
+          <code>Jellyfish/</code> 与 <code>Jellyfish-Plugins/</code> 的那一层。<code>Jellyfish-Plugins/</code> 里<strong>没有</strong>这个脚本，
+          但那两份文档写的都是 <code>./cpPlugins.sh</code>，早期注释让人以为要在插件仓库根执行；
+          两份文档的注释现已明确写成「在聚合工作目录根执行（本仓库内没有这个脚本）」（<code>Jellyfish-Plugins/README.md:34</code>、
+          <code>Jellyfish-Plugins/AGENTS.md:25</code>），另 <code>Jellyfish-Plugins/README.md:893</code> 要求「新增插件……往 <code>cpPlugins.sh</code> 加一行」。
+          那份脚本每一行都带 <code>Jellyfish-Plugins/</code> 前缀
+          （例如 <code>cp Jellyfish-Plugins/jellyfish-plugin-tools/target/jellyfish-plugin-tools-0.1.1.jar ~/.jellyfish/plugins</code>），
+          <strong>要在聚合目录根跑</strong>；在 <code>Jellyfish-Plugins/</code> 里敲只会得到 <code>No such file or directory</code>。
           没有它时按 <a href="11-plugin-usage.html">11 安装与使用官方插件</a> 里的手工 <code>cp</code> 方式装。</li>
         <li><strong>官方插件能像内核一样从中央仓库拿到吗？</strong>不能。官方插件是 PF4J 插件包，
           <strong>不发布到 Maven Central</strong>，靠把 jar 拷进插件目录来安装。</li>

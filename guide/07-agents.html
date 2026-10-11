@@ -126,7 +126,7 @@ flowchart TD
       "description": "通用编码助手",
       "permissions": {
         "deniedTools": ["write_file", "edit_file"],
-        "askTools": ["bash"]
+        "askTools": ["shell"]
       }
     },
     "scout": {
@@ -187,20 +187,20 @@ flowchart TD
     <p><strong>生效方式</strong>：<span class="tag hot">/reload 生效</span>——<code>agents.json</code> 是内容类配置，改完敲 <code>/reload</code> 会重读配置并重建 agent 索引，不必重启进程。</p>
 
     <div class="callout warn">
-      <span class="callout-title">示例里的 <code>bash</code> 是笔误，工具名是 <code>shell</code></span>
+      <span class="callout-title">工具名是 <code>shell</code>，不是 <code>bash</code></span>
       <p>
-        上面那段示例是 <code>Jellyfish/README.md:690-702</code> 的原文，其中 <code>"askTools": ["bash"]</code> 写的是 <code>bash</code>；
-        <code>Jellyfish/README.md:277</code>（审批框示例里的「工具 <code>bash</code>」）是同一处笔误的另一种出现形式。
-        <strong>工具名以源码为准</strong>：官方 shell 插件注册的工具名是 <code>shell</code>
-        （<code>ShellTool.TOOL_NAME = "shell"</code>，由 <code>ShellPlugin</code> 用它注册该工具），
+        上面那段示例取自 <code>Jellyfish/README.md:690-702</code>。<strong>工具名以源码为准</strong>：官方 shell 插件注册的工具名是
+        <code>shell</code>（<code>ShellTool.TOOL_NAME = "shell"</code>，由 <code>ShellPlugin</code> 用它注册该工具），
         <code>Jellyfish-Plugins/README.md:53</code> 的插件一览也写作 <code>shell</code>；
         <code>Jellyfish-Plugins</code> 的源码里不存在名为 <code>bash</code> 的工具（<code>bash</code> 只是它用 <code>/bin/sh -c</code> 执行命令这件事的俗称）。
-        所以照抄那行时必须写成 <code>"askTools": ["shell"]</code>：写 <code>bash</code> 的效果是「该条目命中不了任何工具」，
-        即「不限制任何工具」——该弹的审批不会弹，而不是「每次跑命令都要批准」。
+        <strong>内核文档早期版本在示例与审批框样张里误写成了 <code>bash</code>，现已改回 <code>shell</code></strong>
+        （<code>Jellyfish/README.md:701</code> 与 <code>Jellyfish/README.md:277</code> 两处）。如果你手上是旧版文档，照抄会写成一个
+        <strong>命中不了任何工具</strong>的名字——效果是「不限制任何工具」而不是「每次跑命令都要批准」，务必手改成
+        <code>"askTools": ["shell"]</code>。
       </p>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:690-722（`agents.json` 完整示例与四字段表）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/AgentDefinition.java:70-80、151-153、189（`description` 可为 null；`model` 为 null 即跟随全局默认，及它的优先级）、Jellyfish-Plugins/README.md:48-66（插件一览：shell 插件的工具名）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellTool.java:41（`TOOL_NAME = "shell"`）与 ShellPlugin.java:57（以它注册）、Jellyfish/README.md:277、701（把 `bash` 当工具名的两处笔误）</div>
+    <div class="src-block">Jellyfish/README.md:690-722（`agents.json` 完整示例与四字段表）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/AgentDefinition.java:70-80、151-153、189（`description` 可为 null；`model` 为 null 即跟随全局默认，及它的优先级）、Jellyfish-Plugins/README.md:48-66（插件一览：shell 插件的工具名）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellTool.java:41（`TOOL_NAME = "shell"`）与 ShellPlugin.java:57（以它注册）、Jellyfish/README.md:277、701（审批框样张与示例里的工具名）</div>
 
     <h2>工具权限三段：allowedTools / deniedTools / askTools</h2>
 

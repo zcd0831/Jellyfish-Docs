@@ -408,11 +408,15 @@ cp jellyfish-plugin-tools/target/jellyfish-plugin-tools-*.jar ~/.jellyfish/plugi
         <li>该脚本做的事有两类：拷 13 个官方插件 jar 到 <code>~/.jellyfish/plugins</code>；
           并把 <code>examples/scripts/python/</code> 下的 <code>web</code> / <code>stock</code> / <code>stockpanel</code>
           拷到 <code>~/.jellyfish/scripts/python/</code>（拷前会先 <code>rm -rf</code> 目标目录）。</li>
-        <li><strong>这是上游文档自身的矛盾，不是「查不到」</strong>：<code>Jellyfish-Plugins/README.md:34</code> 与 <code>Jellyfish-Plugins/AGENTS.md:25</code> 都写 <code>./cpPlugins.sh</code>（隐含「在插件仓库根执行」），而插件仓库根<strong>并没有这个文件</strong>；真正存在的那份在<strong>聚合工作目录根</strong>，且每行都带 <code>Jellyfish-Plugins/</code> 前缀——<strong>以工作目录根那份为准</strong>（在聚合目录根跑 <code>./cpPlugins.sh</code>）；按插件仓库文档的写法在 <code>Jellyfish-Plugins/</code> 里敲，只会得到 <code>No such file or directory</code>。</li>
+        <li><strong>那两处的注释一度会让人误解</strong>：<code>Jellyfish-Plugins/README.md:34</code> 与 <code>Jellyfish-Plugins/AGENTS.md:25</code> 都写 <code>./cpPlugins.sh</code>，
+          早期版本的注释让人以为「在插件仓库根执行」，而插件仓库根<strong>并没有这个文件</strong>。两份文档的注释现已明确写成
+          <strong>「在聚合工作目录根执行（本仓库内没有这个脚本）」</strong>；真正存在的那份在<strong>聚合工作目录根</strong>，
+          且每行都带 <code>Jellyfish-Plugins/</code> 前缀——<strong>以工作目录根那份为准</strong>（在聚合目录根跑 <code>./cpPlugins.sh</code>）；
+          按老文档的写法在 <code>Jellyfish-Plugins/</code> 里敲，只会得到 <code>No such file or directory</code>。</li>
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish-Plugins/README.md:30-46（构建与安装、只装几个）、Jellyfish-Plugins/README.md:1017-1031（打包、安装与调试）、Jellyfish/README.md:458-481（插件一节：扫描目录、重启、<code>plugins.roots</code>）、Jellyfish/README.md:495-514（<code>config.json</code> 与 <code>plugins.roots</code> 语义）、Jellyfish/README.md:815-820（<code>plugins.enabled</code> / <code>plugins.disabled</code> / <code>plugins.configurations</code>）、Jellyfish/README.md:985-992（临时禁用某个插件）、Jellyfish/jellyfish-cli/src/main/resources/config.json、工作目录根的 cpPlugins.sh（13 行 <code>cp</code> 均带 <code>Jellyfish-Plugins/</code> 前缀）、Jellyfish-Plugins/README.md:34 与 Jellyfish-Plugins/AGENTS.md:25（写的是 <code>./cpPlugins.sh</code>，而插件仓库根无此文件——两处原文并列，以工作目录根那份为准）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:30-46（构建与安装、只装几个）、Jellyfish-Plugins/README.md:1017-1031（打包、安装与调试）、Jellyfish/README.md:458-481（插件一节：扫描目录、重启、<code>plugins.roots</code>）、Jellyfish/README.md:495-514（<code>config.json</code> 与 <code>plugins.roots</code> 语义）、Jellyfish/README.md:815-820（<code>plugins.enabled</code> / <code>plugins.disabled</code> / <code>plugins.configurations</code>）、Jellyfish/README.md:985-992（临时禁用某个插件）、Jellyfish/jellyfish-cli/src/main/resources/config.json、工作目录根的 cpPlugins.sh（13 行 <code>cp</code> 均带 <code>Jellyfish-Plugins/</code> 前缀）、Jellyfish-Plugins/README.md:34 与 Jellyfish-Plugins/AGENTS.md:25（两份文档的注释现已明确「在聚合工作目录根执行」，因为插件仓库根无此文件）</div>
 
     <h2>插件仓库是独立的 reactor：改插件前先装内核</h2>
 
