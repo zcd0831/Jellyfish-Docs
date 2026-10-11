@@ -5,10 +5,10 @@ Jellyfish 的**离线文档站**：两套纯静态 HTML 文档，同源不同视
 
 ## 在线阅读
 
-| 文档 | 面向谁 | 规模 | 在线地址 | 本地入口 |
-| --- | --- | --- | --- | --- |
-| **Jellyfish 使用指南** | 想用 Jellyfish 干活的人 | 16 个内容页 + 首页 | <https://jellyfish-agent.cloud/guide/> | [`guide/index.html`](guide/index.html) |
-| **Jellyfish 源码深度解析** | 想读懂内核设计与插件化实现的人 | 28 个内容页 + 首页 | <https://www.jellyfish-agent.cloud/learning/> | [`learning/index.html`](learning/index.html) |
+| 文档 | 面向谁 | 规模 | 在线地址                                               | 本地入口 |
+| --- | --- | --- |----------------------------------------------------| --- |
+| **Jellyfish 使用指南** | 想用 Jellyfish 干活的人 | 16 个内容页 + 首页 | <https://jellyfish-agent.cloud/guide/0.1.1>        | [`guide/index.html`](guide/index.html) |
+| **Jellyfish 源码深度解析** | 想读懂内核设计与插件化实现的人 | 28 个内容页 + 首页 | <https://www.jellyfish-agent.cloud/learning/0.1.1> | [`learning/index.html`](learning/index.html) |
 
 - **使用指南（`guide/`）**：环境与安装、三种运行模式、四份配置文件的全字段表、内置工具速查、会话与上下文、
   权限与审批、官方插件安装、从零开发一个插件、整合到 Spring Boot、故障排查与 FAQ。
