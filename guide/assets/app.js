@@ -85,13 +85,24 @@
 
   /* -------------------------------------------------- 侧栏搜索 + 移动端折叠 */
 
+  /** 展开/收起侧栏（只有窄屏下 .sidebar.open 才有显示效果）并同步按钮状态。 */
+  function setSidebarOpen(open) {
+    var sidebar = $('#sidebar');
+    if (!sidebar) { return; }
+    if (open) { sidebar.classList.add('open'); } else { sidebar.classList.remove('open'); }
+    var btn = $('#navToggle');
+    if (btn) { btn.setAttribute('aria-expanded', open ? 'true' : 'false'); }
+  }
+
   function initNavSearch() {
     var input = $('#navSearch');
     if (!input) { return; }
     var groups = $$('.nav-group');
-    input.addEventListener('input', function () {
+    function apply() {
       var q = input.value.trim().toLowerCase();
       var visible = 0;
+      // 窄屏下侧栏是折叠的，过滤结果看不见、像是"搜索没反应"，有关键词就先展开
+      if (q) { setSidebarOpen(true); }
       $$('.nav-list li').forEach(function (li) {
         var a = li.querySelector('a');
         var text = a ? (a.textContent || '').toLowerCase() : '';
@@ -120,6 +131,11 @@
         if (sidebar) { sidebar.appendChild(empty); }
       }
       empty.style.display = visible === 0 && q ? 'block' : 'none';
+    }
+
+    input.addEventListener('input', apply);
+    input.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') { input.value = ''; apply(); input.blur(); }
     });
   }
 
@@ -128,19 +144,19 @@
     var sidebar = $('#sidebar');
     if (!btn || !sidebar) { return; }
     btn.addEventListener('click', function () {
-      var open = sidebar.classList.toggle('is-open');
-      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      setSidebarOpen(!sidebar.classList.contains('open'));
     });
-    // 点击内容区时收起（移动端）
-    var content = $('.content');
-    if (content) {
-      content.addEventListener('click', function () {
-        if (sidebar.classList.contains('is-open')) {
-          sidebar.classList.remove('is-open');
-          btn.setAttribute('aria-expanded', 'false');
-        }
-      });
+
+    // 移动端收起目录的两条触发：点侧栏里的链接、点右侧正文。
+    // 两者是补集——链接跳转会整页重载，但正文点击不会，所以不能只留一条。
+    function closeIfOpen() {
+      if (sidebar.classList.contains('open')) { setSidebarOpen(false); }
     }
+    sidebar.addEventListener('click', function (event) {
+      if (event.target && event.target.tagName === 'A') { closeIfOpen(); }
+    });
+    var content = $('.content');
+    if (content) { content.addEventListener('click', closeIfOpen); }
   }
 
   /* ------------------------------------------------------------ 代码复制 */

@@ -99,23 +99,34 @@
   /* ------------------------------------------------------------------
    * 3. 移动端折叠导航
    * ------------------------------------------------------------------ */
+  /** 展开 / 收起侧栏（只有窄屏下 .sidebar.open 生效）并同步按钮状态 */
+  function setSidebarOpen(open) {
+    var sidebar = document.getElementById('sidebar');
+    if (!sidebar) { return; }
+    if (open) { sidebar.classList.add('open'); } else { sidebar.classList.remove('open'); }
+    var toggle = document.getElementById('navToggle');
+    if (toggle) { toggle.setAttribute('aria-expanded', open ? 'true' : 'false'); }
+  }
+
   function initNavToggle() {
     var toggle = document.getElementById('navToggle');
     var sidebar = document.getElementById('sidebar');
     if (!toggle || !sidebar) { return; }
 
     toggle.addEventListener('click', function () {
-      var open = sidebar.classList.toggle('open');
-      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      setSidebarOpen(!sidebar.classList.contains('open'));
     });
 
+    // 移动端收起目录的两条触发：点侧栏里的链接、点右侧正文。
+    // 两者是补集——链接跳转会整页重载，但正文点击不会，所以不能只留一条。
+    function closeIfOpen() {
+      if (sidebar.classList.contains('open')) { setSidebarOpen(false); }
+    }
     sidebar.addEventListener('click', function (event) {
-      if (window.matchMedia('(max-width: 980px)').matches &&
-          event.target && event.target.tagName === 'A') {
-        sidebar.classList.remove('open');
-        toggle.setAttribute('aria-expanded', 'false');
-      }
+      if (event.target && event.target.tagName === 'A') { closeIfOpen(); }
     });
+    var content = document.querySelector('.content');
+    if (content) { content.addEventListener('click', closeIfOpen); }
   }
 
   /* ------------------------------------------------------------------
@@ -132,6 +143,8 @@
     function apply() {
       var needle = input.value.trim().toLowerCase();
       var shown = 0;
+      // 窄屏下侧栏是折叠的，过滤结果看不见、像是"搜索没反应"，有关键词就先展开
+      if (needle !== '') { setSidebarOpen(true); }
 
       for (var i = 0; i < items.length; i++) {
         var text = (items[i].textContent || '').toLowerCase();
@@ -140,7 +153,10 @@
         if (hit) { shown++; }
       }
 
-      for (var g = 0; g < groups.length; g++) { groups[g].classList.add('nav-hidden'); }
+      // 有搜索词时先全藏，再把「有命中的组」的标题放回来；清空搜索要全部恢复
+      for (var g = 0; g < groups.length; g++) {
+        groups[g].classList.toggle('nav-hidden', needle !== '');
+      }
 
       if (needle !== '') {
         var lists = sidebar.querySelectorAll('.nav-list');

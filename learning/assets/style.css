@@ -184,6 +184,8 @@ body {
   font-weight: 650;
 }
 .nav-list li.nav-hidden { display: none; }
+/* 组内一条都不命中时，JS 会给组标题加 nav-hidden —— 这里补上规则，否则标题会孤零零留着 */
+.nav-group.nav-hidden { display: none; }
 
 .nav-group {
   padding: 14px 10px 5px;
