@@ -216,7 +216,7 @@ flowchart LR
       </p>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:13-22（姊妹仓库表）、Jellyfish/pom.xml:8-11 与 :34-42（坐标与 7 个模块）、Jellyfish/AGENTS.md「技术架构」（模块职责与依赖方向）、Jellyfish-Spring-Boot-Starter/README.md:15-23（它不是什么）、Jellyfish/README.md:1143-1167（内核构件发布范围）、Jellyfish-Plugins/CHANGELOG.md:104（官方插件不发布到中央仓库）</div>
+    <div class="src-block">Jellyfish/README.md:13-22（姊妹仓库表）、Jellyfish/pom.xml:8-11 与 :34-42（坐标与 7 个模块）、Jellyfish/AGENTS.md「技术架构」（模块职责与依赖方向）、Jellyfish-Spring-Boot-Starter/README.md:15-23（它不是什么）、Jellyfish/README.md:1144-1168（内核构件发布范围）、Jellyfish-Plugins/CHANGELOG.md:104（官方插件不发布到中央仓库）</div>
 
     <h2>能力从哪来：内核只有机制，能力全在插件</h2>
 
@@ -241,12 +241,12 @@ flowchart LR
           <tr>
             <td><strong>唯一的工具 <code>task</code></strong>（把子任务委派给子代理，只拿回结论）</td>
             <td>内核（以 <code>owner=core</code> 注册）</td>
-            <td>Jellyfish/docs/constraints.md:843（<code>task</code> 由 <code>core/subagent/SubAgentTools</code> 注册）、<code>TaskTool.java</code> 的 <code>NAME = "task"</code></td>
+            <td>Jellyfish/docs/constraints.md:844（<code>task</code> 由 <code>core/subagent/SubAgentTools</code> 注册）、<code>TaskTool.java</code> 的 <code>NAME = "task"</code></td>
           </tr>
           <tr>
             <td>系统命令：<code>/help</code> <code>/new</code> <code>/session</code> <code>/resume</code> <code>/model</code> <code>/agent</code> <code>/status</code> <code>/usage</code> <code>/delete</code> <code>/compact</code> <code>/reload</code></td>
             <td>内核（以 <code>owner=core</code> 注册）</td>
-            <td>Jellyfish/README.md:371-390、Jellyfish/docs/constraints.md:841</td>
+            <td>Jellyfish/README.md:372-391、Jellyfish/docs/constraints.md:842</td>
           </tr>
           <tr>
             <td>文件工具 <code>read_file</code> / <code>write_file</code> / <code>edit_file</code> / <code>list_dir</code> / <code>grep_files</code>、提问工具 <code>ask_user</code>、输入框 <code>@</code> 文件引用、路径闸门 <code>pathPolicy</code></td>
@@ -266,7 +266,7 @@ flowchart LR
           <tr>
             <td>压缩<strong>策略</strong>（摘要指令 + 保留条数 / 摘要上限）——<strong>不装它就没有压缩</strong></td>
             <td><code>jellyfish-plugin-compact</code></td>
-            <td>Jellyfish-Plugins/README.md:48-67、Jellyfish/README.md:409-427</td>
+            <td>Jellyfish-Plugins/README.md:48-67、Jellyfish/README.md:410-428</td>
           </tr>
           <tr>
             <td>会话待办五个工具 + <code>/todo</code>；项目约定 <code>AGENTS.md</code> 探测 + <code>/init</code>；skills；MCP 客户端；<code>workflow</code> 编排；plan 模式；资源监控 <code>/resmon</code></td>
@@ -357,7 +357,7 @@ flowchart LR
         插件 jar 的增删另说（见 <a href="02-install.html">02 安装</a>）。
       </p>
     </div>
-    <div class="src-block">Jellyfish/README.md:429-461（委派给子代理）、Jellyfish/README.md:695-750（<code>agents.json</code> 字段与工具权限）、Jellyfish/docs/constraints.md:841-844（系统命令与 <code>task</code> 的注册 owner）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/subagent/TaskTool.java:46-47（<code>NAME = "task"</code>）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/model/SessionModelResolver.java:15-20 与 :27-29（模型解析三级：会话显式选定 → agent 偏好模型 → 全局默认；agent 没配则落到全局默认）、:84-92（<code>resolveByAgentOrDefault</code>：偏好模型为空即 <code>resolveDefault()</code>）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/model/ModelManager.java:342-356（<code>resolveDefault</code> 读的就是 <code>models.json</code> 的 <code>defaultProvider</code> / <code>defaultModel</code>）</div>
+    <div class="src-block">Jellyfish/README.md:430-462（委派给子代理）、Jellyfish/README.md:696-751（<code>agents.json</code> 字段与工具权限）、Jellyfish/docs/constraints.md:842-845（系统命令与 <code>task</code> 的注册 owner）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/subagent/TaskTool.java:46-47（<code>NAME = "task"</code>）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/model/SessionModelResolver.java:15-20 与 :27-29（模型解析三级：会话显式选定 → agent 偏好模型 → 全局默认；agent 没配则落到全局默认）、:84-92（<code>resolveByAgentOrDefault</code>：偏好模型为空即 <code>resolveDefault()</code>）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/model/ModelManager.java:342-356（<code>resolveDefault</code> 读的就是 <code>models.json</code> 的 <code>defaultProvider</code> / <code>defaultModel</code>）</div>
 
     <div class="callout pitfall">
       <span class="callout-title">不装插件会缺什么：别把「设计」当成「装坏了」</span>
@@ -373,7 +373,7 @@ flowchart LR
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:19-21（插件不在本仓库）、Jellyfish/README.md:463-485（插件一节：扫描目录、扩展点、能做什么）、Jellyfish/AGENTS.md「关键不变量」（压缩是插件能力）、Jellyfish/README.md:1082-1084（没配模型会怎样）</div>
+    <div class="src-block">Jellyfish/README.md:19-21（插件不在本仓库）、Jellyfish/README.md:464-486（插件一节：扫描目录、扩展点、能做什么）、Jellyfish/AGENTS.md「关键不变量」（压缩是插件能力）、Jellyfish/README.md:1083-1085（没配模型会怎样）</div>
 
     <h2>三种形态分别适合谁</h2>
 
@@ -421,7 +421,7 @@ flowchart LR
       </p>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:108-118（模式与默认）、Jellyfish/README.md:120-138（参数表）、Jellyfish/README.md:140-168（输出与退出码）、Jellyfish/README.md:695-750（三种外壳下的审批行为）、Jellyfish/README.md:998-1079（Server 模式）、Jellyfish/README.md:1086-1097（常见问题：TUI 退 3、cli 下工具被拒、cli 下 <code>ask_user</code>）</div>
+    <div class="src-block">Jellyfish/README.md:108-118（模式与默认）、Jellyfish/README.md:120-138（参数表）、Jellyfish/README.md:140-168（输出与退出码）、Jellyfish/README.md:696-751（三种外壳下的审批行为）、Jellyfish/README.md:999-1080（Server 模式）、Jellyfish/README.md:1087-1098（常见问题：TUI 退 3、cli 下工具被拒、cli 下 <code>ask_user</code>）</div>
 
     <h2>技术栈与版本</h2>
 
@@ -464,7 +464,7 @@ flowchart LR
             <td>TUI</td>
             <td><code>dev.tamboui:tamboui-bom:0.5.0-SNAPSHOT</code></td>
             <td>TamboUI 界面；<code>jellyfish-tui</code> 依赖的 SNAPSHOT 是它<strong>不发布到中央仓库</strong>的原因</td>
-            <td>Jellyfish/pom.xml:140-145、Jellyfish/README.md:1143-1150</td>
+            <td>Jellyfish/pom.xml:140-145、Jellyfish/README.md:1144-1151</td>
           </tr>
           <tr>
             <td>HTTP 外壳</td>
@@ -506,7 +506,7 @@ flowchart LR
       </table>
     </div>
 
-    <div class="src-block">Jellyfish/pom.xml 各 <code>*version</code> 属性与 <code>dependencyManagement</code> 段、Jellyfish/README.md:23-27 与 :1138-1145、Jellyfish/AGENTS.md「技术架构」、Jellyfish-Plugins/AGENTS.md「项目描述」、Jellyfish-Spring-Boot-Starter/README.md:15-45</div>
+    <div class="src-block">Jellyfish/pom.xml 各 <code>*version</code> 属性与 <code>dependencyManagement</code> 段、Jellyfish/README.md:23-27 与 :1139-1146、Jellyfish/AGENTS.md「技术架构」、Jellyfish-Plugins/AGENTS.md「项目描述」、Jellyfish-Spring-Boot-Starter/README.md:15-45</div>
 
     <h2>先认几个词</h2>
 
@@ -525,32 +525,32 @@ flowchart LR
           <tr>
             <td><code>agent</code></td>
             <td>一套「系统提示词 + 工具权限 + 可选偏好模型」的命名配置：写在 <code>agents.json</code> 里，系统提示词来自同目录的 <code>{agentId}.md</code>。</td>
-            <td>Jellyfish/README.md:695-750</td>
+            <td>Jellyfish/README.md:696-751</td>
           </tr>
           <tr>
             <td><code>session</code>（会话）</td>
             <td>一次对话的载体：<code>/new</code> 新建、<code>/resume</code> 切换、<code>/delete</code> 删除；<strong>不装持久化插件就不落盘</strong>。</td>
-            <td>Jellyfish/README.md:371-390、Jellyfish-Plugins/README.md:264-275</td>
+            <td>Jellyfish/README.md:372-391、Jellyfish-Plugins/README.md:264-275</td>
           </tr>
           <tr>
             <td><code>turn</code>（回合）</td>
             <td>一次 <code>chat</code> 调用 = 一个回合，<strong>回合边界由外壳决定</strong>；一个回合内可以有多轮模型调用与工具调用（受 <code>react.maxRounds</code> 约束，缺省 16）。</td>
-            <td>Jellyfish/docs/constraints.md:214、Jellyfish/README.md:844</td>
+            <td>Jellyfish/docs/constraints.md:214、Jellyfish/README.md:845</td>
           </tr>
           <tr>
             <td><code>tool</code>（工具）</td>
             <td>模型可以调用的能力，<strong>全部由插件注册</strong>（内核只注册 <code>task</code>），每次调用都过权限判定。</td>
-            <td>Jellyfish/README.md:1-11、:458-480、Jellyfish/docs/constraints.md:843</td>
+            <td>Jellyfish/README.md:1-11、:459-481、Jellyfish/docs/constraints.md:844</td>
           </tr>
           <tr>
             <td>插件（<code>plugin</code>）</td>
             <td>独立打包的 PF4J jar，与内核<strong>没有编译期依赖</strong>，只经 <code>jellyfish-api</code> 的 SPI 交互，由内核在启动期扫描加载。</td>
-            <td>Jellyfish/README.md:463-466、Jellyfish-Plugins/README.md:1-11</td>
+            <td>Jellyfish/README.md:464-467、Jellyfish-Plugins/README.md:1-11</td>
           </tr>
           <tr>
             <td>扩展点（extension point）</td>
             <td>插件接入内核的同步契约：工具、命令、提示词贡献、权限拦截、会话持久化 / 恢复、压缩策略、UI 贡献、输入指令走同步扩展点；轮次与会话等通知走异步事件通道。</td>
-            <td>Jellyfish/README.md:463-486（插件一节）</td>
+            <td>Jellyfish/README.md:464-487（插件一节）</td>
           </tr>
           <tr>
             <td><code>owner</code></td>
@@ -561,7 +561,7 @@ flowchart LR
       </table>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:695-750（<code>agents.json</code>）、Jellyfish/README.md:371-390（常用命令）、Jellyfish/README.md:463-486（插件与扩展点）、Jellyfish/docs/constraints.md:214（回合边界）、:265-290（owner 与命名空间）、:842（<code>task</code> 的 owner）、Jellyfish-Plugins/README.md:1-11 与 :254-265（插件定义与会话持久化）</div>
+    <div class="src-block">Jellyfish/README.md:696-751（<code>agents.json</code>）、Jellyfish/README.md:372-391（常用命令）、Jellyfish/README.md:464-487（插件与扩展点）、Jellyfish/docs/constraints.md:214（回合边界）、:265-290（owner 与命名空间）、:843（<code>task</code> 的 owner）、Jellyfish-Plugins/README.md:1-11 与 :254-265（插件定义与会话持久化）</div>
 
     <h2>什么场景不该用它</h2>
 
@@ -620,7 +620,7 @@ flowchart LR
       </p>
     </div>
 
-    <div class="src-block">Jellyfish/docs/constraints.md:1129-1137（服务端单主体模型与命令域同权）、Jellyfish/README.md:1068-1072（服务端是单主体模型）、Jellyfish-Spring-Boot-Starter/README.md:341-350 与 :420-431（多用户护栏与使用限制：<code>Session</code> 无 owner 字段、涉密能力不要装进多租户进程）、Jellyfish-Plugins/README.md:159-162 与 :163-166、:238-245（路径闸门不是沙箱、shell 无沙箱、不做目录围栏、Windows 未验证）、Jellyfish/README.md:23-27 与 :1081-1092（终端要求与 TUI 退 3）、Jellyfish/pom.xml:34-42（模块列表）</div>
+    <div class="src-block">Jellyfish/docs/constraints.md:1132-1140（服务端单主体模型与命令域同权）、Jellyfish/README.md:1069-1073（服务端是单主体模型）、Jellyfish-Spring-Boot-Starter/README.md:341-350 与 :420-431（多用户护栏与使用限制：<code>Session</code> 无 owner 字段、涉密能力不要装进多租户进程）、Jellyfish-Plugins/README.md:159-162 与 :163-166、:238-245（路径闸门不是沙箱、shell 无沙箱、不做目录围栏、Windows 未验证）、Jellyfish/README.md:23-27 与 :1082-1093（终端要求与 TUI 退 3）、Jellyfish/pom.xml:34-42（模块列表）</div>
 
     <div class="conclusion">
       <h2>关键结论</h2>

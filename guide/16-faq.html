@@ -202,7 +202,7 @@
       它在 <code>user</code> 包里补上了 userId 维度（<code>SessionOwnerStore</code> / <code>ApprovalGateway</code>），
       并给出「不存在」与「不属于你」对外<strong>同一个答复</strong>这类护栏。详见 <a href="14-spring-boot.html">14 整合到 Spring Boot</a>。
     </p>
-    <div class="src-block">Jellyfish/README.md:1-22（是什么与三种形态）、Jellyfish/README.md:34-57（环境与构建）、Jellyfish/README.md:108-137（三种模式与参数）、Jellyfish/README.md:375-407（自带命令与离线可用）、Jellyfish/README.md:522-595（type 与 models）、Jellyfish/README.md:30（模型是一个 OpenAI 兼容的 API）、Jellyfish/README.md:563（<code>baseUrl</code>：服务地址，缺省用该 type 的官方地址）、Jellyfish/README.md:570（<code>type</code> 也可由插件提供：自建网关、私有协议、本地 llama.cpp）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm/AbstractOpenAiCompatibleLlmClient.java:63-92（<code>baseUrl()</code> 优先取 provider 配置、<code>chatCompletionsUrl()</code> 拼 <code>/v1/chat/completions</code>、Bearer 鉴权与 <code>vendorHeaders</code> 落在发现模型这一步）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/support/LlmClients.java:75（<code>resolveBaseUrl</code>：配置优先、缺省回退官方地址）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/support/LlmClients.java:102（<code>appendVersion</code>：baseUrl 已含版本段时不重复拼）、Jellyfish-Plugins/jellyfish-plugin-project/src/main/java/zcd/jellyfish/plugin/project/ContributionCache.java:15（三仓唯一提到 Claude Code 的地方：借它说明缓存时机，非产品对比）、Jellyfish-Plugins/README.md:44-66（13 个官方插件一览）、Jellyfish-Spring-Boot-Starter/README.md:341-390（多用户护栏）</div>
+    <div class="src-block">Jellyfish/README.md:1-22（是什么与三种形态）、Jellyfish/README.md:34-57（环境与构建）、Jellyfish/README.md:108-137（三种模式与参数）、Jellyfish/README.md:376-408（自带命令与离线可用）、Jellyfish/README.md:523-596（type 与 models）、Jellyfish/README.md:30（模型是一个 OpenAI 兼容的 API）、Jellyfish/README.md:564（<code>baseUrl</code>：服务地址，缺省用该 type 的官方地址）、Jellyfish/README.md:571（<code>type</code> 也可由插件提供：自建网关、私有协议、本地 llama.cpp）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm/AbstractOpenAiCompatibleLlmClient.java:63-92（<code>baseUrl()</code> 优先取 provider 配置、<code>chatCompletionsUrl()</code> 拼 <code>/v1/chat/completions</code>、Bearer 鉴权与 <code>vendorHeaders</code> 落在发现模型这一步）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/support/LlmClients.java:75（<code>resolveBaseUrl</code>：配置优先、缺省回退官方地址）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/support/LlmClients.java:102（<code>appendVersion</code>：baseUrl 已含版本段时不重复拼）、Jellyfish-Plugins/jellyfish-plugin-project/src/main/java/zcd/jellyfish/plugin/project/ContributionCache.java:15（三仓唯一提到 Claude Code 的地方：借它说明缓存时机，非产品对比）、Jellyfish-Plugins/README.md:44-66（13 个官方插件一览）、Jellyfish-Spring-Boot-Starter/README.md:341-390（多用户护栏）</div>
 
     <h2 id="faq-2">二、配置与模型</h2>
 
@@ -289,7 +289,7 @@
       不落盘、不进 <code>/session</code> 列表。run 的归档另有 <code>subAgent.archiveKeepFiles</code>（缺省 200）与
       <code>archiveMaxBytes</code>（缺省 100 MiB）两道配额，与工具输出分开算。
     </p>
-    <div class="src-block">Jellyfish/README.md:522-595（providers / models 字段）、Jellyfish/README.md:622-695（vendorBody 与六条坑）、Jellyfish/README.md:847-889（react / toolOutput / cache 字段表）、Jellyfish/README.md:918-955（subAgent 字段表）、Jellyfish/README.md:958-996（双源合并、项目级信任、常见配置任务）、Jellyfish/README.md:1086-1137（常见问题）、Jellyfish/README.md:1004-1010（Server 密钥）、Jellyfish/CHANGELOG.md（0.1.1：配置字段名与数值的告警）</div>
+    <div class="src-block">Jellyfish/README.md:523-596（providers / models 字段）、Jellyfish/README.md:623-696（vendorBody 与六条坑）、Jellyfish/README.md:848-890（react / toolOutput / cache 字段表）、Jellyfish/README.md:919-956（subAgent 字段表）、Jellyfish/README.md:959-997（双源合并、项目级信任、常见配置任务）、Jellyfish/README.md:1087-1138（常见问题）、Jellyfish/README.md:1005-1011（Server 密钥）、Jellyfish/CHANGELOG.md（0.1.1：配置字段名与数值的告警）</div>
 
     <h2 id="faq-3">三、使用与权限</h2>
 
@@ -365,7 +365,7 @@
       <code>rm -rf /</code> 依旧被拒。要「允许跑但每次都要我批准」，就只配白名单、不配可信表。
       不想一条条维护名单时，两个表都可以写<strong>整条 <code>*</code></strong>（匹配全部命令；写作 <code>git *</code> 没有这个效果）。
     </p>
-    <div class="src-block">Jellyfish/README.md:140-168（退出码与兜底）、Jellyfish/README.md:824-833（Unreleased：重试 1 次与截断提示）、Jellyfish/README.md:860-870（react 字段表）、Jellyfish/README.md:1097-1110（-cli 下工具被拒）、Jellyfish/README.md:450-461（子代理不继承模型、token 计入父会话）、Jellyfish/docs/constraints.md:495-520（ask_user 与审批的差别）、Jellyfish/docs/constraints.md:1145-1214（边界与明确不做：UI 深度、子代理、压缩）、Jellyfish-Plugins/README.md:196-252（白名单与可信表）、Jellyfish-Plugins/README.md:244-252（Windows 未验证）、Jellyfish-Plugins/README.md:253（非 POSIX 平台映射成 <code>cmd.exe /c</code>）、Jellyfish-Plugins/README.md:652（MCP 子进程环境白名单：Windows 另加四个变量）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommonsExecShellProcessLauncher.java:28（Windows 未验证的源码说明）、Jellyfish-Plugins/jellyfish-plugin-session-file/src/main/java/zcd/jellyfish/plugin/sessionfile/SessionStore.java:220（不支持 POSIX 权限位的平台跳过权限设置）、Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/Utf8Files.java:82（同样跳过 POSIX 权限位）、Jellyfish-Plugins/CHANGELOG.md:225（同上，行为变更记录）、Jellyfish/docs/constraints.md:1229（UI 深度明确不做：主题与自定义颜色）、Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiApp.java:287（<code>jellyfish.tui.pluginPanels</code>）、Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiApp.java:312（<code>jellyfish.tui.mouseCapture</code>）、Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiTerminal.java:33（<code>jellyfish.tui.skipTerminalCheck</code>）、Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/UiRender.java:22（颜色语义收在一个类里：插件换不了主题）、Jellyfish-Plugins/jellyfish-plugin-resmon/src/main/java/zcd/jellyfish/plugin/resmon/ResmonPanel.java:65（阈值决定面板配色档位）</div>
+    <div class="src-block">Jellyfish/README.md:140-168（退出码与兜底）、Jellyfish/README.md:825-834（Unreleased：重试 1 次与截断提示）、Jellyfish/README.md:861-871（react 字段表）、Jellyfish/README.md:1098-1111（-cli 下工具被拒）、Jellyfish/README.md:451-462（子代理不继承模型、token 计入父会话）、Jellyfish/docs/constraints.md:495-521（ask_user 与审批的差别）、Jellyfish/docs/constraints.md:1148-1217（边界与明确不做：UI 深度、子代理、压缩）、Jellyfish-Plugins/README.md:196-252（白名单与可信表）、Jellyfish-Plugins/README.md:244-252（Windows 未验证）、Jellyfish-Plugins/README.md:253（非 POSIX 平台映射成 <code>cmd.exe /c</code>）、Jellyfish-Plugins/README.md:652（MCP 子进程环境白名单：Windows 另加四个变量）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommonsExecShellProcessLauncher.java:28（Windows 未验证的源码说明）、Jellyfish-Plugins/jellyfish-plugin-session-file/src/main/java/zcd/jellyfish/plugin/sessionfile/SessionStore.java:220（不支持 POSIX 权限位的平台跳过权限设置）、Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/Utf8Files.java:82（同样跳过 POSIX 权限位）、Jellyfish-Plugins/CHANGELOG.md:225（同上，行为变更记录）、Jellyfish/docs/constraints.md:1232（UI 深度明确不做：主题与自定义颜色）、Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiApp.java:287（<code>jellyfish.tui.pluginPanels</code>）、Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiApp.java:312（<code>jellyfish.tui.mouseCapture</code>）、Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiTerminal.java:33（<code>jellyfish.tui.skipTerminalCheck</code>）、Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/UiRender.java:22（颜色语义收在一个类里：插件换不了主题）、Jellyfish-Plugins/jellyfish-plugin-resmon/src/main/java/zcd/jellyfish/plugin/resmon/ResmonPanel.java:65（阈值决定面板配色档位）</div>
 
     <h2 id="faq-4">四、插件与集成</h2>
 
@@ -442,7 +442,7 @@
       是否被 <code>jellyfish.json</code> 的 <code>plugins.disabled</code> 排掉；以及<strong>是否重启过进程</strong>（新增 jar 不热加载）。
       完整清单见 <a href="15-troubleshooting.html#ts-c1">15 页 C1</a> 与 <a href="15-troubleshooting.html#ts-c2">C2</a>。
     </p>
-    <div class="src-block">Jellyfish/docs/constraints.md:234-300（present / ShellContribution、插件生命周期、owner）、Jellyfish/docs/constraints.md:1216-1254（边界与明确不做）、Jellyfish/README.md:465-488（插件安装与能力边界）、Jellyfish-Plugins/README.md:44-66（插件一览）、Jellyfish-Plugins/README.md:415-431（resmon：sessions 增长）、Jellyfish-Plugins/README.md:1029-1077（覆盖、打包安装与调试）、Jellyfish-Plugins/README.md:622-702（MCP 只读与审批）、Jellyfish/README.md:837-841（readOnlyTools 与「工具无法自称只读」）、Jellyfish-Spring-Boot-Starter/README.md:42-59（引入与快速开始）、Jellyfish-Spring-Boot-Starter/README.md:295-309（配置分工）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/RuntimeInfo.java（四个字段与静态语义）</div>
+    <div class="src-block">Jellyfish/docs/constraints.md:234-300（present / ShellContribution、插件生命周期、owner）、Jellyfish/docs/constraints.md:1219-1257（边界与明确不做）、Jellyfish/README.md:466-489（插件安装与能力边界）、Jellyfish-Plugins/README.md:44-66（插件一览）、Jellyfish-Plugins/README.md:415-431（resmon：sessions 增长）、Jellyfish-Plugins/README.md:1029-1077（覆盖、打包安装与调试）、Jellyfish-Plugins/README.md:622-702（MCP 只读与审批）、Jellyfish/README.md:838-842（readOnlyTools 与「工具无法自称只读」）、Jellyfish-Spring-Boot-Starter/README.md:42-59（引入与快速开始）、Jellyfish-Spring-Boot-Starter/README.md:295-309（配置分工）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/RuntimeInfo.java（四个字段与静态语义）</div>
 
     <h2 id="glossary">术语表</h2>
 
@@ -467,14 +467,14 @@
 
       <dt>ask（提问）</dt>
       <dd>「问你一件事」的通道，与审批刻意分开：机制在内核（<code>AskChannel</code>）、工具在官方 tools 插件（<code>ask_user</code>）；
-        <strong>不涉及权限</strong>，且不是 fail-closed（Jellyfish/docs/constraints.md:495-520）。</dd>
+        <strong>不涉及权限</strong>，且不是 fail-closed（Jellyfish/docs/constraints.md:495-521）。</dd>
 
       <dt>compact（压缩）</dt>
       <dd>把更早的对话压成一份摘要，之后每轮只带摘要 + 最近若干条原文；<strong>依赖插件提供策略</strong>，
         不启用压缩插件时整体不可用且不回退内置（<a href="09-session.html">09 会话与上下文</a>）。</dd>
 
       <dt>context window（上下文窗口）</dt>
-      <dd>模型单次请求能容纳的 token 上限，在 <code>models[].contextLength</code> 里声明，内核用它算压缩预算（Jellyfish/README.md:585-595）。</dd>
+      <dd>模型单次请求能容纳的 token 上限，在 <code>models[].contextLength</code> 里声明，内核用它算压缩预算（Jellyfish/README.md:586-596）。</dd>
 
       <dt>extension point（扩展点）</dt>
       <dd>内核允许插件介入的位置，分两个能力面：<code>ExtensionRegistry</code>（同步、不可丢，如工具、参数改写、权限拦截、会话持久化、输入改写）
@@ -514,7 +514,7 @@
 
       <dt>prompt cache（提示词缓存）</dt>
       <dd>厂商侧按<strong>前缀匹配</strong>做的输入缓存：改掉历史上的一个字节，后面的整段都会从约 <code>0.1×</code> 的命中价
-        变回 <code>1×</code> 全价；内核用 aging 与 <code>cache</code> 段治理它（Jellyfish/README.md:881-889）。</dd>
+        变回 <code>1×</code> 全价；内核用 aging 与 <code>cache</code> 段治理它（Jellyfish/README.md:882-890）。</dd>
 
       <dt>Reactor</dt>
       <dd>Maven 的多模块构建单元。<code>Jellyfish</code> 与 <code>Jellyfish-Plugins</code> 是<strong>两个独立 reactor</strong>，
@@ -522,15 +522,15 @@
 
       <dt>ReAct</dt>
       <dd>「推理 → 调用工具 → 看结果 → 再推理」的循环，内核的实现是 <code>ReActLooper</code>，
-        跑在 <code>react</code> 线程池上（上限 8 条线程 = 并发顶层回合数）（Jellyfish/docs/constraints.md:523-560）。</dd>
+        跑在 <code>react</code> 线程池上（上限 8 条线程 = 并发顶层回合数）（Jellyfish/docs/constraints.md:524-561）。</dd>
 
       <dt>round（轮次）</dt>
       <dd>回合内部的一次模型调用；单回合轮数上限是 <code>react.maxRounds</code>（缺省 <code>16</code>），
-        达到上限仍未收敛 → <code>-cli</code> 退 <code>6</code>、SSE <code>truncated=true</code>（Jellyfish/README.md:849-870）。</dd>
+        达到上限仍未收敛 → <code>-cli</code> 退 <code>6</code>、SSE <code>truncated=true</code>（Jellyfish/README.md:850-871）。</dd>
 
       <dt>run</dt>
       <dd>子代理的一次执行（一个 <code>task</code> 或 <code>workflow</code> 步骤 = 一个 run）。run 跑在独立的 <code>agent-run</code> 线程池上，
-        受 <code>subAgent</code> 的并发、墙钟与 token 预算约束，归档到 <code>&lt;toolOutput.dir&gt;/subagent-runs</code>（Jellyfish/README.md:918-955）。</dd>
+        受 <code>subAgent</code> 的并发、墙钟与 token 预算约束，归档到 <code>&lt;toolOutput.dir&gt;/subagent-runs</code>（Jellyfish/README.md:919-956）。</dd>
 
       <dt>RuntimeInfo</dt>
       <dd>插件能看到的「我正跑在哪种外壳里」的只读快照：<code>Shell</code> / <code>hasUI</code> / <code>supportsApproval</code> / <code>interactive</code>；
@@ -551,7 +551,7 @@
 
       <dt>spill（落盘）</dt>
       <dd>工具输出溢出时把完整内容写进文件、只回灌头尾预览 + 信封；<strong>落盘只在溢出时发生</strong>，短输出不产生文件；
-        单条上限是 <code>react.toolOutput.spillMaxBytes</code>（缺省 32 MiB，Jellyfish/docs/constraints.md:718-746）。</dd>
+        单条上限是 <code>react.toolOutput.spillMaxBytes</code>（缺省 32 MiB，Jellyfish/docs/constraints.md:719-747）。</dd>
 
       <dt>SPI</dt>
       <dd>插件对内核的编程接口面，集中在 <code>jellyfish-api</code>：<code>JellyfishPlugin</code> 的 <code>start(PluginContext)</code> /
@@ -560,15 +560,15 @@
       <dt>subagent（子代理）</dt>
       <dd>主会话按 <code>task</code> 或 <code>workflow</code> 派出去的一次委派执行：不继承主会话模型、会话是临时的、
         除了任务描述几乎什么都不共享；它的 token 计入父会话，「归谁所有」沿父链只穿临时会话
-        （Jellyfish/README.md:431-461）。</dd>
+        （Jellyfish/README.md:432-462）。</dd>
 
       <dt>token</dt>
       <dd>模型计费与预算的单位。内核记录用量（<code>/usage</code> 可看），并给子代理设了
-        <code>runTokenBudget</code> / <code>treeTokenBudget</code> 两道上限（Jellyfish/README.md:938-950）。</dd>
+        <code>runTokenBudget</code> / <code>treeTokenBudget</code> 两道上限（Jellyfish/README.md:939-951）。</dd>
 
       <dt>tool（工具）</dt>
       <dd>模型可以调用的一个动作，由插件注册（内核只自带 <code>task</code>）；执行统一走 <code>ToolExecutor</code>：
-        权限 → 路由 → 截断的唯一执行点（Jellyfish/docs/constraints.md:713-717）。</dd>
+        权限 → 路由 → 截断的唯一执行点（Jellyfish/docs/constraints.md:714-718）。</dd>
 
       <dt>tool call（工具调用）</dt>
       <dd>assistant 消息里的一次调用请求（带 <code>toolCallId</code> 与参数），与随后的 tool 结果消息<strong>成对</strong>出现；
@@ -599,7 +599,7 @@
       <dt>工具轨迹</dt>
       <dd>界面上按工具调用逐行显示的记录：TUI 里是 <code>⎿ 工具名 · 结果摘要 · 调用参数</code>；
         失败标记来自结果信封里的 <code>metadata</code>（<code>exitCode</code> / <code>terminal</code>），<strong>界面按字段渲染、不解析文本</strong>
-        （Jellyfish/README.md:1104-1106）。</dd>
+        （Jellyfish/README.md:1105-1107）。</dd>
 
       <dt>门面（facade）</dt>
       <dd><code>JellyfishUserFacade</code>：Spring Boot 接入方唯一应当使用的交互入口。它替内核补上归属校验
@@ -608,17 +608,17 @@
 
       <dt>命令域</dt>
       <dd>输入以 <code>/</code> 开头就走的那条路：<code>CommandManager</code> 按命令名路由，别名与用法来自 <code>CommandDescriptor</code>；
-        候选查询是与执行<strong>平行</strong>的只读路径，不执行命令（Jellyfish/docs/constraints.md:839-863）。</dd>
+        候选查询是与执行<strong>平行</strong>的只读路径，不执行命令（Jellyfish/docs/constraints.md:840-864）。</dd>
 
       <dt>输入改写</dt>
       <dd><code>InputTransformRequest</code> 链：<strong>排在命令判定之后、指令解析之前、建会话之前</strong>，可 <code>continueAsIs</code> /
         <code>replace</code> / <code>handled</code> 短路。它跑在调用线程上（TUI 路径上是渲染线程），因此只能纯计算、不得阻塞
-        （Jellyfish/docs/constraints.md:790-801）。</dd>
+        （Jellyfish/docs/constraints.md:791-802）。</dd>
 
       <dt>输入指令（<code>!</code> 与 <code>@</code>）</dt>
       <dd>输入框里的特殊语法，<strong>归插件不归外壳</strong>（没有插件就没有这个语法）：<code>!命令</code> 手动执行一条命令、
         不进模型，结果落成一条 <strong>user 消息</strong>；<code>@路径</code> 只做引用、<strong>不内联不展开</strong>，
-        真正读取由模型调用 <code>read_file</code>（Jellyfish/docs/constraints.md:807-837）。</dd>
+        真正读取由模型调用 <code>read_file</code>（Jellyfish/docs/constraints.md:808-838）。</dd>
 
       <dt>头槽位（head slot）</dt>
       <dd>审批与提问队列的裁决口：<strong>每会话一个</strong>，会话内是 FIFO 队列且<strong>只有头槽位能被裁决 / 作答</strong>，
@@ -632,9 +632,9 @@
       <dt>信封（落盘信封）</dt>
       <dd>工具输出超限时回灌给模型的唯一格式：<code>{_truncated, _tool, _total_chars, _total_lines, _path, _hint, _partial, preview}</code>；
         完整内容落盘，预览是<strong>头 30% + 尾 70%</strong>（顺序在末尾），渲染与解析共用 <code>ToolOutputEnvelope</code> 的字段常量
-        （Jellyfish/docs/constraints.md:727-735）。</dd>
+        （Jellyfish/docs/constraints.md:728-736）。</dd>
     </dl>
-    <div class="src-block">Jellyfish/docs/constraints.md:196-300（扩展点、owner、插件运行时、生命周期）、Jellyfish/docs/constraints.md:212-250（回合与 ShellContribution）、Jellyfish/docs/constraints.md:323-360（会话状态与投影）、Jellyfish/docs/constraints.md:452-520（审批、mode、ask_user）、Jellyfish/docs/constraints.md:711-837（工具执行、截断与落盘、老化、输入改写与指令）、Jellyfish/docs/constraints.md:839-863（命令域）、Jellyfish/README.md:450-488（子代理与插件安装）、Jellyfish/README.md:1104-1106（失败标记与 metadata）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/RuntimeInfo.java、Jellyfish-Plugins/README.md:48-66、557-621（插件一览与 workflow spec）、Jellyfish-Spring-Boot-Starter/README.md:192-213（门面与四条纪律）</div>
+    <div class="src-block">Jellyfish/docs/constraints.md:196-300（扩展点、owner、插件运行时、生命周期）、Jellyfish/docs/constraints.md:212-250（回合与 ShellContribution）、Jellyfish/docs/constraints.md:323-360（会话状态与投影）、Jellyfish/docs/constraints.md:452-521（审批、mode、ask_user）、Jellyfish/docs/constraints.md:712-838（工具执行、截断与落盘、老化、输入改写与指令）、Jellyfish/docs/constraints.md:840-864（命令域）、Jellyfish/README.md:451-489（子代理与插件安装）、Jellyfish/README.md:1105-1107（失败标记与 metadata）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/RuntimeInfo.java、Jellyfish-Plugins/README.md:48-66、557-621（插件一览与 workflow spec）、Jellyfish-Spring-Boot-Starter/README.md:192-213（门面与四条纪律）</div>
 
     <h2 id="authority">去哪找更权威的答案</h2>
 
@@ -771,7 +771,7 @@
         <li><code>【版本对应关系需查阅各自 README】</code>：涉及跨仓库版本搭配时一律用这句，因为它确实没有被声明。</li>
       </ul>
     </div>
-    <div class="src-block">Jellyfish/docs/constraints.md:1145-1254（边界与明确不做）、Jellyfish/README.md:1-22（三个仓库与角色）、Jellyfish-Plugins/README.md:1063-1077（内核升级后的检查清单）、Jellyfish-Plugins/README.md:353（resmon 面板样例里的 sessions 读数）、Jellyfish-Plugins/README.md:392（实测 79M 里 54M 是 .git）、Jellyfish/CHANGELOG.md（行为变更与依赖升级依据；无压测数据）、三个仓库的 AGENTS.md（各仓库的开发约定与分工）</div>
+    <div class="src-block">Jellyfish/docs/constraints.md:1148-1257（边界与明确不做）、Jellyfish/README.md:1-22（三个仓库与角色）、Jellyfish-Plugins/README.md:1063-1077（内核升级后的检查清单）、Jellyfish-Plugins/README.md:353（resmon 面板样例里的 sessions 读数）、Jellyfish-Plugins/README.md:392（实测 79M 里 54M 是 .git）、Jellyfish/CHANGELOG.md（行为变更与依赖升级依据；无压测数据）、三个仓库的 AGENTS.md（各仓库的开发约定与分工）</div>
 
     <div class="conclusion">
       <h2>关键结论</h2>

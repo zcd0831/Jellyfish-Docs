@@ -216,10 +216,10 @@
           <code>constraints.md</code> 的「Server」一节写的是同一件事：「<strong>启动期不建会话</strong>。
           <code>--agent</code> / <code>--model</code> / <code>-p</code> / <code>--show-thinking</code> 只归 CLI，
           其余模式带上这些参数一律判用法错误退 <code>2</code>——拒绝而不是静默忽略」
-          （<code>Jellyfish/docs/constraints.md:1029-1030</code>）。</li>
+          （<code>Jellyfish/docs/constraints.md:1032-1033</code>）。</li>
         <li><strong>说「降级」的有一处</strong>：<code>constraints.md</code> 的「会话语义」一节写
           「<code>--agent</code> / <code>--model</code> 降级为『新建会话的默认值』」
-          （<code>Jellyfish/docs/constraints.md:1188</code>）。</li>
+          （<code>Jellyfish/docs/constraints.md:1191</code>）。</li>
         <li><strong>该信哪一个：以「拒绝」为准</strong>——这一条在实现里没有含糊的余地：
           <code>StartupOptionsParser</code> 在解析阶段对 <code>-p</code> / <code>--agent</code> /
           <code>--model</code> / <code>--show-tool-args</code> / <code>--show-thinking</code> 逐个调

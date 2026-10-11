@@ -851,7 +851,7 @@ public interface JellyfishComponent extends JellyfishRuntime {</code></pre>
       最后在 <code>finally</code> 里 <code>shutdown()</code>（<code>Jellyfish/jellyfish-cli/src/main/java/zcd/jellyfish/cli/Launcher.java:135</code>）。
       这几步的相对顺序<strong>不是外壳的心血来潮</strong>：运行时信息必须在 <code>bootstrap()</code> 之前写入
       （插件在 <code>start()</code> 里就会读它，这条写在
-      <code>Jellyfish/docs/constraints.md:898-899</code>），信任表态也必须在装载配置之前。
+      <code>Jellyfish/docs/constraints.md:899-900</code>），信任表态也必须在装载配置之前。
     </p>
 
     <p>
@@ -958,7 +958,7 @@ flowchart LR
       因此<strong>装配期读到的一切「配置」都只是缺省值</strong>
       （<code>Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/JellyfishAssembler.java:113-117</code>）。
       需要按配置定型的运行参数只能推迟到「真正用到的那一刻」再读，这条纪律在
-      <code>Jellyfish/docs/constraints.md:554-558</code> 有完整表述。
+      <code>Jellyfish/docs/constraints.md:555-559</code> 有完整表述。
     </p>
 
     <p>

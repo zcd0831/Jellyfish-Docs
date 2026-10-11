@@ -78,7 +78,7 @@
 
     <h1>14 终端界面（TamboUI）</h1>
     <p class="page-sub">
-      <code>TuiApp.java</code> 有 2176 行，是整个仓库最大的单个类。理解它的关键在于一条纪律：
+      <code>TuiApp.java</code> 有 2239 行，是整个仓库最大的单个类。理解它的关键在于一条纪律：
       <strong>界面状态只归渲染线程</strong>。
     </p>
 
@@ -190,7 +190,7 @@ flowchart TB
           <tr><td><code>onStart</code></td><td>挂接审批 / 提问通道、启动时的一次性工作</td><td><code>:465</code></td></tr>
           <tr><td><code>onStop</code></td><td>收尾</td><td><code>:478</code></td></tr>
           <tr><td><strong><code>render</code></strong></td><td>每帧：交付插件贡献 → 取 UI 快照 → 算布局 → 建 Overlay → 画</td><td><code>:490</code>（<code>:497-499, 516, 534, 618</code>）</td></tr>
-          <tr><td>按键处理</td><td><code>InputKeys</code>；滚动兜底 <code>ScrollFallback</code></td><td><code>:1683</code>、<code>:2086</code></td></tr>
+          <tr><td>按键处理</td><td><code>InputKeys</code>；滚动兜底 <code>ScrollFallback</code></td><td><code>:1736</code>、<code>:2143</code></td></tr>
         </tbody>
       </table>
     </div>
@@ -203,7 +203,7 @@ flowchart TB
   1. drainShell()               // :499           把 ShellIngress 里的插件贡献取走（每帧一次）
   2. uiCache.snapshot(session)  // :515           取「插件贡献 + 状态行 + 面板」快照
   3. completion.refresh(...)    // :524           按当前输入刷新补全候选
-  4. buildOverlay(width)        // :528 → 定义 :618  建当前该显示的浮层
+  4. buildOverlay(width)        // :528 → 定义 :624  建当前该显示的浮层
   5. ChatLayout.compute(...)    // :534           算各区域高度（<b>要拿到浮层行数之后才能算</b>）
   6. 绘制</code></pre>
 
@@ -434,7 +434,7 @@ sequenceDiagram
         <tbody>
           <tr><td>来源</td><td><code>ApprovalChannel.pendingApproval()</code></td><td><code>AskChannel</code></td></tr>
           <tr><td>每帧读</td><td><code>TuiApp.java:710-712</code></td><td>同类机制</td></tr>
-          <tr><td>按键</td><td><code>handleApproval</code>（<code>:1876-1901</code>）→ <code>resolve</code>（<code>:1909-1913</code>）</td><td>选项 2–6 个（由工具 schema 约束）</td></tr>
+          <tr><td>按键</td><td><code>handleApproval</code>（<code>:1929-1954</code>）→ <code>resolve</code>（<code>:1962-1966</code>）</td><td>选项 2–6 个（由工具 schema 约束）</td></tr>
           <tr><td><code>Esc</code></td><td><strong>拒绝 + 中断回合</strong></td><td>—</td></tr>
           <tr><td>无人应答</td><td><strong>拒绝</strong>（fail-closed）</td><td><strong>返回「不可用」让模型继续</strong>（fail-open）</td></tr>
         </tbody>

@@ -468,8 +468,8 @@ sequenceDiagram
         <tbody>
           <tr><td>挂接审批者</td><td><strong>两处</strong>：<code>-tui</code> 挂弹框，<code>-server</code> 挂 HTTP 桥；<strong><code>-cli</code> 从不挂接</strong></td><td><code>TuiRunMode.java:198</code>、<code>JellyfishServer.java:166</code></td></tr>
           <tr><td>取当前待审批</td><td>主事件循环每帧读 <code>pendingApproval()</code></td><td><code>TuiApp.java:710-712</code></td></tr>
-          <tr><td>处理按键</td><td><code>handleApproval</code></td><td><code>TuiApp.java:1876-1901</code></td></tr>
-          <tr><td>落定</td><td><code>approvals.resolve(id, approved)</code></td><td><code>TuiApp.java:1909-1913</code></td></tr>
+          <tr><td>处理按键</td><td><code>handleApproval</code></td><td><code>TuiApp.java:1929-1954</code></td></tr>
+          <tr><td>落定</td><td><code>approvals.resolve(id, approved)</code></td><td><code>TuiApp.java:1962-1966</code></td></tr>
           <tr><td>绘制</td><td><code>ApprovalPrompt.render</code>（只负责画）</td><td><code>ApprovalPrompt.java:115-127</code></td></tr>
           <tr><td><code>Esc</code></td><td><strong>拒绝 + 中断整个回合</strong></td><td><code>TuiApp.java</code>（<code>handleApproval</code> 分支）</td></tr>
         </tbody>

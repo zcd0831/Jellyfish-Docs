@@ -211,7 +211,7 @@ cp -r Jellyfish-Plugins/examples/scripts/python/web ~/.jellyfish/scripts/python/
         <li><strong>拷完就生效了吗？</strong>没有。<span class="tag restart">需重启</span> 扫描目录与插件集合只在启动期确定。</li>
       </ul>
     </div>
-    <div class="src-block">Jellyfish-Plugins/README.md:30-46（构建与安装）、cpPlugins.sh（脚本全文）、Jellyfish/README.md:467-474（安装与扫描目录）、Jellyfish/README.md:500-514（<code>config.json</code> 的 <code>plugins.roots</code>）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:30-46（构建与安装）、cpPlugins.sh（脚本全文）、Jellyfish/README.md:468-475（安装与扫描目录）、Jellyfish/README.md:501-515（<code>config.json</code> 的 <code>plugins.roots</code>）</div>
 
     <div class="feature">
       <h3>方法二：只装用得到的几个</h3>
@@ -264,7 +264,7 @@ mvn -q clean package -DskipTests
         与之相对，<strong>改配置不用重启</strong>：启用 / 禁用名单与逐插件配置段写在 <code>jellyfish.json</code>，改动由 <code>/reload</code> 生效。
       </p>
     </div>
-    <div class="src-block">Jellyfish-Plugins/README.md:33-35、Jellyfish/README.md:516-518（<code>/reload</code> 与「只重启配置段变了的插件」）、Jellyfish/docs/constraints.md「插件扫描与配置」</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:33-35、Jellyfish/README.md:517-519（<code>/reload</code> 与「只重启配置段变了的插件」）、Jellyfish/docs/constraints.md「插件扫描与配置」</div>
 
     <h2>启用与禁用</h2>
 
@@ -329,7 +329,7 @@ mvn -q clean package -DskipTests
       <li><strong>写错了 pluginId 会怎样？</strong>禁用名单里写错只会「什么也没禁」；<code>configurations</code> 里写错 pluginId 时插件拿到的是空映射，因此配置看起来「被忽略了」——先核对拼写与大小写。</li>
       <li><strong>项目级配置为什么不生效？</strong>项目级 <code>.jellyfish/jellyfish.json</code> 的插件段是<strong>整对象替换</strong>：项目级一写某个插件段，全局级那一份就整段被盖掉。想同时保留两处，就把完整内容写在生效的那一级。</li>
     </ul>
-    <div class="src-block">Jellyfish/README.md:819-838（<code>plugins</code> 段字段表与模式类授权）、Jellyfish/README.md:949-959（双源合并与整对象覆盖）、Jellyfish/README.md:516-518（<code>/reload</code> 只重启配置段变了的插件）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/plugin/PluginContext.java（<code>configuration()</code> 未配置时是空映射而非 <code>null</code>）</div>
+    <div class="src-block">Jellyfish/README.md:820-839（<code>plugins</code> 段字段表与模式类授权）、Jellyfish/README.md:950-960（双源合并与整对象覆盖）、Jellyfish/README.md:517-519（<code>/reload</code> 只重启配置段变了的插件）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/plugin/PluginContext.java（<code>configuration()</code> 未配置时是空映射而非 <code>null</code>）</div>
 
     <h2>逐个插件</h2>
 
@@ -584,10 +584,10 @@ mvn -q clean package -DskipTests
       <p>
         内核 <code>README.md</code> 在举「插件带来的命令」的例子时写到了「shell 的 <code>/shell</code>」，
         但 <code>Jellyfish-Plugins</code> 里 shell 插件只注册了 <code>shell</code> 工具与 <code>!</code> 输入指令，
-        <strong>没有注册名为 <code>shell</code> 的命令</strong>。插件侧源码：<code>ShellPlugin.start()</code> 只有三处扩展点声明——<code>shell</code> 工具 <code>ToolCallRequest</code>（<code>ShellPlugin.java:57</code>）、类型级 <code>PermissionCheckRequest</code>（<code>ShellPlugin.java:58</code>）、<code>!</code> 输入指令 <code>InputDirectiveRequest</code>（<code>ShellPlugin.java:59</code>），<strong>没有 <code>CommandRequest</code></strong>，<code>Jellyfish-Plugins</code> 全文也搜不到 <code>/shell</code>——因此 <code>/help</code> 里不会有 <code>/shell</code>。（内核 <code>Jellyfish/README.md:390</code> 早期版本举例时写过 <code>shell 的 /shell</code>，<strong>现已改为 <code>项目约定插件的 /init</code></strong>；同句里的 <code>/todo</code>、<code>/skills</code> 确有，见 <code>TodoPlugin.java:69</code>、<code>SkillsPlugin.java:62</code>。）
+        <strong>没有注册名为 <code>shell</code> 的命令</strong>。插件侧源码：<code>ShellPlugin.start()</code> 只有三处扩展点声明——<code>shell</code> 工具 <code>ToolCallRequest</code>（<code>ShellPlugin.java:57</code>）、类型级 <code>PermissionCheckRequest</code>（<code>ShellPlugin.java:58</code>）、<code>!</code> 输入指令 <code>InputDirectiveRequest</code>（<code>ShellPlugin.java:59</code>），<strong>没有 <code>CommandRequest</code></strong>，<code>Jellyfish-Plugins</code> 全文也搜不到 <code>/shell</code>——因此 <code>/help</code> 里不会有 <code>/shell</code>。（内核 <code>Jellyfish/README.md:391</code> 早期版本举例时写过 <code>shell 的 /shell</code>，<strong>现已改为 <code>项目约定插件的 /init</code></strong>；同句里的 <code>/todo</code>、<code>/skills</code> 确有，见 <code>TodoPlugin.java:69</code>、<code>SkillsPlugin.java:62</code>。）
       </p>
     </div>
-    <div class="src-block">Jellyfish/README.md:390（「插件会带来更多命令」示例句）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellPlugin.java（<code>start</code> 内的三处扩展点）</div>
+    <div class="src-block">Jellyfish/README.md:391（「插件会带来更多命令」示例句）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellPlugin.java（<code>start</code> 内的三处扩展点）</div>
 
     <div class="feature">
       <h3>session-file —— 会话持久化</h3>
@@ -1252,7 +1252,7 @@ mvn -q clean package -DskipTests
         <li><strong>只写「热路径」贡献的脚本为什么永远不启动？</strong><code>request_tuning</code> / <code>aging_strategy</code> 每次组装请求都会被问到，worker 没热着时它们直接「不表态」；<strong>只提供这两个贡献的脚本永远不会被拉起</strong>，因此也不会因「起不来」被熔断。</li>
       </ul>
     </div>
-    <div class="src-block">Jellyfish-Plugins/README.md:744-862（脚本插件两门语言、配置字段表、周期任务）、Jellyfish-Plugins/examples/scripts/README.md（脚本 API、清单一致性、示例）、Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/GatewaySettings.java 与 CircuitBreakerSettings.java（默认值常量）、Jellyfish/README.md:824-834（<code>scripts</code> 段与 <code>${ENV}</code> 硬失败）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:744-862（脚本插件两门语言、配置字段表、周期任务）、Jellyfish-Plugins/examples/scripts/README.md（脚本 API、清单一致性、示例）、Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/GatewaySettings.java 与 CircuitBreakerSettings.java（默认值常量）、Jellyfish/README.md:825-835（<code>scripts</code> 段与 <code>${ENV}</code> 硬失败）</div>
 
     <div class="callout design">
       <span class="callout-title">脚本桥接还有几个 README 未收录的键</span>
@@ -1360,7 +1360,7 @@ flowchart TD
       <li><strong>注册表</strong>按「类型 + 路由键」找处理器。同一「类型 + 路由键」被两个插件抢时，在<strong>插件启动时</strong>以 <code>DUPLICATE_HANDLER</code> 当场暴露。</li>
     </ul>
 
-    <div class="src-block">Jellyfish/README.md:463-475（插件安装与扫描目录）、Jellyfish/docs/constraints.md「插件扫描与配置」「插件生命周期」「两个注册式能力面 + 四条插件出边」、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/PluginClasspathGuard.java、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/PF4JPluginManager.java（<code>warnUnavailable</code> 的三条日志）</div>
+    <div class="src-block">Jellyfish/README.md:464-476（插件安装与扫描目录）、Jellyfish/docs/constraints.md「插件扫描与配置」「插件生命周期」「两个注册式能力面 + 四条插件出边」、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/PluginClasspathGuard.java、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/PF4JPluginManager.java（<code>warnUnavailable</code> 的三条日志）</div>
 
     <h2>常见问题</h2>
 
@@ -1394,7 +1394,7 @@ flowchart TD
       <p><strong>几个例外要知道</strong>：<code>skills</code> 插件的 <code>SKILL.md</code> 改动<strong>连 <code>/reload</code> 都不用</strong>（按文件系统签名失效）；
       <code>project</code> 插件里「会话中途修改一个已经存在的 <code>AGENTS.md</code>」要开新会话才生效（已读内容按会话缓存），而<strong>新出现的</strong> <code>AGENTS.md</code> 下一轮就能看到。</p>
     </div>
-    <div class="src-block">Jellyfish-Plugins/README.md:1082-1107、Jellyfish/README.md:516-518、Jellyfish-Plugins/README.md:517-556（skills 的失效口径）、Jellyfish-Plugins/README.md:434-484（project 的缓存口径）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:1082-1107、Jellyfish/README.md:517-519、Jellyfish-Plugins/README.md:517-556（skills 的失效口径）、Jellyfish-Plugins/README.md:434-484（project 的缓存口径）</div>
 
     <div class="feature">
       <h3>MCP server 连不上</h3>

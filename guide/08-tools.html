@@ -228,7 +228,7 @@ flowchart LR
       </p>
     </div>
 
-    <div class="src-block">Jellyfish-Plugins/README.md:48-66（插件一览：每个插件提供什么工具）、Jellyfish-Plugins/README.md:69-123（tools 插件六个工具）、Jellyfish-Plugins/README.md:163-204（shell）、Jellyfish-Plugins/README.md:276-324（todo）、Jellyfish-Plugins/README.md:517-556（skills）、Jellyfish-Plugins/README.md:557-621（workflow）、Jellyfish-Plugins/README.md:622-705（MCP）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/ToolDescriptor.java（「这里没有『是否只读』字段」）、Jellyfish/README.md:463-486（插件装载：新增 / 删除只在启动期确定）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:48-66（插件一览：每个插件提供什么工具）、Jellyfish-Plugins/README.md:69-123（tools 插件六个工具）、Jellyfish-Plugins/README.md:163-204（shell）、Jellyfish-Plugins/README.md:276-324（todo）、Jellyfish-Plugins/README.md:517-556（skills）、Jellyfish-Plugins/README.md:557-621（workflow）、Jellyfish-Plugins/README.md:622-705（MCP）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/ToolDescriptor.java（「这里没有『是否只读』字段」）、Jellyfish/README.md:464-487（插件装载：新增 / 删除只在启动期确定）</div>
 
     <h2>内核自带：<code>task</code></h2>
 
@@ -308,7 +308,7 @@ flowchart LR
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:429-462（委派给子代理）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/subagent/TaskTool.java:53、293-300（参数 `subagent_type` / `description` / `prompt`）、:334-335（必填只有 `subagent_type` 与 `prompt`，`description` 可缺）、:267（`description` 为空白时开场行只写「开始」）、Jellyfish/README.md:918-946（`subAgent` 段）</div>
+    <div class="src-block">Jellyfish/README.md:430-463（委派给子代理）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/subagent/TaskTool.java:53、293-300（参数 `subagent_type` / `description` / `prompt`）、:334-335（必填只有 `subagent_type` 与 `prompt`，`description` 可缺）、:267（`description` 为空白时开场行只写「开始」）、Jellyfish/README.md:919-947（`subAgent` 段）</div>
 
     <h2>tools 插件：六个文件与提问工具</h2>
 
@@ -596,7 +596,7 @@ flowchart LR
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish-Plugins/README.md:69-123（五个文件工具与 `ask_user` 的参数表、单行超限、三个读工具的取消语义、两个耗时上限、`@` 路径引用、`edit_file` 的 UTF-8 限制）、Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/（各工具的 `ToolDescriptor` 参数与必填项、`DEFAULT_LIMIT` / `MAX_ENTRIES` / `DEFAULT_MAX_RESULTS` / `DEFAULT_MAX_LINE_CHARS` / `DEFAULT_MAX_BYTES` 常量；`AskUserTool.java:63、133`——`options[].description` 声明为选填、缺省即 `null`）、Jellyfish/README.md:905-917（`ask.timeoutSeconds`）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:69-123（五个文件工具与 `ask_user` 的参数表、单行超限、三个读工具的取消语义、两个耗时上限、`@` 路径引用、`edit_file` 的 UTF-8 限制）、Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/（各工具的 `ToolDescriptor` 参数与必填项、`DEFAULT_LIMIT` / `MAX_ENTRIES` / `DEFAULT_MAX_RESULTS` / `DEFAULT_MAX_LINE_CHARS` / `DEFAULT_MAX_BYTES` 常量；`AskUserTool.java:63、133`——`options[].description` 声明为选填、缺省即 `null`）、Jellyfish/README.md:906-918（`ask.timeoutSeconds`）</div>
 
     <h2>shell 插件：<code>shell</code></h2>
 
@@ -1269,7 +1269,7 @@ mcp__filesystem__list_directory</code></pre>
       </p>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:728-744（三段名单与三外壳行为）、Jellyfish/README.md:816-839（`plugins.enabled` / `plugins.disabled`、plan 白名单）、Jellyfish/README.md:918-946（`subAgent.enabled`）、Jellyfish-Plugins/README.md:205-263（shell 分类器：插件裁定只能收紧）、Jellyfish-Plugins/README.md:706-743（plan：不换清单只拦执行）</div>
+    <div class="src-block">Jellyfish/README.md:729-745（三段名单与三外壳行为）、Jellyfish/README.md:817-840（`plugins.enabled` / `plugins.disabled`、plan 白名单）、Jellyfish/README.md:919-947（`subAgent.enabled`）、Jellyfish-Plugins/README.md:205-263（shell 分类器：插件裁定只能收紧）、Jellyfish-Plugins/README.md:706-743（plan：不换清单只拦执行）</div>
 
     <h2>常见问题</h2>
 
@@ -1296,7 +1296,7 @@ mcp__filesystem__list_directory</code></pre>
       <dd>没有这个概念。工具无法自称只读（描述符里已无该字段），只看你把它写进了哪份名单：plan 的 <code>readOnlyTools</code>、MCP 的 <code>servers[].readOnlyTools</code>。</dd>
     </dl>
 
-    <div class="src-block">Jellyfish-Plugins/README.md:48-66（插件与工具归属）、Jellyfish-Plugins/README.md:69-123（读 / 写工具限制与 `ask_user` 口径）、Jellyfish-Plugins/README.md:163-263（shell 退出码与分类器）、Jellyfish/README.md:463-486（插件装载只在启动期确定）、Jellyfish/README.md:905-917（`ask.timeoutSeconds`）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/ToolDescriptor.java（无只读字段）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:48-66（插件与工具归属）、Jellyfish-Plugins/README.md:69-123（读 / 写工具限制与 `ask_user` 口径）、Jellyfish-Plugins/README.md:163-263（shell 退出码与分类器）、Jellyfish/README.md:464-487（插件装载只在启动期确定）、Jellyfish/README.md:906-918（`ask.timeoutSeconds`）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/ToolDescriptor.java（无只读字段）</div>
 
     <div class="conclusion">
       <h2>关键结论</h2>

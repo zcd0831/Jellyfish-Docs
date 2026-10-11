@@ -251,7 +251,7 @@
       </p>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:371-391（常用命令表与别名）、Jellyfish/README.md:392-406（命令接力、Server 半程、离线可用）、Jellyfish/README.md:190-193（TUI 状态栏：<code>已压缩 N 条（丢弃 M 条）</code>）、Jellyfish/README.md:196（命令输出面板）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/command/SystemCommands.java:634-648（<code>/status</code> 的输出行与字段顺序）、SystemCommands.java:920-925（模型标签：跟随默认时显示 <code>默认</code>）、SystemCommands.java:945-947（<code>null</code> 显示为 <code>-</code>）、SystemCommands.java:754-770（压缩一行的四种文案）、SystemCommands.java:681-684（缓存一行的写法）</div>
+    <div class="src-block">Jellyfish/README.md:372-392（常用命令表与别名）、Jellyfish/README.md:393-407（命令接力、Server 半程、离线可用）、Jellyfish/README.md:190-193（TUI 状态栏：<code>已压缩 N 条（丢弃 M 条）</code>）、Jellyfish/README.md:196（命令输出面板）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/command/SystemCommands.java:634-648（<code>/status</code> 的输出行与字段顺序）、SystemCommands.java:920-925（模型标签：跟随默认时显示 <code>默认</code>）、SystemCommands.java:945-947（<code>null</code> 显示为 <code>-</code>）、SystemCommands.java:754-770（压缩一行的四种文案）、SystemCommands.java:681-684（缓存一行的写法）</div>
 
     <h2>会话存在哪：session-file 插件</h2>
 
@@ -325,7 +325,7 @@
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish-Plugins/README.md:264-275（session-file：一个会话一个 JSON、<code>sessionDir</code> / <code>gitEnabled</code> 表与三条口径）、Jellyfish/README.md:476（插件配置段由 <code>/reload</code> 生效）、Jellyfish/README.md:463-466（插件 jar 的新增 / 删除只在启动期确定）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:264-275（session-file：一个会话一个 JSON、<code>sessionDir</code> / <code>gitEnabled</code> 表与三条口径）、Jellyfish/README.md:477（插件配置段由 <code>/reload</code> 生效）、Jellyfish/README.md:464-467（插件 jar 的新增 / 删除只在启动期确定）</div>
 
     <h3>会话文件的结构</h3>
 
@@ -522,7 +522,7 @@ flowchart LR
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:409-427（会话与压缩：用法、自动触发、三条口径、依赖插件）、Jellyfish/docs/constraints.md:629-645（压缩：非破坏式、边界对齐、单次压缩、cache-safe fork、两条触发、<code>/compact</code> 只起头不等结果）</div>
+    <div class="src-block">Jellyfish/README.md:410-428（会话与压缩：用法、自动触发、三条口径、依赖插件）、Jellyfish/docs/constraints.md:630-646（压缩：非破坏式、边界对齐、单次压缩、cache-safe fork、两条触发、<code>/compact</code> 只起头不等结果）</div>
 
     <h3><code>/compact</code> 与 <code>/compact preview</code></h3>
 
@@ -557,7 +557,7 @@ flowchart LR
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:412-427（<code>/compact</code> / <code>/compact preview</code> 的两种用法与三条口径）、Jellyfish/docs/constraints.md:641-645（只起头不等结果、只有两种形态、无档位、ERROR 与 OK 的差别）</div>
+    <div class="src-block">Jellyfish/README.md:413-428（<code>/compact</code> / <code>/compact preview</code> 的两种用法与三条口径）、Jellyfish/docs/constraints.md:642-646（只起头不等结果、只有两种形态、无档位、ERROR 与 OK 的差别）</div>
 
     <h3>自动压缩的触发条件</h3>
 
@@ -576,7 +576,7 @@ flowchart LR
       </li>
     </ul>
 
-    <div class="src-block">Jellyfish/README.md:419-421（80% 自动压、机械裁剪也是触发点、不拖慢对话）、Jellyfish/README.md:994（「关掉自动压缩」这条常见配置任务）、Jellyfish/docs/constraints.md:639-640（两条触发：MANUAL / AUTO）</div>
+    <div class="src-block">Jellyfish/README.md:420-422（80% 自动压、机械裁剪也是触发点、不拖慢对话）、Jellyfish/README.md:995（「关掉自动压缩」这条常见配置任务）、Jellyfish/docs/constraints.md:640-641（两条触发：MANUAL / AUTO）</div>
 
     <h3>压缩需要插件：不装就没有</h3>
 
@@ -630,7 +630,7 @@ flowchart LR
       <p>看到这一行就去检查 <code>plugins.enabled</code> / <code>plugins.disabled</code>。</p>
     </div>
 
-    <div class="src-block">Jellyfish-Plugins/README.md:485-516（压缩是插件能力、不启用的三个后果、三种状态、两个字段表、摘要措辞改不了）、Jellyfish/docs/constraints.md:646-661（<code>CompactionStrategyRequest</code> / <code>CompactionPreRequest</code>、内核钳制区间、插件拿不到消息正文）、Jellyfish/docs/constraints.md:1225（不启用压缩插件时整体不可用且不回退内置）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:485-516（压缩是插件能力、不启用的三个后果、三种状态、两个字段表、摘要措辞改不了）、Jellyfish/docs/constraints.md:647-662（<code>CompactionStrategyRequest</code> / <code>CompactionPreRequest</code>、内核钳制区间、插件拿不到消息正文）、Jellyfish/docs/constraints.md:1228（不启用压缩插件时整体不可用且不回退内置）</div>
 
     <h3>compact 插件的两个字段</h3>
 
@@ -744,7 +744,7 @@ flowchart LR
       <li><strong>摘要指令里的占位符</strong>：<code>summary-prompt.md</code> 用 <code>{maxSummaryChars}</code> 表示长度上限，内核替换成<strong>当次生效</strong>的值；占位符缺失不算错误（内核仍按上限本地截断），但模型会少一条自我约束，因此记一条告警。</li>
     </ul>
 
-    <div class="src-block">Jellyfish/README.md:840-851（<code>react</code> 段字段表：<code>compactKeepRecentMessages</code> / <code>compactMaxSummaryChars</code> / <code>autoCompactPercent</code>）、Jellyfish/README.md:778-782（<code>jellyfish.json</code> 里这三个键的写法）、Jellyfish/docs/constraints.md:659（内核钳制区间与占位符替换）</div>
+    <div class="src-block">Jellyfish/README.md:841-852（<code>react</code> 段字段表：<code>compactKeepRecentMessages</code> / <code>compactMaxSummaryChars</code> / <code>autoCompactPercent</code>）、Jellyfish/README.md:779-783（<code>jellyfish.json</code> 里这三个键的写法）、Jellyfish/docs/constraints.md:660（内核钳制区间与占位符替换）</div>
 
     <h2>工具输出落盘（<code>react.toolOutput</code>）</h2>
 
@@ -839,7 +839,7 @@ flowchart LR
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:869-877（<code>react.toolOutput</code> 五字段表）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/tooloutput/ToolOutputStore.java:602-606（文件名拼法）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/tooloutput/ToolOutputStore.java:344-411（<code>&lt;dir&gt;/&lt;sessionId&gt;</code> 目录与只本人权限）、Jellyfish/docs/constraints.md:733-749（<code>spillMaxBytes</code> 的写入截断、落盘失败语义、清理只报告不阻断）</div>
+    <div class="src-block">Jellyfish/README.md:870-878（<code>react.toolOutput</code> 五字段表）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/tooloutput/ToolOutputStore.java:602-606（文件名拼法）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/tooloutput/ToolOutputStore.java:344-411（<code>&lt;dir&gt;/&lt;sessionId&gt;</code> 目录与只本人权限）、Jellyfish/docs/constraints.md:734-750（<code>spillMaxBytes</code> 的写入截断、落盘失败语义、清理只报告不阻断）</div>
 
     <h3>回灌信封长什么样</h3>
 
@@ -905,7 +905,7 @@ flowchart LR
         <code>read_file</code> / <code>grep_files</code>。</p>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:1108-1119（信封 <code>metadata</code>、清理上限与「<code>_path</code> 只在保留窗口内有效」、<code>~</code> 缩写）、Jellyfish/docs/constraints.md:738-749（信封字段清单、落盘失败、清理规则与唯一路径段）</div>
+    <div class="src-block">Jellyfish/README.md:1109-1120（信封 <code>metadata</code>、清理上限与「<code>_path</code> 只在保留窗口内有效」、<code>~</code> 缩写）、Jellyfish/docs/constraints.md:739-750（信封字段清单、落盘失败、清理规则与唯一路径段）</div>
 
     <h2>工具结果老化（<code>react.cache.agingPercent</code>）</h2>
 
@@ -966,7 +966,7 @@ flowchart LR
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:879-891（<code>react.cache.agingPercent</code> 表、为什么要低于 80、想彻底关掉的做法）、Jellyfish/docs/constraints.md:755-761（老化排在裁剪之前、两种触发口径、stub 保留首行 400 字符）</div>
+    <div class="src-block">Jellyfish/README.md:880-892（<code>react.cache.agingPercent</code> 表、为什么要低于 80、想彻底关掉的做法）、Jellyfish/docs/constraints.md:756-762（老化排在裁剪之前、两种触发口径、stub 保留首行 400 字符）</div>
 
     <h2><code>@</code> 文件引用</h2>
 
@@ -1027,7 +1027,7 @@ flowchart LR
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:258-266（<code>!命令</code> 与 <code>@路径</code> 两行表与「两条口径」）、Jellyfish/docs/constraints.md:805-819（输入框语法归插件、执行体是工具执行器、两请求类型分开、<code>@</code> 不内联、转义规则只有一处）、Jellyfish-Plugins/README.md:69-123（tools 插件的 <code>@</code> 路径引用与「<code>\ </code> 是空格」）、Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ToolsPlugin.java:62-69（<code>@</code> 只注册一个补全处理器与一份提示词贡献）、Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/FileReferenceCompletion.java:45（标记常量 <code>MARKER = "@"</code>）、Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/PathPolicy.java:140（本插件唯一的配置段是 <code>pathPolicy</code>，与 <code>@</code> 无关）</div>
+    <div class="src-block">Jellyfish/README.md:258-266（<code>!命令</code> 与 <code>@路径</code> 两行表与「两条口径」）、Jellyfish/docs/constraints.md:806-820（输入框语法归插件、执行体是工具执行器、两请求类型分开、<code>@</code> 不内联、转义规则只有一处）、Jellyfish-Plugins/README.md:69-123（tools 插件的 <code>@</code> 路径引用与「<code>\ </code> 是空格」）、Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ToolsPlugin.java:62-69（<code>@</code> 只注册一个补全处理器与一份提示词贡献）、Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/FileReferenceCompletion.java:45（标记常量 <code>MARKER = "@"</code>）、Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/PathPolicy.java:140（本插件唯一的配置段是 <code>pathPolicy</code>，与 <code>@</code> 无关）</div>
 
     <h2>上下文投影上限：500 条消息</h2>
 
@@ -1079,7 +1079,7 @@ flowchart LR
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:384（<code>/usage</code> / <code>/cost</code> 的作用）、Jellyfish/README.md:190-193（状态栏用量与缓存命中率）、Jellyfish/README.md:454-462（子代理 token 计入父会话、轨迹行格式）、Jellyfish/docs/constraints.md:355-360（用量记账三条口径）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/session/SessionUsage.java:202-207（命中率用累计量相除）</div>
+    <div class="src-block">Jellyfish/README.md:385（<code>/usage</code> / <code>/cost</code> 的作用）、Jellyfish/README.md:190-193（状态栏用量与缓存命中率）、Jellyfish/README.md:455-463（子代理 token 计入父会话、轨迹行格式）、Jellyfish/docs/constraints.md:355-360（用量记账三条口径）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/session/SessionUsage.java:202-207（命中率用累计量相除）</div>
 
     <h2>常见问题</h2>
 
@@ -1116,7 +1116,7 @@ flowchart LR
         要备份就在会话没在用的时候整目录拷走。</dd>
     </dl>
 
-    <div class="src-block">Jellyfish/README.md:1111-1117（「几十轮之前的工具输出路径不见了」与滚动 / 复制两类常见问题）、Jellyfish-Plugins/README.md:491-502（「不启用它就没有压缩」的三个后果与禁用日志）、Jellyfish/docs/constraints.md:1078-1084（压缩边界失效按「从未压缩过」处理）、Jellyfish-Plugins/CHANGELOG.md:221-225（落盘权限 600 / 700 与「已知边界」）</div>
+    <div class="src-block">Jellyfish/README.md:1112-1118（「几十轮之前的工具输出路径不见了」与滚动 / 复制两类常见问题）、Jellyfish-Plugins/README.md:491-502（「不启用它就没有压缩」的三个后果与禁用日志）、Jellyfish/docs/constraints.md:1081-1087（压缩边界失效按「从未压缩过」处理）、Jellyfish-Plugins/CHANGELOG.md:221-225（落盘权限 600 / 700 与「已知边界」）</div>
 
     <div class="conclusion">
       <h2>关键结论</h2>

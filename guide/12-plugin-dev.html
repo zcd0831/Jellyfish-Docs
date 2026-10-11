@@ -196,7 +196,7 @@
         </tbody>
       </table>
     </div>
-    <div class="src-block">Jellyfish-Plugins/README.md:14-28（环境要求与独立 reactor）、Jellyfish-Plugins/pom.xml（<code>java.version</code> / shade 版本线）、Jellyfish/README.md:463-475（扫描目录与安装）、Jellyfish-Plugins/AGENTS.md「项目描述」</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:14-28（环境要求与独立 reactor）、Jellyfish-Plugins/pom.xml（<code>java.version</code> / shade 版本线）、Jellyfish/README.md:464-476（扫描目录与安装）、Jellyfish-Plugins/AGENTS.md「项目描述」</div>
 
     <h2>最小插件工程结构</h2>
 
@@ -362,7 +362,7 @@ jellyfish.tags=example</code></pre>
         <code>maven-metadata-local.xml</code>，没有任何从中央仓库下载的痕迹），换一台机器就解析不到——仓库之外开发请直接用下面那份。
       </p>
     </div>
-    <div class="src-block">Jellyfish-Plugins/README.md:894-923（README 原文 POM）、Jellyfish-Plugins/pom.xml（无发布 profile）、Jellyfish/README.md:1145-1157（内核发布到中央仓库的五个构件）、Jellyfish-Plugins/jellyfish-plugin-shell/pom.xml（模块级 profile 的用途）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:894-923（README 原文 POM）、Jellyfish-Plugins/pom.xml（无发布 profile）、Jellyfish/README.md:1146-1158（内核发布到中央仓库的五个构件）、Jellyfish-Plugins/jellyfish-plugin-shell/pom.xml（模块级 profile 的用途）</div>
 
     <p><strong>替代方案：不依赖父 POM、可直接用的等价 POM</strong>（<code>&lt;parent&gt;</code> 换成 <code>jellyfish-api</code> 坐标）：</p>
 
@@ -1099,7 +1099,7 @@ java -jar /path/to/jellyfish-cli-0.1.1.jar -cli -p "/hello 世界"</code></pre>
         所以一个坏插件的正确表现是：<strong>它自己不起，其它插件与内核照常。</strong>
       </p>
     </div>
-    <div class="src-block">Jellyfish-Plugins/README.md:1046-1060（打包、安装与调试）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/PF4JPluginManager.java（<code>warnUnavailable</code> / <code>safeStart</code> 的日志原文）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/JellyfishPluginDescriptorFinder.java（不抛异常的理由）、Jellyfish/README.md:390（插件带来的命令会出现在 <code>/help</code>）、Jellyfish/README.md:1035-1045（Server 的 <code>GET /commands</code>）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:1046-1060（打包、安装与调试）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/PF4JPluginManager.java（<code>warnUnavailable</code> / <code>safeStart</code> 的日志原文）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/JellyfishPluginDescriptorFinder.java（不抛异常的理由）、Jellyfish/README.md:391（插件带来的命令会出现在 <code>/help</code>）、Jellyfish/README.md:1036-1046（Server 的 <code>GET /commands</code>）</div>
 
     <h2>调试</h2>
 
@@ -1310,7 +1310,7 @@ flowchart TD
         </dd>
       </dl>
     </div>
-    <div class="src-block">Jellyfish/README.md:516-518（<code>/reload</code> 只重启配置段变了的插件）、Jellyfish/README.md:1133-1137（改了配置不生效怎么办）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/JellyfishPluginFactory.java（「上下文在每次 start 时重建：描述符里的配置段那一刻才读，因此重启即拿到新配置」）</div>
+    <div class="src-block">Jellyfish/README.md:517-519（<code>/reload</code> 只重启配置段变了的插件）、Jellyfish/README.md:1134-1138（改了配置不生效怎么办）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/JellyfishPluginFactory.java（「上下文在每次 start 时重建：描述符里的配置段那一刻才读，因此重启即拿到新配置」）</div>
 
     <div class="feature">
       <h3>我想顶替内核自带的 <code>task</code> 工具或某个系统命令</h3>

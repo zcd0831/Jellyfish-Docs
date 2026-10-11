@@ -525,7 +525,7 @@ flowchart TD
     <p>
       两个改写点的失败语义都是「按无异议处理」（<code>ABSTAIN</code>，记 WARN 后继续），
       而且都<strong>在 0 个处理器时退化成空操作</strong>——这是「装了插件与没装插件行为逐字段一致」的落点，
-      有单测锁定（<code>Jellyfish/docs/constraints.md:715-723</code>）。
+      有单测锁定（<code>Jellyfish/docs/constraints.md:716-724</code>）。
     </p>
 
     <div class="callout tip">
@@ -695,7 +695,7 @@ flowchart TD
       而模型无从判断自己拿到的是不是全文。这类工具抛出的异常最终会被
       <code>ToolExecutor</code> 接住并转成回灌文本，因此错误文案就是模型自我纠正的<strong>唯一依据</strong>——
       这也是为什么错误里要写清三条出路。
-      内核那层仍会再兜一次底，<strong>两道都不能省</strong>（<code>Jellyfish/docs/constraints.md:780-782</code>）。
+      内核那层仍会再兜一次底，<strong>两道都不能省</strong>（<code>Jellyfish/docs/constraints.md:781-783</code>）。
     </p>
 
     <!-- ============================================================ -->
@@ -932,7 +932,7 @@ flowchart LR
       <p>
         落盘目录有清理上限（缺省每会话 200 个文件 / 50 MiB），从最旧开始删，
         因此 <code>_path</code> <strong>只在保留窗口内有效</strong>——这是「不做引用计数式保留」的直接代价，
-        刻意接受（<code>Jellyfish/docs/constraints.md:746</code>）。
+        刻意接受（<code>Jellyfish/docs/constraints.md:747</code>）。
         另外主目录内的落盘路径记成 <code>~</code> 形式（<code>HomePaths.abbreviate</code>）：
         绝对路径会把真实用户名与主目录结构带进上下文（并随会话落盘、被导出、发给上游模型），
         而它对「回查这个文件」这件事没有任何用处。文件工具认 <code>~</code>
@@ -968,7 +968,7 @@ flowchart LR
         对「无界输出」的工具（典型是 <code>yes</code>），超出上限的部分
         <strong>仍会继续被读取并丢弃</strong>（<code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ToolOutputSettings.java:25</code>）——
         写到上限为止（不是整个放弃），并置信封字段 <code>_partial</code>
-        （<code>Jellyfish/docs/constraints.md:733</code>）。
+        （<code>Jellyfish/docs/constraints.md:734</code>）。
         同样地，<strong>不做「输出体量杀命令」</strong>：无界输出由超时兜住。
         因此「输出被截断」与「命令被停下来」是两件独立的事，
         运行期的实时输出是旁路（可丢、抛错被隔离、绝不能阻塞）。
@@ -1168,7 +1168,7 @@ flowchart LR
       <strong>规避</strong>：用结构化的信封，而不是字符串截断——
       字符串结果按行做头尾切分，结构化结果按 JSON 子树截断，
       两者都保证「回灌的仍是合法 JSON 信封」
-      （<code>Jellyfish/docs/constraints.md:736-740</code>，详版见
+      （<code>Jellyfish/docs/constraints.md:737-741</code>，详版见
       <a href="25-pitfalls.html">25 页</a> 的 D3）。
       配套的一条纪律是：<code>output</code> 在结果整形那一步<strong>保持原始类型</strong>，
       不得提前序列化成文本——截断要知道类型才能选对算法。
@@ -1198,7 +1198,7 @@ flowchart LR
           <tr>
             <td>压缩</td>
             <td><strong>后续请求的起始边界</strong></td>
-            <td><code>Jellyfish/docs/constraints.md:631-637</code></td>
+            <td><code>Jellyfish/docs/constraints.md:632-638</code></td>
           </tr>
         </tbody>
       </table>

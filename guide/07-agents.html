@@ -114,7 +114,7 @@ flowchart TD
       </p>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:487-499（配置五份文件表，含 `agents.json` 与 `default-agent.json` 的定位）、Jellyfish/README.md:695-727（`agents.json` 示例与字段表）</div>
+    <div class="src-block">Jellyfish/README.md:488-500（配置五份文件表，含 `agents.json` 与 `default-agent.json` 的定位）、Jellyfish/README.md:696-728（`agents.json` 示例与字段表）</div>
 
     <h2>agents.json 完整示例与字段表</h2>
 
@@ -189,18 +189,18 @@ flowchart TD
     <div class="callout warn">
       <span class="callout-title">工具名是 <code>shell</code>，不是 <code>bash</code></span>
       <p>
-        上面那段示例取自 <code>Jellyfish/README.md:695-707</code>。<strong>工具名以源码为准</strong>：官方 shell 插件注册的工具名是
+        上面那段示例取自 <code>Jellyfish/README.md:696-708</code>。<strong>工具名以源码为准</strong>：官方 shell 插件注册的工具名是
         <code>shell</code>（<code>ShellTool.TOOL_NAME = "shell"</code>，由 <code>ShellPlugin</code> 用它注册该工具），
         <code>Jellyfish-Plugins/README.md:53</code> 的插件一览也写作 <code>shell</code>；
         <code>Jellyfish-Plugins</code> 的源码里不存在名为 <code>bash</code> 的工具（<code>bash</code> 只是它用 <code>/bin/sh -c</code> 执行命令这件事的俗称）。
         <strong>内核文档早期版本在示例与审批框样张里误写成了 <code>bash</code>，现已改回 <code>shell</code></strong>
-        （<code>Jellyfish/README.md:706</code> 与 <code>Jellyfish/README.md:281</code> 两处）。如果你手上是旧版文档，照抄会写成一个
+        （<code>Jellyfish/README.md:707</code> 与 <code>Jellyfish/README.md:281</code> 两处）。如果你手上是旧版文档，照抄会写成一个
         <strong>命中不了任何工具</strong>的名字——效果是「不限制任何工具」而不是「每次跑命令都要批准」，务必手改成
         <code>"askTools": ["shell"]</code>。
       </p>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:695-727（`agents.json` 完整示例与四字段表）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/AgentDefinition.java:70-80、151-153、189（`description` 可为 null；`model` 为 null 即跟随全局默认，及它的优先级）、Jellyfish-Plugins/README.md:48-66（插件一览：shell 插件的工具名）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellTool.java:41（`TOOL_NAME = "shell"`）与 ShellPlugin.java:57（以它注册）、Jellyfish/README.md:281、701（审批框样张与示例里的工具名）</div>
+    <div class="src-block">Jellyfish/README.md:696-728（`agents.json` 完整示例与四字段表）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/AgentDefinition.java:70-80、151-153、189（`description` 可为 null；`model` 为 null 即跟随全局默认，及它的优先级）、Jellyfish-Plugins/README.md:48-66（插件一览：shell 插件的工具名）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellTool.java:41（`TOOL_NAME = "shell"`）与 ShellPlugin.java:57（以它注册）、Jellyfish/README.md:281、701（审批框样张与示例里的工具名）</div>
 
     <h2>工具权限三段：allowedTools / deniedTools / askTools</h2>
 
@@ -338,7 +338,7 @@ flowchart TD
       <li><strong>写了一个不存在的工具名？</strong><strong>静默</strong>——不告警、也不报错，因此这个条目<strong>等于没写</strong>。三段工具名在源码里只是一组字符串：配置侧由 <code>AgentPermissions</code> 收下并归一，判定侧是 <code>PermissionPolicy</code> 的三个集合，命中就是精确相等（<code>deniedTools.contains(toolName)</code>）——<strong>全仓库没有任何一处把它与实际注册的工具名对照</strong>。内核在权限这件事上只有一条告警：会话引用了配置里查不到的 <code>agentId</code>（那条会明说「该会话的工具调用一律拒绝」）；子代理权限比父更宽是被<strong>直接拒绝</strong>而不是告警。所以写错工具名不会有任何提示，只能自己核对 <a href="08-tools.html">08 页</a>的工具名总表。</li>
     </ul>
 
-    <div class="src-block">Jellyfish/README.md:728-744（工具权限三段语义、优先级与三外壳行为表）、Jellyfish/README.md:892-904（`permission` 段：`approvalTimeoutSeconds`）、Jellyfish/README.md:429-462（`allowedTools` 只随委派生效）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/permission/PermissionPolicy.java:105-130（判定只有字符串精确相等，不查工具清单）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/agent/AgentRegistry.java:206-222（权限侧唯一的告警：未声明的 agentId）、AgentRegistry.java:246-259（权限段转策略时不校验工具名）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/subagent/SubAgentLauncher.java:427-450（子代理权限比父更宽是拒绝，不是告警）</div>
+    <div class="src-block">Jellyfish/README.md:729-745（工具权限三段语义、优先级与三外壳行为表）、Jellyfish/README.md:893-905（`permission` 段：`approvalTimeoutSeconds`）、Jellyfish/README.md:430-463（`allowedTools` 只随委派生效）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/permission/PermissionPolicy.java:105-130（判定只有字符串精确相等，不查工具清单）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/agent/AgentRegistry.java:206-222（权限侧唯一的告警：未声明的 agentId）、AgentRegistry.java:246-259（权限段转策略时不校验工具名）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/subagent/SubAgentLauncher.java:427-450（子代理权限比父更宽是拒绝，不是告警）</div>
 
     <h2>提示词文件 <code>{agentId}.md</code></h2>
 
@@ -421,7 +421,7 @@ flowchart TD
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:745-750（提示词文件：位置、命名限制、文件不存在时的行为）、Jellyfish/README.md:947-962（双源合并与插值：`{agentId}.md` 为原文不做插值）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/AgentPromptLoader.java:37、83-88（后缀 `.md`、整份读取、源码里没有长度校验）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/prompt/PromptAssembler.java:478-483（原文整段拼进 system prompt）、:820-833（机械裁剪只裁历史消息，system prompt 只参与预算扣减）</div>
+    <div class="src-block">Jellyfish/README.md:746-751（提示词文件：位置、命名限制、文件不存在时的行为）、Jellyfish/README.md:948-963（双源合并与插值：`{agentId}.md` 为原文不做插值）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/AgentPromptLoader.java:37、83-88（后缀 `.md`、整份读取、源码里没有长度校验）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/prompt/PromptAssembler.java:478-483（原文整段拼进 system prompt）、:820-833（机械裁剪只裁历史消息，system prompt 只参与预算扣减）</div>
 
     <h2>default-agent.json：系统默认 agent</h2>
 
@@ -466,7 +466,7 @@ flowchart TD
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:751-765（`default-agent.json`：内置定义原文与绑定规则）、Jellyfish/README.md:487-499（配置五份文件表：「classpath 根，不走双源、用户改不了」）</div>
+    <div class="src-block">Jellyfish/README.md:752-766（`default-agent.json`：内置定义原文与绑定规则）、Jellyfish/README.md:488-500（配置五份文件表：「classpath 根，不走双源、用户改不了」）</div>
 
     <h2>查看与切换 agent</h2>
 
@@ -533,7 +533,7 @@ java -jar /path/to/jellyfish-cli-0.1.1.jar -cli --agent coder -p "帮我看看�
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:371-391（常用命令表：`/agent` 与别名 `/a`）、Jellyfish/README.md:120-139（参数表：`--agent` 与「只归 `-cli`」）、Jellyfish/README.md:140-167（退出码表）</div>
+    <div class="src-block">Jellyfish/README.md:372-392（常用命令表：`/agent` 与别名 `/a`）、Jellyfish/README.md:120-139（参数表：`--agent` 与「只归 `-cli`」）、Jellyfish/README.md:140-167（退出码表）</div>
 
     <h2>子代理委派：<code>task</code> 工具</h2>
 
@@ -657,7 +657,7 @@ java -jar /path/to/jellyfish-cli-0.1.1.jar -cli --agent coder -p "帮我看看�
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:429-462（委派给子代理：scout 示例、三条隔离规则、轨迹行、两道上限）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/subagent/TaskTool.java:53、293-300（`subagent_type` / `description` / `prompt` 三个参数）、:334-335（必填只有 `subagent_type` 与 `prompt`）、:267（`description` 空白时开场行只写「开始」）、Jellyfish/README.md:695-727（`delegatable` 与 `model` 字段）</div>
+    <div class="src-block">Jellyfish/README.md:430-463（委派给子代理：scout 示例、三条隔离规则、轨迹行、两道上限）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/subagent/TaskTool.java:53、293-300（`subagent_type` / `description` / `prompt` 三个参数）、:334-335（必填只有 `subagent_type` 与 `prompt`）、:267（`description` 空白时开场行只写「开始」）、Jellyfish/README.md:696-728（`delegatable` 与 `model` 字段）</div>
 
     <h2>subAgent 配置段全字段表</h2>
 
@@ -858,7 +858,7 @@ java -jar /path/to/jellyfish-cli-0.1.1.jar -cli --agent coder -p "帮我看看�
       <li><strong>不想要子代理了？</strong>把 <code>enabled</code> 设为 <code>false</code>，敲 <code>/reload</code>，<code>task</code> 工具就不再注册。</li>
     </ul>
 
-    <div class="src-block">Jellyfish/README.md:918-946（`subAgent` 段全字段表与「这几个键什么时候读」）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/ReActLooper.java:305-307（每个顶层回合开始时开委派作用域，读 `maxDepth` / `maxSpawnsPerTurn` / `runTokenBudget` / `treeTokenBudget`）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/runtime/RunScheduler.java:157-206（首次提交时建执行资源读 `maxConcurrentRuns` / `maxQueuedRuns` / `maxDepth`，墙钟每次起看门狗时读）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/subagent/SubAgentLauncher.java:231-242、316（每次委派读 `enabled`，每次派 run 读 `maxRounds`）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/subagent/SubAgentArchive.java:84-86（每次归档读 `archiveKeepFiles` / `archiveMaxBytes`）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/subagent/SubAgentTools.java:150、191（重算注册与组装提示贡献时读 `enabled`）</div>
+    <div class="src-block">Jellyfish/README.md:919-947（`subAgent` 段全字段表与「这几个键什么时候读」）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/ReActLooper.java:305-307（每个顶层回合开始时开委派作用域，读 `maxDepth` / `maxSpawnsPerTurn` / `runTokenBudget` / `treeTokenBudget`）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/runtime/RunScheduler.java:157-206（首次提交时建执行资源读 `maxConcurrentRuns` / `maxQueuedRuns` / `maxDepth`，墙钟每次起看门狗时读）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/subagent/SubAgentLauncher.java:231-242、316（每次委派读 `enabled`，每次派 run 读 `maxRounds`）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/subagent/SubAgentArchive.java:84-86（每次归档读 `archiveKeepFiles` / `archiveMaxBytes`）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/subagent/SubAgentTools.java:150、191（重算注册与组装提示贡献时读 `enabled`）</div>
 
     <h2>三个可直接用的 agent 完整示例（coder / scout / planner）</h2>
 
@@ -954,7 +954,7 @@ java -jar /path/to/jellyfish-cli-0.1.1.jar -cli --agent coder -p "帮我看看�
       （见 <a href="08-tools.html">08 内置工具速查</a>的 workflow 一节）。
     </p>
 
-    <div class="src-block">Jellyfish/README.md:695-727（agent 四字段与示例）、Jellyfish/README.md:429-462（委派示例与隔离规则）、Jellyfish-Plugins/README.md:557-621（编排 spec 里的 `agent` / `needs` 用法）</div>
+    <div class="src-block">Jellyfish/README.md:696-728（agent 四字段与示例）、Jellyfish/README.md:430-463（委派示例与隔离规则）、Jellyfish-Plugins/README.md:557-621（编排 spec 里的 `agent` / `needs` 用法）</div>
 
     <h2>常见问题</h2>
 
@@ -978,7 +978,7 @@ java -jar /path/to/jellyfish-cli-0.1.1.jar -cli --agent coder -p "帮我看看�
       <dd>只派一个子代理做一件事用内核自带的 <code>task</code>；「几件事可以同时做、再把结果合起来」用 <code>workflow</code> 插件的 spec。两者在内核里走同一条委派路径，并发、深度、预算、取消口径完全一致。</dd>
     </dl>
 
-    <div class="src-block">Jellyfish/README.md:751-765（默认 agent 的绑定规则）、Jellyfish/README.md:728-744（三段语义）、Jellyfish/README.md:918-946（`subAgent` 生效方式）、Jellyfish-Plugins/README.md:557-621（workflow 与 task 的分工）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/AgentPromptLoader.java:83-88 与 Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/prompt/PromptAssembler.java:478-483、820-833（`{agentId}.md` 无长度上限、原样进 system prompt、裁剪不碰它）</div>
+    <div class="src-block">Jellyfish/README.md:752-766（默认 agent 的绑定规则）、Jellyfish/README.md:729-745（三段语义）、Jellyfish/README.md:919-947（`subAgent` 生效方式）、Jellyfish-Plugins/README.md:557-621（workflow 与 task 的分工）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/AgentPromptLoader.java:83-88 与 Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/prompt/PromptAssembler.java:478-483、820-833（`{agentId}.md` 无长度上限、原样进 system prompt、裁剪不碰它）</div>
 
     <div class="conclusion">
       <h2>关键结论</h2>
