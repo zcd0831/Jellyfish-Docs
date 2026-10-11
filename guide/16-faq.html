@@ -365,7 +365,7 @@
       <code>rm -rf /</code> 依旧被拒。要「允许跑但每次都要我批准」，就只配白名单、不配可信表。
       不想一条条维护名单时，两个表都可以写<strong>整条 <code>*</code></strong>（匹配全部命令；写作 <code>git *</code> 没有这个效果）。
     </p>
-    <div class="src-block">Jellyfish/README.md:140-168（退出码与兜底）、Jellyfish/README.md:825-834（Unreleased：重试 1 次与截断提示）、Jellyfish/README.md:861-871（react 字段表）、Jellyfish/README.md:1098-1111（-cli 下工具被拒）、Jellyfish/README.md:451-462（子代理不继承模型、token 计入父会话）、Jellyfish/docs/constraints.md:495-521（ask_user 与审批的差别）、Jellyfish/docs/constraints.md:1148-1217（边界与明确不做：UI 深度、子代理、压缩）、Jellyfish-Plugins/README.md:196-252（白名单与可信表）、Jellyfish-Plugins/README.md:244-252（Windows 未验证）、Jellyfish-Plugins/README.md:253（非 POSIX 平台映射成 <code>cmd.exe /c</code>）、Jellyfish-Plugins/README.md:652（MCP 子进程环境白名单：Windows 另加四个变量）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommonsExecShellProcessLauncher.java:28（Windows 未验证的源码说明）、Jellyfish-Plugins/jellyfish-plugin-session-file/src/main/java/zcd/jellyfish/plugin/sessionfile/SessionStore.java:220（不支持 POSIX 权限位的平台跳过权限设置）、Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/Utf8Files.java:82（同样跳过 POSIX 权限位）、Jellyfish-Plugins/CHANGELOG.md:225（同上，行为变更记录）、Jellyfish/docs/constraints.md:1232（UI 深度明确不做：主题与自定义颜色）、Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiApp.java:287（<code>jellyfish.tui.pluginPanels</code>）、Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiApp.java:312（<code>jellyfish.tui.mouseCapture</code>）、Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiTerminal.java:33（<code>jellyfish.tui.skipTerminalCheck</code>）、Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/UiRender.java:22（颜色语义收在一个类里：插件换不了主题）、Jellyfish-Plugins/jellyfish-plugin-resmon/src/main/java/zcd/jellyfish/plugin/resmon/ResmonPanel.java:65（阈值决定面板配色档位）</div>
+    <div class="src-block">Jellyfish/README.md:140-168（退出码与兜底）、Jellyfish/README.md:825-834（Unreleased：重试 1 次与截断提示）、Jellyfish/README.md:861-871（react 字段表）、Jellyfish/README.md:1098-1111（-cli 下工具被拒）、Jellyfish/README.md:451-462（子代理不继承模型、token 计入父会话）、Jellyfish/docs/constraints.md:495-521（ask_user 与审批的差别）、Jellyfish/docs/constraints.md:1148-1217（边界与明确不做：UI 深度、子代理、压缩）、Jellyfish-Plugins/README.md:196-252（白名单与可信表）、Jellyfish-Plugins/README.md:244-252（Windows 未验证）、Jellyfish-Plugins/README.md:253（非 POSIX 平台映射成 <code>cmd.exe /c</code>）、Jellyfish-Plugins/README.md:652（MCP 子进程环境白名单：Windows 另加四个变量）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommonsExecShellProcessLauncher.java:28（Windows 未验证的源码说明）、Jellyfish-Plugins/jellyfish-plugin-session-file/src/main/java/zcd/jellyfish/plugin/sessionfile/SessionStore.java:220（不支持 POSIX 权限位的平台跳过权限设置）、Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/Utf8Files.java:82（同样跳过 POSIX 权限位）、Jellyfish-Plugins/CHANGELOG.md:230（同上，行为变更记录）、Jellyfish/docs/constraints.md:1232（UI 深度明确不做：主题与自定义颜色）、Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiApp.java:287（<code>jellyfish.tui.pluginPanels</code>）、Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiApp.java:312（<code>jellyfish.tui.mouseCapture</code>）、Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiTerminal.java:33（<code>jellyfish.tui.skipTerminalCheck</code>）、Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/UiRender.java:22（颜色语义收在一个类里：插件换不了主题）、Jellyfish-Plugins/jellyfish-plugin-resmon/src/main/java/zcd/jellyfish/plugin/resmon/ResmonPanel.java:65（阈值决定面板配色档位）</div>
 
     <h2 id="faq-4">四、插件与集成</h2>
 
@@ -428,7 +428,7 @@
 
     <h3>Q32　怎么把内核接进已有的 Spring Boot 应用？</h3>
     <p>
-      加依赖 <code>io.github.zcd0831:jellyfish-spring-boot-starter:0.1.1</code>（它依赖内核 <code>jellyfish-di</code>），
+      加依赖 <code>io.github.zcd0831:jellyfish-spring-boot-starter:0.1.2</code>（它依赖内核 <code>jellyfish-di</code>），
       用 <code>application.yml</code> 指定<strong>四份配置文件在哪</strong>与插件扫描目录，<strong>内容仍是内核的 JSON 格式</strong>
       （starter 刻意不把 JSON 翻译成 yml）；然后交互一律走 <code>JellyfishUserFacade</code>。
       三条最容易踩的：审批与提问通道缺省<strong>关闭</strong>（接好接口再打开）、不要重复注册内核组件的第二个视图、
@@ -690,7 +690,7 @@
     </div>
 
     <p>
-      三个仓库的版本都是 <code>0.1.1</code>，但<strong>没有任何文档声明三者之间的版本兼容矩阵</strong>——
+      三个仓库的版本都是 <code>0.1.2</code>，但<strong>没有任何文档声明三者之间的版本兼容矩阵</strong>——
       涉及「哪个内核版本配哪个插件 / Starter 版本」时请写
       <code>【版本对应关系需查阅各自 README】</code>，不要凭版本号相等去推断。
     </p>
@@ -730,7 +730,7 @@
       <h3>3. 三个仓库之间的版本兼容矩阵</h3>
       <dl>
         <dt>原因</dt>
-        <dd>三个仓库都停在 <code>0.1.1</code>，但<strong>没有任何文档声明兼容矩阵</strong>。插件对 <code>jellyfish-api</code> 是
+        <dd>三个仓库都停在 <code>0.1.2</code>，但<strong>没有任何文档声明兼容矩阵</strong>。插件对 <code>jellyfish-api</code> 是
           <code>provided</code>、Starter 依赖 <code>jellyfish-di</code>，因此「同一版本号」不等于「互相兼容」。
         </dd>
         <dt>去哪找</dt>

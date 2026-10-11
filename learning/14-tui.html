@@ -171,7 +171,7 @@ flowchart TB
       <span class="callout-title">读代码时容易迷路的一点</span>
       <p>
         <code>TuiApp extends ToolkitApp</code>，而 <code>ToolkitApp</code> 来自外部依赖
-        <code>dev.tamboui:tamboui-toolkit</code>（<code>jellyfish-tui/pom.xml:38</code>）。
+        <code>dev.tamboui:tamboui-toolkit</code>（<code>jellyfish-tui/pom.xml:61-65</code>）。
         <strong>主事件循环由 <code>ToolkitApp.run()</code> 驱动，本仓库里找不到它。</strong>
         <code>TuiRunMode.java:213</code> 的注释指明了这一点。
       </p>

@@ -117,11 +117,11 @@
           <tr><td>语言 / 运行时</td><td>Java 1.8（源码与 target 均为 1.8，<strong>构建需 JDK 8，运行只需 JRE 8+</strong>）</td><td><code>Jellyfish/pom.xml:54-56</code>、<code>Jellyfish/README.md:27</code></td></tr>
           <tr><td>构建</td><td>Maven 多模块（聚合 + 父 POM），<code>maven-shade-plugin</code> 产出单个可执行 fat jar</td><td><code>Jellyfish/pom.xml:43-51</code>、<code>jellyfish-cli/pom.xml:100-124</code></td></tr>
           <tr><td>插件框架</td><td>PF4J（运行时加载独立 jar，SPI 走 <code>jellyfish-api</code>）</td><td><code>jellyfish-infra/.../plugin/PF4JPluginManager.java</code></td></tr>
-          <tr><td>终端 UI</td><td>TamboUI（备用屏 + raw 模式，外部依赖 <code>dev.tamboui:tamboui-toolkit</code>）</td><td><code>jellyfish-tui/pom.xml:38</code>、<code>tui/TuiApp.java</code></td></tr>
+          <tr><td>终端 UI</td><td>TamboUI（备用屏 + raw 模式，外部依赖 <code>dev.tamboui:tamboui-toolkit</code>）</td><td><code>jellyfish-tui/pom.xml:61-65</code>、<code>tui/TuiApp.java</code></td></tr>
           <tr><td>HTTP 服务</td><td>Undertow（REST + SSE）</td><td><code>jellyfish-server/.../JellyfishServer.java</code></td></tr>
           <tr><td>DI / 装配</td><td>Dagger2（编译期生成）<strong>与</strong>手写装配工厂，二者交付同一契约</td><td><code>jellyfish-di/</code>、<code>JellyfishAssembler.java</code></td></tr>
           <tr><td>JSON</td><td>Jackson，经 <code>ObjectMapperWrapper</code> 统一（禁止直接 <code>new ObjectMapper</code>）</td><td><code>infra/support/ObjectMapperWrapper.java</code></td></tr>
-          <tr><td>测试</td><td>JUnit5 + Mockito + JaCoCo</td><td><code>Jellyfish/pom.xml:281-296</code></td></tr>
+          <tr><td>测试</td><td>JUnit5 + Mockito + JaCoCo</td><td><code>Jellyfish/pom.xml:262-277</code></td></tr>
         </tbody>
       </table>
     </div>

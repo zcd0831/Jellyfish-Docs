@@ -86,7 +86,7 @@
     <div class="callout tip">
       <span class="callout-title">读这一页之前需要什么</span>
       <ul>
-        <li>三个仓库的版本都是 <code>0.1.1</code>，但<strong>没有任何文档声明三者之间的版本兼容矩阵</strong>；
+        <li>三个仓库的版本都是 <code>0.1.2</code>，但<strong>没有任何文档声明三者之间的版本兼容矩阵</strong>；
           凡涉及「哪个内核版本配哪个 Starter 版本」，一律按 <code>【版本对应关系需查阅各自 README】</code> 处理。</li>
         <li>本页假定你已经知道内核的四份配置文件与插件怎么装：没读过的话先看
           <a href="05-config-overview.html">05 配置体系总览</a> 与 <a href="11-plugin-usage.html">11 安装与使用官方插件</a>——
@@ -179,7 +179,7 @@
           </tr>
           <tr>
             <td>内核</td>
-            <td><code>io.github.zcd0831:jellyfish-di:0.1.1</code></td>
+            <td><code>io.github.zcd0831:jellyfish-di:0.1.2</code></td>
             <td><strong>已发布到中央仓库</strong>，依赖由 Maven 直接解析（传递带 <code>jellyfish-api</code> / <code>jellyfish-infra</code> / <code>jellyfish-core</code>）</td>
           </tr>
         </tbody>
@@ -215,8 +215,8 @@
             <td>string</td>
             <td><span class="tag required">必填</span></td>
             <td>—</td>
-            <td>版本号；三个仓库当前都是 <code>0.1.1</code></td>
-            <td><code>0.1.1</code></td>
+            <td>版本号；三个仓库当前都是 <code>0.1.2</code></td>
+            <td><code>0.1.2</code></td>
           </tr>
         </tbody>
       </table>
@@ -225,7 +225,7 @@
     <pre><code class="language-xml">&lt;dependency&gt;
     &lt;groupId&gt;io.github.zcd0831&lt;/groupId&gt;
     &lt;artifactId&gt;jellyfish-spring-boot-starter&lt;/artifactId&gt;
-    &lt;version&gt;0.1.1&lt;/version&gt;
+    &lt;version&gt;0.1.2&lt;/version&gt;
 &lt;/dependency&gt;</code></pre>
 
     <div class="callout tip">
@@ -1947,9 +1947,9 @@ public class DelayedBootstrapConfig {
               <td><code>jellyfish.version</code></td>
               <td>Maven 属性</td>
               <td><span class="tag optional">选填</span></td>
-              <td><code>0.1.1</code></td>
+              <td><code>0.1.2</code></td>
               <td>内核模块（<code>jellyfish-di</code> 及其传递依赖）的版本</td>
-              <td><code>&lt;jellyfish.version&gt;0.1.1&lt;/jellyfish.version&gt;</code></td>
+              <td><code>&lt;jellyfish.version&gt;0.1.2&lt;/jellyfish.version&gt;</code></td>
             </tr>
           </tbody>
         </table>
@@ -2119,7 +2119,7 @@ mvn test -Djackson-bom.version=2.13.5   # Boot 管理的版本</code></pre>
       <p><strong>常见问题</strong></p>
       <ul>
         <li><strong>本 starter 依赖的内核从哪来？</strong>中央仓库：
-          <code>io.github.zcd0831:jellyfish-spring-boot-starter:0.1.1</code> 依赖
+          <code>io.github.zcd0831:jellyfish-spring-boot-starter:0.1.2</code> 依赖
           <code>io.github.zcd0831:jellyfish-di</code>，同样来自中央仓库。</li>
         <li><strong>日常构建会被 GPG 挡住吗？</strong>不会，四个插件只在 <code>-P release</code> 时加载。</li>
         <li><strong>官方插件也从中央仓库拿吗？</strong>不。官方插件是 PF4J 插件包，

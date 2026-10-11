@@ -214,7 +214,7 @@
 ├── pom.xml                      ← 父 POM：新增模块要在 &lt;modules&gt; 里登记
 ├── cpPlugins.sh                 ← 新增插件要在这里加一行 cp
 └── my-plugin/
-    ├── pom.xml                  ← &lt;parent&gt; 指向 io.github.zcd0831:jellyfish-plugins:0.1.1
+    ├── pom.xml                  ← &lt;parent&gt; 指向 io.github.zcd0831:jellyfish-plugins:0.1.2
     └── src/
         ├── main/java/com/example/myplugin/MyPlugin.java
         ├── main/resources/plugin.properties
@@ -330,7 +330,7 @@ jellyfish.tags=example</code></pre>
     <pre><code class="language-xml">&lt;parent&gt;
     &lt;groupId&gt;io.github.zcd0831&lt;/groupId&gt;
     &lt;artifactId&gt;jellyfish-plugins&lt;/artifactId&gt;
-    &lt;version&gt;0.1.1&lt;/version&gt;
+    &lt;version&gt;0.1.2&lt;/version&gt;
 &lt;/parent&gt;
 
 &lt;artifactId&gt;my-plugin&lt;/artifactId&gt;
@@ -352,7 +352,7 @@ jellyfish.tags=example</code></pre>
         四个构件（坐标 <code>io.github.zcd0831:jellyfish</code>），而 <code>Jellyfish-Plugins</code>
         <strong>没有 <code>release</code> profile</strong>（整份 <code>pom.xml</code> 里没有任何用于发布 Central 的 <code>&lt;profiles&gt;</code>；
         各插件模块自己的 <code>&lt;profiles&gt;</code> 只用来跑端到端测试，如 <code>shell-it</code>、<code>mcp-it</code>、<code>script-it</code>）。
-        因此 <code>io.github.zcd0831:jellyfish-plugins:0.1.1</code> <strong>不在中央仓库</strong>——<code>repo1.maven.org</code> 上
+        因此 <code>io.github.zcd0831:jellyfish-plugins:0.1.2</code> <strong>不在中央仓库</strong>——<code>repo1.maven.org</code> 上
         <code>io/github/zcd0831/</code> 整个路径 404，Central 检索该 <code>groupId</code> 命中 0 条。
       </p>
       <p>
@@ -381,8 +381,8 @@ jellyfish.tags=example</code></pre>
     &lt;name&gt;My Jellyfish Plugin&lt;/name&gt;
 
     &lt;properties&gt;
-        &lt;!-- 内核契约的版本：与你要装的那个内核一致（本套文档写的是 0.1.1） --&gt;
-        &lt;jellyfish.version&gt;0.1.1&lt;/jellyfish.version&gt;
+        &lt;!-- 内核契约的版本：与你要装的那个内核一致（本套文档写的是 0.1.2） --&gt;
+        &lt;jellyfish.version&gt;0.1.2&lt;/jellyfish.version&gt;
         &lt;java.version&gt;1.8&lt;/java.version&gt;
         &lt;maven.compiler.source&gt;${java.version}&lt;/maven.compiler.source&gt;
         &lt;maven.compiler.target&gt;${java.version}&lt;/maven.compiler.target&gt;
@@ -1061,8 +1061,8 @@ cp my-plugin/target/my-plugin-*.jar ~/.jellyfish/plugins/
 
 # 2) 重启 jellyfish —— 新增 / 删除插件 jar 只在启动期确定
 # 3) 验证：看启动日志、看 /help、跑一条命令
-java -jar /path/to/jellyfish-cli-0.1.1.jar -cli -p "/help"
-java -jar /path/to/jellyfish-cli-0.1.1.jar -cli -p "/hello 世界"</code></pre>
+java -jar /path/to/jellyfish-cli-0.1.2.jar -cli -p "/help"
+java -jar /path/to/jellyfish-cli-0.1.2.jar -cli -p "/hello 世界"</code></pre>
 
     <p>三种验证方法，从「最省事」到「最直接」：</p>
 

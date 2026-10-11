@@ -219,7 +219,7 @@ flowchart TD
       <table>
         <tbody>
           <tr><th style="width:88px">现象</th><td><code>subAgent</code> 的并发 / 墙钟预算配了，实际仍按缺省跑</td></tr>
-          <tr><th>根因</th><td><code>RunScheduler</code> 在 <code>RuntimeConfig.refresh()</code> 之前就被构造，读到的是缺省值（CHANGELOG Unreleased / 0.1.1 Fixed）</td></tr>
+          <tr><th>根因</th><td><code>RunScheduler</code> 在 <code>RuntimeConfig.refresh()</code> 之前就被构造，读到的是缺省值（CHANGELOG 0.1.1 Fixed）</td></tr>
           <tr><th>规避</th><td>升级版本；这类「装配期读到的配置」改完必须重启，不要指望 <code>/reload</code></td></tr>
         </tbody>
       </table>

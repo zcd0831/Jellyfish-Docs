@@ -296,7 +296,7 @@
 
     <p>
       顺带把两个易混的事实说清。第一，13 个插件的 <code>plugin.id</code> <strong>都等于模块名</strong>，
-      <code>plugin.version</code> 都是 <code>0.1.1</code>、<code>plugin.provider</code> 都是 <code>zcd</code>。
+      <code>plugin.version</code> 都是 <code>0.1.2</code>、<code>plugin.provider</code> 都是 <code>zcd</code>。
       第二，描述符里有一个 <code>jellyfish.tags</code> 键（例如 <code>tools</code> 写 <code>files,tools</code>、
       <code>workflow</code> 写 <code>workflow,orchestration,subagent</code>），
       但它是<strong>给人看的分类标签</strong>，不参与加载判定。
@@ -328,7 +328,7 @@
 # plugin.id 同时是注册表的 owner：插件卸载时按它批量回收工具注册。
 plugin.id=jellyfish-plugin-tools
 plugin.class=zcd.jellyfish.plugin.tools.ToolsPlugin
-plugin.version=0.1.1
+plugin.version=0.1.2
 plugin.provider=zcd
 plugin.description=文件读取 / 写入 / 编辑、目录列举与文本搜索
 
@@ -359,7 +359,7 @@ jellyfish.tags=files,tools</code></pre>
           </tr>
           <tr>
             <td><code>plugin.version</code></td>
-            <td><code>0.1.1</code></td>
+            <td><code>0.1.2</code></td>
             <td>插件自身版本；缺失时被补成兜底版本，不让下游依赖解析拿到 <code>null</code></td>
           </tr>
           <tr>
@@ -758,19 +758,19 @@ flowchart TD
 
     <div class="src-block">cpPlugins.sh:1-13（13 条 cp，目标目录是 ~/.jellyfish/plugins）</div>
 
-<pre><code class="language-bash">cp Jellyfish-Plugins/jellyfish-plugin-compact/target/jellyfish-plugin-compact-0.1.1.jar ~/.jellyfish/plugins
-cp Jellyfish-Plugins/jellyfish-plugin-todo/target/jellyfish-plugin-todo-0.1.1.jar ~/.jellyfish/plugins
-cp Jellyfish-Plugins/jellyfish-plugin-tools/target/jellyfish-plugin-tools-0.1.1.jar ~/.jellyfish/plugins
-cp Jellyfish-Plugins/jellyfish-plugin-session-file/target/jellyfish-plugin-session-file-0.1.1.jar ~/.jellyfish/plugins
-cp Jellyfish-Plugins/jellyfish-plugin-project/target/jellyfish-plugin-project-0.1.1.jar ~/.jellyfish/plugins
-cp Jellyfish-Plugins/jellyfish-plugin-shell/target/jellyfish-plugin-shell-0.1.1.jar ~/.jellyfish/plugins
-cp Jellyfish-Plugins/jellyfish-plugin-plan/target/jellyfish-plugin-plan-0.1.1.jar ~/.jellyfish/plugins
-cp Jellyfish-Plugins/jellyfish-plugin-skills/target/jellyfish-plugin-skills-0.1.1.jar ~/.jellyfish/plugins
-cp Jellyfish-Plugins/jellyfish-plugin-workflow/target/jellyfish-plugin-workflow-0.1.1.jar ~/.jellyfish/plugins
-cp Jellyfish-Plugins/jellyfish-plugin-python/target/jellyfish-plugin-python-0.1.1.jar ~/.jellyfish/plugins
-cp Jellyfish-Plugins/jellyfish-plugin-resmon/target/jellyfish-plugin-resmon-0.1.1.jar ~/.jellyfish/plugins
-cp Jellyfish-Plugins/jellyfish-plugin-mcp/target/jellyfish-plugin-mcp-0.1.1.jar ~/.jellyfish/plugins
-cp Jellyfish-Plugins/jellyfish-plugin-node/target/jellyfish-plugin-node-0.1.1.jar ~/.jellyfish/plugins</code></pre>
+<pre><code class="language-bash">cp Jellyfish-Plugins/jellyfish-plugin-compact/target/jellyfish-plugin-compact-0.1.2.jar ~/.jellyfish/plugins
+cp Jellyfish-Plugins/jellyfish-plugin-todo/target/jellyfish-plugin-todo-0.1.2.jar ~/.jellyfish/plugins
+cp Jellyfish-Plugins/jellyfish-plugin-tools/target/jellyfish-plugin-tools-0.1.2.jar ~/.jellyfish/plugins
+cp Jellyfish-Plugins/jellyfish-plugin-session-file/target/jellyfish-plugin-session-file-0.1.2.jar ~/.jellyfish/plugins
+cp Jellyfish-Plugins/jellyfish-plugin-project/target/jellyfish-plugin-project-0.1.2.jar ~/.jellyfish/plugins
+cp Jellyfish-Plugins/jellyfish-plugin-shell/target/jellyfish-plugin-shell-0.1.2.jar ~/.jellyfish/plugins
+cp Jellyfish-Plugins/jellyfish-plugin-plan/target/jellyfish-plugin-plan-0.1.2.jar ~/.jellyfish/plugins
+cp Jellyfish-Plugins/jellyfish-plugin-skills/target/jellyfish-plugin-skills-0.1.2.jar ~/.jellyfish/plugins
+cp Jellyfish-Plugins/jellyfish-plugin-workflow/target/jellyfish-plugin-workflow-0.1.2.jar ~/.jellyfish/plugins
+cp Jellyfish-Plugins/jellyfish-plugin-python/target/jellyfish-plugin-python-0.1.2.jar ~/.jellyfish/plugins
+cp Jellyfish-Plugins/jellyfish-plugin-resmon/target/jellyfish-plugin-resmon-0.1.2.jar ~/.jellyfish/plugins
+cp Jellyfish-Plugins/jellyfish-plugin-mcp/target/jellyfish-plugin-mcp-0.1.2.jar ~/.jellyfish/plugins
+cp Jellyfish-Plugins/jellyfish-plugin-node/target/jellyfish-plugin-node-0.1.2.jar ~/.jellyfish/plugins</code></pre>
 
     <p>
       脚本后面还有几行（<code>cpPlugins.sh:15-20</code>）：把 <code>examples/scripts/python</code> 下的

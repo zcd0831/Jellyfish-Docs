@@ -159,9 +159,9 @@
       <table>
         <thead><tr><th>项</th><th>版本 / 坐标</th><th>声明位置</th></tr></thead>
         <tbody>
-          <tr><td>JUnit</td><td><code>5.10.2</code>（<code>org.junit:junit-bom</code> import）</td><td><code>Jellyfish/pom.xml:104</code>（属性）、<code>:220-222</code>（import）</td></tr>
-          <tr><td>Mockito</td><td><code>4.11.0</code>（<code>org.mockito:mockito-bom</code> import）</td><td><code>Jellyfish/pom.xml:105</code>、<code>:227-229</code></td></tr>
-          <tr><td>JaCoCo</td><td><code>0.8.12</code></td><td><code>Jellyfish/pom.xml:108</code>、<code>:268-270</code></td></tr>
+          <tr><td>JUnit</td><td><code>5.10.2</code>（<code>org.junit:junit-bom</code> import）</td><td><code>Jellyfish/pom.xml:104</code>（属性）、<code>:201-203</code>（import）</td></tr>
+          <tr><td>Mockito</td><td><code>4.11.0</code>（<code>org.mockito:mockito-bom</code> import）</td><td><code>Jellyfish/pom.xml:105</code>、<code>:208-210</code></td></tr>
+          <tr><td>JaCoCo</td><td><code>0.8.12</code></td><td><code>Jellyfish/pom.xml:108</code>、<code>:249-251</code></td></tr>
           <tr><td>surefire</td><td><strong>未声明版本</strong>，随 Maven 父 POM</td><td>仅 <code>jellyfish-cli/pom.xml:147, 151</code> 覆写 include</td></tr>
         </tbody>
       </table>
@@ -169,7 +169,7 @@
 
     <h3>事实一：JaCoCo 没有覆盖率门禁</h3>
 
-    <div class="src-block">Jellyfish/pom.xml:273-294</div>
+    <div class="src-block">Jellyfish/pom.xml:254-275</div>
 
 <pre><code class="language-xml">&lt;!-- 排除生成代码：Dagger 的产物不该算进覆盖率分母 --&gt;
 &lt;excludes&gt;
@@ -178,7 +178,7 @@
   &lt;exclude&gt;**/*_MembersInjector.*&lt;/exclude&gt;
   &lt;exclude&gt;**/package-info.*&lt;/exclude&gt;
 &lt;/excludes&gt;
-&lt;!-- :283-286 prepare-agent / :290-294 report（绑 test 阶段） --&gt;</code></pre>
+&lt;!-- :263-268 prepare-agent / :270-276 report（绑 test 阶段） --&gt;</code></pre>
 
     <p>
       <strong>只有 <code>prepare-agent</code> 与 <code>report</code> 两个 goal，没有 <code>check</code></strong>。
@@ -226,8 +226,9 @@
     <h3>事实三：TamboUI 是 SNAPSHOT 依赖</h3>
 
     <p>
-      <code>dev.tamboui:tamboui-bom 0.5.0-SNAPSHOT</code>（<code>Jellyfish/pom.xml:142-144</code>，import 方式），
-      实际构件 <code>tamboui-toolkit</code> / <code>tamboui-jline3-backend</code> 不带版本（<code>jellyfish-tui/pom.xml:38-49</code>）。
+      <code>dev.tamboui:tamboui-toolkit</code> / <code>tamboui-jline3-backend</code> 的版本是 SNAPSHOT <code>0.5.0-SNAPSHOT</code>，
+      写在 <code>jellyfish-tui</code> 自己的 POM 属性 <code>tamboui.version</code>（<code>jellyfish-tui/pom.xml:23</code>；父 POM 刻意不 import TamboUI 的 BOM），
+      两个依赖都显式带 <code>&lt;version&gt;${tamboui.version}&lt;/version&gt;</code>（<code>jellyfish-tui/pom.xml:61-65</code>、<code>:72-82</code>）。
     </p>
 
     <div class="callout pitfall">
@@ -240,8 +241,8 @@
       <p>
         这是本页所有事实里<strong>对构建可复现性影响最大的一条</strong>。要做生产构建，
         建议先把该快照落到本地仓库并固定，或等它发正式版。
-        另外 <code>jellyfish-tui/pom.xml:48-55</code> 排除了 TamboUI 传递来的 <code>jline 3.25.1</code>，
-        自己显式声明 <code>jline 3.30.17</code>（<code>:58-60</code>）——这种「排除传递版本、自己钉一个」的做法值得学，
+        另外 <code>jellyfish-tui/pom.xml:73-81</code> 排除了 TamboUI 传递来的 <code>jline 3.25.1</code>，
+        自己显式声明 <code>jline 3.30.17</code>（<code>:84-86</code>）——这种「排除传递版本、自己钉一个」的做法值得学，
         因为它把版本冲突的处理显式化了。
       </p>
     </div>
@@ -494,18 +495,18 @@ private void forEachRuntime(Consumer&lt;JellyfishRuntime&gt; assertion) {
       <table>
         <thead><tr><th>坐标</th><th>版本</th><th>声明行</th><th>用途</th></tr></thead>
         <tbody>
-          <tr><td><code>com.google.dagger:dagger</code></td><td>2.16</td><td><code>Jellyfish/pom.xml:128-130</code></td><td>编译期 DI，生成 <code>Dagger*</code></td></tr>
-          <tr><td><code>javax.inject:javax.inject</code></td><td>1</td><td><code>:135-137</code></td><td><code>@Inject</code> 注解</td></tr>
-          <tr><td><code>dev.tamboui:tamboui-bom</code></td><td><strong>0.5.0-SNAPSHOT</strong></td><td><code>:142-144</code></td><td>TUI 框架（见第 2 节的事实三）</td></tr>
-          <tr><td><code>io.undertow:undertow-core</code></td><td>2.2.40.Final</td><td><code>:151-153</code></td><td>HTTP 服务与 SSE</td></tr>
-          <tr><td><code>com.squareup.okhttp3:okhttp</code></td><td>4.12.0</td><td><code>:158-160</code></td><td>模型调用与插件传输的 HTTP 客户端</td></tr>
-          <tr><td><code>com.fasterxml.jackson.core:jackson-databind</code></td><td>2.21.6</td><td><code>:165-167</code></td><td>JSON（统一经 <code>ObjectMapperWrapper</code>）</td></tr>
-          <tr><td><code>org.pf4j:pf4j</code></td><td>3.14.1</td><td><code>:172-174</code></td><td>插件框架</td></tr>
-          <tr><td><code>org.slf4j:slf4j-api</code></td><td>1.7.36</td><td><code>:179-181</code></td><td>日志门面</td></tr>
-          <tr><td><code>org.apache.logging.log4j:*</code></td><td>2.25.4</td><td><code>:184-191</code></td><td>日志实现（含 <code>log4j-slf4j-impl</code>）</td></tr>
-          <tr><td><code>org.apache.commons:commons-lang3</code></td><td>3.18.0</td><td><code>:196-198</code></td><td>字符串工具</td></tr>
-          <tr><td><code>org.commonmark:commonmark</code> + <code>-ext-gfm-tables</code> + <code>-ext-gfm-strikethrough</code></td><td>0.21.0</td><td><code>:203-215</code></td><td>TUI 的 markdown 渲染（见 <a href="14-tui.html">14 页</a>）</td></tr>
-          <tr><td><code>org.jline:jline</code></td><td>3.30.17</td><td><code>jellyfish-tui/pom.xml:58-60</code></td><td>终端行编辑（显式覆盖 TamboUI 传递的 3.25.1，<code>:48-55</code> 排除）</td></tr>
+          <tr><td><code>com.google.dagger:dagger</code></td><td>2.16</td><td><code>Jellyfish/pom.xml:118-120</code></td><td>编译期 DI，生成 <code>Dagger*</code></td></tr>
+          <tr><td><code>javax.inject:javax.inject</code></td><td>1</td><td><code>:125-127</code></td><td><code>@Inject</code> 注解</td></tr>
+          <tr><td><code>dev.tamboui:tamboui-toolkit</code>、<code>tamboui-jline3-backend</code></td><td><strong>0.5.0-SNAPSHOT</strong></td><td><code>jellyfish-tui/pom.xml:23</code>（<code>tamboui.version</code>）、<code>:61-65</code>、<code>:72-82</code></td><td>TUI 框架（见第 2 节的事实三）</td></tr>
+          <tr><td><code>io.undertow:undertow-core</code></td><td>2.2.40.Final</td><td><code>:132-134</code></td><td>HTTP 服务与 SSE</td></tr>
+          <tr><td><code>com.squareup.okhttp3:okhttp</code></td><td>4.12.0</td><td><code>:139-141</code></td><td>模型调用与插件传输的 HTTP 客户端</td></tr>
+          <tr><td><code>com.fasterxml.jackson.core:jackson-databind</code></td><td>2.21.6</td><td><code>:146-148</code></td><td>JSON（统一经 <code>ObjectMapperWrapper</code>）</td></tr>
+          <tr><td><code>org.pf4j:pf4j</code></td><td>3.14.1</td><td><code>:153-155</code></td><td>插件框架</td></tr>
+          <tr><td><code>org.slf4j:slf4j-api</code></td><td>1.7.36</td><td><code>:160-162</code></td><td>日志门面</td></tr>
+          <tr><td><code>org.apache.logging.log4j:*</code></td><td>2.25.4</td><td><code>:165-172</code></td><td>日志实现（含 <code>log4j-slf4j-impl</code>）</td></tr>
+          <tr><td><code>org.apache.commons:commons-lang3</code></td><td>3.18.0</td><td><code>:177-179</code></td><td>字符串工具</td></tr>
+          <tr><td><code>org.commonmark:commonmark</code> + <code>-ext-gfm-tables</code> + <code>-ext-gfm-strikethrough</code></td><td>0.21.0</td><td><code>:184-196</code></td><td>TUI 的 markdown 渲染（见 <a href="14-tui.html">14 页</a>）</td></tr>
+          <tr><td><code>org.jline:jline</code></td><td>3.30.17</td><td><code>jellyfish-tui/pom.xml:84-86</code></td><td>终端行编辑（显式覆盖 TamboUI 传递的 3.25.1，<code>:73-81</code> 排除）</td></tr>
         </tbody>
       </table>
     </div>

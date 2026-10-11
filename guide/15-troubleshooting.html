@@ -222,12 +222,12 @@
         <dt>解决</dt>
         <dd>
           <ul>
-            <li>在真实终端里运行：<code>java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -tui</code>；</li>
+            <li>在真实终端里运行：<code>java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -tui</code>；</li>
             <li>要在 IDEA 里调试，<strong>在真实终端启动、用远程调试挂接</strong>（IDEA 内置 Terminal 标签页是真 PTY，也可以直接在那里跑）：</li>
           </ul>
           <pre><code class="language-bash">mvn -o package -DskipTests
 java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005 \
-     -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -tui</code></pre>
+     -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -tui</code></pre>
           <ul>
             <li>确认终端明明可用却被拦下时，用 <code>-Djellyfish.tui.skipTerminalCheck=true</code> 跳过检查；</li>
             <li>只是要跑一次问答，就别用 TUI：<code>-cli -p "…"</code> 不需要终端。</li>
@@ -252,7 +252,7 @@ java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005 \
             <li>要单次问答就显式写 <code>-cli</code>：<code>-cli -p "总结一下这个项目"</code>；</li>
             <li>要从管道喂输入，<code>-cli</code> 缺省从 stdin 读到 EOF：</li>
           </ul>
-          <pre><code class="language-bash">echo "/help" | java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli</code></pre>
+          <pre><code class="language-bash">echo "/help" | java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli</code></pre>
         </dd>
       </dl>
     </div>
@@ -285,7 +285,7 @@ java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005 \
         <dt>原因</dt>
         <dd>
           构建产物只有<strong>一个可执行 fat jar</strong>：
-          <code>jellyfish-cli/target/jellyfish-cli-0.1.1.jar</code>。三种模式都用它启动；
+          <code>jellyfish-cli/target/jellyfish-cli-0.1.2.jar</code>。三种模式都用它启动；
           相对路径是按<strong>当前工作目录</strong>解析的，所以在别的目录里敲同一条命令就会失败。
         </dd>
         <dt>解决</dt>
@@ -294,8 +294,8 @@ java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005 \
             <li>从仓库根跑构建：<code>mvn -o clean package</code>（<code>-DskipTests</code> 可跳测）；</li>
             <li>嫌路径长就设别名，用绝对路径：</li>
           </ul>
-          <pre><code class="language-bash">alias jellyfish='java -jar /绝对路径/jellyfish-cli/target/jellyfish-cli-0.1.1.jar'
-java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli -p "/help"   # 在仓库根执行</code></pre>
+          <pre><code class="language-bash">alias jellyfish='java -jar /绝对路径/jellyfish-cli/target/jellyfish-cli-0.1.2.jar'
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli -p "/help"   # 在仓库根执行</code></pre>
           <ul>
             <li>没有「安装目录」这回事：内核就那一个 fat jar，只有插件需要拷进扫描目录。</li>
           </ul>
@@ -640,7 +640,7 @@ plugin.requires=*</code></pre>
 &lt;dependency&gt;
   &lt;groupId&gt;io.github.zcd0831&lt;/groupId&gt;
   &lt;artifactId&gt;jellyfish-api&lt;/artifactId&gt;
-  &lt;version&gt;0.1.1&lt;/version&gt;
+  &lt;version&gt;0.1.2&lt;/version&gt;
   &lt;scope&gt;provided&lt;/scope&gt;
 &lt;/dependency&gt;</code></pre>
           <ul>
@@ -1169,8 +1169,8 @@ plugin.requires=*</code></pre>
         <dd>缺省端口是 <code>9096</code>；换端口有两条等价写法（位置参数与 <code>--port</code>）。</dd>
         <dt>解决</dt>
         <dd>
-          <pre><code class="language-bash">java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -server 9097
-java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -server --port 9097
+          <pre><code class="language-bash">java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -server 9097
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -server --port 9097
 curl -s localhost:9097/health</code></pre>
           <ul>
             <li>先用 <code>curl localhost:&lt;端口&gt;/health</code> 确认起没起来（它返回 <code>UP</code> / <code>WARN</code> / <code>DOWN</code>，
@@ -1196,9 +1196,9 @@ curl -s localhost:9097/health</code></pre>
         <dt>解决</dt>
         <dd>
           <pre><code class="language-bash"># 推荐：密钥走环境变量（不会出现在 ps 输出里）
-JELLYFISH_SERVER_API_KEY=$(openssl rand -hex 32) java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -server --host 0.0.0.0
+JELLYFISH_SERVER_API_KEY=$(openssl rand -hex 32) java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -server --host 0.0.0.0
 # 也可以：命令行参数（argv 会出现在 ps 里，同机其他用户看得见）
-java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -server --host 0.0.0.0 --api-key &lt;你的密钥&gt;</code></pre>
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -server --host 0.0.0.0 --api-key &lt;你的密钥&gt;</code></pre>
           <ul>
             <li><strong>不接受用 query 参数传密钥</strong>（URL 会进访问日志、浏览器历史与 Referer）；</li>
             <li>密钥短于 16 位会在启动日志里告警，但不拒绝启动；密钥比较是常时比较；</li>
@@ -1512,7 +1512,7 @@ mvn test -Djackson-bom.version=2.13.5   # Boot 管理版本</code></pre>
         </tbody>
       </table>
     </div>
-    <div class="src-block">Jellyfish/CHANGELOG.md（0.1.1 与 Unreleased：配置字段名告警、ConfigWarningReporter、审批/提问超时 0 的语义、subAgent 参数读取时机、取消穿过等待区、jline 3.30.17 与 Undertow 2.2.40 依赖升级）</div>
+    <div class="src-block">Jellyfish/CHANGELOG.md（0.1.1：配置字段名告警、ConfigWarningReporter、审批/提问超时 0 的语义、subAgent 参数读取时机、取消穿过等待区、jline 3.30.17 与 Undertow 2.2.40 依赖升级）</div>
 
     <div class="callout danger">
       <span class="callout-title">排错时最容易扩大事故的三件事</span>

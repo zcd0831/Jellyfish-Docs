@@ -172,7 +172,7 @@ flowchart TD
     <p>
       全站此前没有一页讲过 Dagger2 的用法，所以这一节从注解开始。先说清一件事：
       <strong>项目用的 Dagger 版本是 2.16，注解处理器由父 POM 统一配置</strong>
-      （<code>Jellyfish/pom.xml:61</code> 定义版本，<code>Jellyfish/pom.xml:253-255</code> 在
+      （<code>Jellyfish/pom.xml:61</code> 定义版本，<code>Jellyfish/pom.xml:234-236</code> 在
       <code>maven-compiler-plugin</code> 的 <code>annotationProcessorPaths</code> 里挂上
       <code>dagger-compiler</code>），因此<strong>子模块的 <code>pom.xml</code> 里只声明 <code>dagger</code> 依赖、
       不重复声明处理器</strong>（<code>Jellyfish/jellyfish-di/pom.xml</code> 的依赖清单里没有 <code>dagger-compiler</code>）。
@@ -749,7 +749,7 @@ public interface JellyfishComponent extends JellyfishRuntime {</code></pre>
 
     <p>
       对照一下覆盖率这一侧：<code>Dagger*</code> 生成物与 <code>*_Factory.*</code> 被排除在 JaCoCo 统计之外
-      （<code>Jellyfish/pom.xml:272-278</code>，其中 <code>Jellyfish/pom.xml:274</code> 就是 <code>**/Dagger*</code>），
+      （<code>Jellyfish/pom.xml:253-259</code>，其中 <code>Jellyfish/pom.xml:255</code> 就是 <code>**/Dagger*</code>），
       所以 <code>jellyfish-di</code> 报出来的覆盖率<strong>只反映人写的装配代码</strong>
       （<a href="24-testing.html">24 页</a>第 3 节列了这股覆盖率实测）。这两件事是配套的：
       生成物不进分母，人写的那部分就必须由测试兜住。
@@ -1270,7 +1270,7 @@ flowchart LR
 
     <p>
       <code>Dagger*</code> 与 <code>*_Factory.*</code> 被排除在 JaCoCo 之外
-      （<code>Jellyfish/pom.xml:272-278</code>），所以 <code>jellyfish-di</code> 报出来的覆盖率
+      （<code>Jellyfish/pom.xml:253-259</code>），所以 <code>jellyfish-di</code> 报出来的覆盖率
       <strong>只反映人写的装配代码</strong>：<code>JellyfishRuntime</code>、<code>JellyfishAssembler</code>
       与 10 个模块。反过来说，生成物没人测（也不该测），
       而人写的那部分——尤其「哪些实例必须唯一」这类约束——就得靠

@@ -615,7 +615,7 @@
           <code>vendorBody</code> 往请求体里加字段（provider 级与模型级都可写）；
           <code>vendorHeaders</code> 往出站请求加头（<strong>只有 provider 级</strong>）。排查办法：
           <code>vendorBody</code> 生效时会在 <strong>DEBUG 日志</strong>里打一行实际下发的键名（不打值）。
-          <pre><code class="language-bash">java -jar /path/to/jellyfish-cli-0.1.1.jar -cli --verbose -p "你好"</code></pre>
+          <pre><code class="language-bash">java -jar /path/to/jellyfish-cli-0.1.2.jar -cli --verbose -p "你好"</code></pre>
         </dd>
       </dl>
 
@@ -1090,13 +1090,13 @@
     </p>
 
     <pre><code class="language-bash"># 看当前用的是哪个
-java -jar /path/to/jellyfish-cli-0.1.1.jar -cli -p "/model"
+java -jar /path/to/jellyfish-cli-0.1.2.jar -cli -p "/model"
 
 # 切到 gpt-5（配置文件里已配好 openai 这个 provider）
-java -jar /path/to/jellyfish-cli-0.1.1.jar -cli -p "/model openai/gpt-5"
+java -jar /path/to/jellyfish-cli-0.1.2.jar -cli -p "/model openai/gpt-5"
 
 # 切到 DeepSeek 的推理模型
-java -jar /path/to/jellyfish-cli-0.1.1.jar -cli -p "/model deepseek/deepseek-reasoner"
+java -jar /path/to/jellyfish-cli-0.1.2.jar -cli -p "/model deepseek/deepseek-reasoner"
 
 # 交互界面里同样直接敲
 # /model claude/claude-3-5-sonnet</code></pre>

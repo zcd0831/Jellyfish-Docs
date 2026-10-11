@@ -129,20 +129,20 @@ flowchart TD
           <tr>
             <td><code>Jellyfish</code></td>
             <td>内核：三种外壳 + 装配 + 扩展点与插件运行时 + 插件 SPI。工具、命令、权限模式等能力<strong>都不在内核里</strong></td>
-            <td>必然要。它产出唯一的可执行入口 <code>jellyfish-cli-0.1.1.jar</code></td>
-            <td>父 POM 与 <code>jellyfish-api</code> / <code>-infra</code> / <code>-core</code> / <code>-di</code> 发中央仓库，坐标 <code>io.github.zcd0831:jellyfish:0.1.1</code></td>
+            <td>必然要。它产出唯一的可执行入口 <code>jellyfish-cli-0.1.2.jar</code></td>
+            <td>父 POM 与 <code>jellyfish-api</code> / <code>-infra</code> / <code>-core</code> / <code>-di</code> 发中央仓库，坐标 <code>io.github.zcd0831:jellyfish:0.1.2</code></td>
           </tr>
           <tr>
             <td><code>Jellyfish-Plugins</code></td>
             <td>官方插件集 + 插件开发教程。每个插件是独立打包的 PF4J jar</td>
             <td>想读文件 / 跑命令 / 存会话就必须装，否则内核近乎空转</td>
-            <td>独立 Maven reactor，聚合坐标 <code>io.github.zcd0831:jellyfish-plugins:0.1.1</code></td>
+            <td>独立 Maven reactor，聚合坐标 <code>io.github.zcd0831:jellyfish-plugins:0.1.2</code></td>
           </tr>
           <tr>
             <td><code>Jellyfish-Spring-Boot-Starter</code></td>
             <td>把内核搬进已有的 Spring Boot 容器，并补上内核没有的「用户」维度</td>
             <td>只有当你要在自己的 Java 服务里用 agent 才需要</td>
-            <td><code>io.github.zcd0831:jellyfish-spring-boot-starter:0.1.1</code></td>
+            <td><code>io.github.zcd0831:jellyfish-spring-boot-starter:0.1.2</code></td>
           </tr>
         </tbody>
       </table>
@@ -435,9 +435,9 @@ flowchart LR
 
 <footer class="footer">
   <div class="doc-meta">
-    Jellyfish 使用指南 · 依据仓库 <code>Jellyfish</code>（<code>io.github.zcd0831:jellyfish:0.1.1</code>）、
-    <code>Jellyfish-Plugins</code>（<code>io.github.zcd0831:jellyfish-plugins:0.1.1</code>）、
-    <code>Jellyfish-Spring-Boot-Starter</code>（<code>io.github.zcd0831:jellyfish-spring-boot-starter:0.1.1</code>）整理。
+    Jellyfish 使用指南 · 依据仓库 <code>Jellyfish</code>（<code>io.github.zcd0831:jellyfish:0.1.2</code>）、
+    <code>Jellyfish-Plugins</code>（<code>io.github.zcd0831:jellyfish-plugins:0.1.2</code>）、
+    <code>Jellyfish-Spring-Boot-Starter</code>（<code>io.github.zcd0831:jellyfish-spring-boot-starter:0.1.2</code>）整理。
     示例中的密钥、token 一律以占位符表示；<code>【待确认】</code>表示该结论在仓库中未找到出处，请以实际代码为准。
   </div>
 </footer>

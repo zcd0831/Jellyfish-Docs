@@ -398,7 +398,7 @@ flowchart TD
           在配置文件的<strong>字符串值</strong>里写占位符，然后导出环境变量：
           <pre><code class="language-bash">export OPENAI_API_KEY=sk-***
 export DEEPSEEK_API_KEY=sk-***
-java -jar /path/to/jellyfish-cli-0.1.1.jar -cli -p "/model"</code></pre>
+java -jar /path/to/jellyfish-cli-0.1.2.jar -cli -p "/model"</code></pre>
         </dd>
       </dl>
 
@@ -548,7 +548,7 @@ java -jar /path/to/jellyfish-cli-0.1.1.jar -cli -p "/model"</code></pre>
       </p>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:948-963（路径：<code>~</code> 展开、相对进程工作目录、文件不存在视为未配置）、Jellyfish/docs/constraints.md:377-410（插件扫描目录不参与双源、展开行首 <code>~</code>、空列表回退）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/SettingsReader.java（<code>classpath:</code> 与本地文件两条读法、目录报错）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/RuntimeConfig.java:416-421（缺失/为空的告警）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ConfigWarningReporter.java（把 <code>ConfigWarningEvent</code> 渲染成一行 WARN）、Jellyfish/CHANGELOG.md:48-52（<code>0.1.1</code> 新增 <code>ConfigWarningReporter</code>）</div>
+    <div class="src-block">Jellyfish/README.md:948-963（路径：<code>~</code> 展开、相对进程工作目录、文件不存在视为未配置）、Jellyfish/docs/constraints.md:377-410（插件扫描目录不参与双源、展开行首 <code>~</code>、空列表回退）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/SettingsReader.java（<code>classpath:</code> 与本地文件两条读法、目录报错）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/RuntimeConfig.java:416-421（缺失/为空的告警）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ConfigWarningReporter.java（把 <code>ConfigWarningEvent</code> 渲染成一行 WARN）、Jellyfish/CHANGELOG.md:29-33（<code>0.1.1</code> 新增 <code>ConfigWarningReporter</code>）</div>
 
     <h2>项目级配置的信任</h2>
 
@@ -565,10 +565,10 @@ java -jar /path/to/jellyfish-cli-0.1.1.jar -cli -p "/model"</code></pre>
         <dd>
           <code>-cli</code> / <code>-server</code> 加启动参数；<code>-tui</code> 在启动时回答确认框：
           <pre><code class="language-bash"># 命令行：本次进程内信任并加载 ./.jellyfish/*.json（不落盘）
-java -jar /path/to/jellyfish-cli-0.1.1.jar -cli --trust-project-config -p "读一下这个项目"
+java -jar /path/to/jellyfish-cli-0.1.2.jar -cli --trust-project-config -p "读一下这个项目"
 
 # TUI：启动时弹确认框，y = 加载并记住，o = 仅本次加载
-java -jar /path/to/jellyfish-cli-0.1.1.jar -tui</code></pre>
+java -jar /path/to/jellyfish-cli-0.1.2.jar -tui</code></pre>
         </dd>
       </dl>
 
@@ -619,7 +619,7 @@ java -jar /path/to/jellyfish-cli-0.1.1.jar -tui</code></pre>
       <p><strong>完整示例</strong>（项目根建一份只覆盖模型的配置，然后带信任参数启动）</p>
       <pre><code class="language-bash">mkdir -p ./.jellyfish
 # 写入 ./.jellyfish/models.json（内容见 06 页的多厂商示例）
-java -jar /path/to/jellyfish-cli-0.1.1.jar -cli --trust-project-config -p "/model"</code></pre>
+java -jar /path/to/jellyfish-cli-0.1.2.jar -cli --trust-project-config -p "/model"</code></pre>
 
       <p><strong>常见问题</strong></p>
       <ul>
@@ -630,7 +630,7 @@ java -jar /path/to/jellyfish-cli-0.1.1.jar -cli --trust-project-config -p "/mode
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:964-990（项目级配置的信任）、Jellyfish/docs/constraints.md:377-410（项目级默认不加载、三种授予方式、缺省答案与读取失败按不加载、<code>classpath:</code> 不受闸管辖）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ProjectConfigTrust.java（信任仓库位置、SHA-256 指纹、失败按不信任）、Jellyfish/CHANGELOG.md:59-63（<code>--trust-project-config</code> 与 TUI 两种选项）</div>
+    <div class="src-block">Jellyfish/README.md:964-990（项目级配置的信任）、Jellyfish/docs/constraints.md:377-410（项目级默认不加载、三种授予方式、缺省答案与读取失败按不加载、<code>classpath:</code> 不受闸管辖）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ProjectConfigTrust.java（信任仓库位置、SHA-256 指纹、失败按不信任）、Jellyfish/CHANGELOG.md:40-42（<code>--trust-project-config</code> 与 TUI 两种选项）</div>
 
     <h2>未知字段怎么处理</h2>
 
@@ -643,7 +643,7 @@ java -jar /path/to/jellyfish-cli-0.1.1.jar -cli --trust-project-config -p "/mode
       <span class="callout-title">两处明文口径不一致，以 CHANGELOG 与源码为准</span>
       <ul>
         <li><strong>README（<code>models.json</code> 一节，<code>Jellyfish/README.md:552</code>）</strong>：本文件关掉了「未知字段」的报错，多写一个键<strong>既不会有提示、也不会有任何效果</strong>；表里没列出的字段就是不支持的。</li>
-        <li><strong>CHANGELOG <code>0.1.1</code>（<code>Jellyfish/CHANGELOG.md:43-47</code>）</strong>：配置里拼错字段名<strong>不再无声</strong>——读取配置时会比对字段名，发现内核不认识的字段就发一条 <code>ConfigWarningEvent</code> 并打出 WARN 行，带上文件路径与字段名；只比字段名、不做类型转换；<strong>自由格式的位置一概不看</strong>（<code>vendorBody</code>、逐插件配置段这类键名由使用方决定），宁可漏报也不报假警。</li>
+        <li><strong>CHANGELOG <code>0.1.1</code>（<code>Jellyfish/CHANGELOG.md:24-28</code>）</strong>：配置里拼错字段名<strong>不再无声</strong>——读取配置时会比对字段名，发现内核不认识的字段就发一条 <code>ConfigWarningEvent</code> 并打出 WARN 行，带上文件路径与字段名；只比字段名、不做类型转换；<strong>自由格式的位置一概不看</strong>（<code>vendorBody</code>、逐插件配置段这类键名由使用方决定），宁可漏报也不报假警。</li>
       </ul>
       <p>
         两句说的不是同一件事，但要一起读：<strong>「不报错、不阻断启动、字段照样不生效」在 <code>0.1.1</code> 前后都成立</strong>，
@@ -734,7 +734,7 @@ java -jar /path/to/jellyfish-cli-0.1.1.jar -cli --trust-project-config -p "/mode
       </p>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:521-555（models.json：未知字段不报错、表里没有的就是不支持）、Jellyfish/README.md:552（「多写一个键既不会有提示、也不会有任何效果」——被 <code>0.1.1</code> 的变更条目取代）、Jellyfish/CHANGELOG.md:41-55（0.1.1：拼错字段名不再无声、自由格式不看、<code>ConfigWarningReporter</code>）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ConfigLoader.java:44-46、58-60、76-84（两条读取重载）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/RuntimeConfig.java:114、116、169、416-421（三份内容文件都报未知字段；<code>config.json</code> / <code>default-agent.json</code> 不报）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/BuiltinAgentLoader.java:78、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/support/ObjectMapperWrapper.java:43、172（<code>FAIL_ON_UNKNOWN_PROPERTIES=false</code>、<code>unknownFields</code> 与自由格式判定）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ConfigWarningReporter.java（渲染成一行 WARN）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/SamplingSettings.java（非法值丢弃并告警）</div>
+    <div class="src-block">Jellyfish/README.md:521-555（models.json：未知字段不报错、表里没有的就是不支持）、Jellyfish/README.md:552（「多写一个键既不会有提示、也不会有任何效果」——被 <code>0.1.1</code> 的变更条目取代）、Jellyfish/CHANGELOG.md:24-33（0.1.1：拼错字段名不再无声、自由格式不看、<code>ConfigWarningReporter</code>）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ConfigLoader.java:44-46、58-60、76-84（两条读取重载）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/RuntimeConfig.java:114、116、169、416-421（三份内容文件都报未知字段；<code>config.json</code> / <code>default-agent.json</code> 不报）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/BuiltinAgentLoader.java:78、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/support/ObjectMapperWrapper.java:43、172（<code>FAIL_ON_UNKNOWN_PROPERTIES=false</code>、<code>unknownFields</code> 与自由格式判定）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ConfigWarningReporter.java（渲染成一行 WARN）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/SamplingSettings.java（非法值丢弃并告警）</div>
 
     <h2>哪些改动要重启、哪些热生效</h2>
 
@@ -789,7 +789,7 @@ java -jar /path/to/jellyfish-cli-0.1.1.jar -cli --trust-project-config -p "/mode
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:517-520（改完不用重启 vs config.json 不热更新）、Jellyfish/README.md:464-487（插件 jar 增删要重启）、Jellyfish/README.md:919-947（<code>subAgent</code> 各键何时读取）、Jellyfish/docs/constraints.md:418-428（热更新顺序、单飞不回滚、stop+start）、Jellyfish/CHANGELOG.md:8-38（Unreleased：并发 / 等待区 / 墙钟的读取时机修正）</div>
+    <div class="src-block">Jellyfish/README.md:517-520（改完不用重启 vs config.json 不热更新）、Jellyfish/README.md:464-487（插件 jar 增删要重启）、Jellyfish/README.md:919-947（<code>subAgent</code> 各键何时读取）、Jellyfish/docs/constraints.md:418-428（热更新顺序、单飞不回滚、stop+start）、Jellyfish/CHANGELOG.md:356-361（<code>0.1.1</code> Fixed：并发 / 等待区 / 墙钟的读取时机修正）</div>
 
     <h2>常见配置任务</h2>
 
@@ -806,7 +806,7 @@ java -jar /path/to/jellyfish-cli-0.1.1.jar -cli --trust-project-config -p "/mode
     }
   }
 }</code></pre>
-    <p>写完之后确认生效：<code>java -jar /path/to/jellyfish-cli-0.1.1.jar -cli -p "/model"</code>（<code>/model</code> 离线可用，不需要模型也能看出当前选的是哪个）。</p>
+    <p>写完之后确认生效：<code>java -jar /path/to/jellyfish-cli-0.1.2.jar -cli -p "/model"</code>（<code>/model</code> 离线可用，不需要模型也能看出当前选的是哪个）。</p>
 
     <h3>2. 只给某个项目换模型</h3>
     <p>

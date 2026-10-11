@@ -270,7 +270,7 @@
           装 jar 到扫描目录（缺省 <code>~/.jellyfish/plugins/</code>）后<strong>重启进程</strong>，
           然后什么都不用做：首轮对话结束就会落盘。
           <pre><code class="language-bash">mkdir -p ~/.jellyfish/plugins
-# 把 jellyfish-plugin-session-file-0.1.1.jar 放进去，然后重新启动 jellyfish</code></pre>
+# 把 jellyfish-plugin-session-file-0.1.2.jar 放进去，然后重新启动 jellyfish</code></pre>
         </dd>
       </dl>
 
@@ -388,7 +388,7 @@
       </table>
     </div>
 
-    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-session-file/src/main/java/zcd/jellyfish/plugin/sessionfile/SessionStore.java（文件名 <code>&lt;sessionId&gt;.json</code>、<code>.json.tmp</code> 临时文件、原子改名）、Jellyfish-Plugins/CHANGELOG.md:221-225（会话文件 600 / 新目录 700 的安全修复）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/SessionSnapshot.java（快照 14 个字段与「唯一构造器」约束）、Jellyfish/docs/constraints.md:310-336（落盘时机与恢复顺序）</div>
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-session-file/src/main/java/zcd/jellyfish/plugin/sessionfile/SessionStore.java（文件名 <code>&lt;sessionId&gt;.json</code>、<code>.json.tmp</code> 临时文件、原子改名）、Jellyfish-Plugins/CHANGELOG.md:226-230（会话文件 600 / 新目录 700 的安全修复）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/SessionSnapshot.java（快照 14 个字段与「唯一构造器」约束）、Jellyfish/docs/constraints.md:310-336（落盘时机与恢复顺序）</div>
 
     <h3>没有装持久化插件时会怎样</h3>
 
@@ -1116,7 +1116,7 @@ flowchart LR
         要备份就在会话没在用的时候整目录拷走。</dd>
     </dl>
 
-    <div class="src-block">Jellyfish/README.md:1112-1118（「几十轮之前的工具输出路径不见了」与滚动 / 复制两类常见问题）、Jellyfish-Plugins/README.md:491-502（「不启用它就没有压缩」的三个后果与禁用日志）、Jellyfish/docs/constraints.md:1081-1087（压缩边界失效按「从未压缩过」处理）、Jellyfish-Plugins/CHANGELOG.md:221-225（落盘权限 600 / 700 与「已知边界」）</div>
+    <div class="src-block">Jellyfish/README.md:1112-1118（「几十轮之前的工具输出路径不见了」与滚动 / 复制两类常见问题）、Jellyfish-Plugins/README.md:491-502（「不启用它就没有压缩」的三个后果与禁用日志）、Jellyfish/docs/constraints.md:1081-1087（压缩边界失效按「从未压缩过」处理）、Jellyfish-Plugins/CHANGELOG.md:226-230（落盘权限 600 / 700 与「已知边界」）</div>
 
     <div class="conclusion">
       <h2>关键结论</h2>

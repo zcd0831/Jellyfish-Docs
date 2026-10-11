@@ -127,7 +127,7 @@ mvn -v</code></pre>
       <p>
         fat jar 的路径很长，建议先设个别名，后面每一步都能少打一截：
       </p>
-      <pre><code class="language-bash">alias jellyfish='java -jar /绝对路径/jellyfish-cli/target/jellyfish-cli-0.1.1.jar'</code></pre>
+      <pre><code class="language-bash">alias jellyfish='java -jar /绝对路径/jellyfish-cli/target/jellyfish-cli-0.1.2.jar'</code></pre>
       <p>本页为了说明「哪个文件是入口」，仍然把完整命令写全。</p>
     </div>
     <div class="src-block">Jellyfish/README.md「环境要求」「安装与构建」两节（JDK 8 / Maven 3.2.5+ / 终端 / 模型四项要求、fat jar 路径与 alias 示例）</div>
@@ -144,7 +144,7 @@ mvn -v</code></pre>
         </dd>
         <dt>怎么用</dt>
         <dd>
-          <pre><code class="language-bash">java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli -p "/help"</code></pre>
+          <pre><code class="language-bash">java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli -p "/help"</code></pre>
           <p>
             <strong>看到命令清单就说明装好了</strong>：<code>-cli</code> 走单次调用、<code>-p</code> 给这一次的输入，
             输入以 <code>/</code> 开头即走命令域。<strong>在碰别的旗标之前，先确保这一条能出结果</strong>——
@@ -182,10 +182,10 @@ mvn -v</code></pre>
 
       <p><strong>完整示例</strong></p>
       <pre><code class="language-bash"># 方式一：把输入写在命令行上
-java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli -p "/help"
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli -p "/help"
 
 # 方式二：从管道喂进去（不写 -p 时读到 EOF）
-echo "/help" | java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli</code></pre>
+echo "/help" | java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli</code></pre>
 
       <p><strong>常见问题</strong></p>
       <ul>
@@ -503,10 +503,10 @@ echo "/help" | java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli</code
     </div>
 
     <pre><code class="language-bash"># 路径一：CLI / Server，临时信任一次
-java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli --trust-project-config -p "/model"
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli --trust-project-config -p "/model"
 
 # 路径二：TUI，启动时在确认框里回答 y（记住）或 o（仅本次）
-java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -tui</code></pre>
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -tui</code></pre>
 
     <div class="table-scroll field-table">
       <table>
@@ -582,10 +582,10 @@ cp jellyfish-plugin-session-file/target/jellyfish-plugin-session-file-*.jar ~/.j
           <p>
             仓库里只对 <code>tools</code> 给了字面拷贝示例。上面另外两行的 jar 名不是推断出来的：每个插件模块
             只声明自己的 <code>&lt;artifactId&gt;</code>（与它 <code>plugin.properties</code> 里的
-            <code>plugin.id</code> 同名），版本继承父 <code>pom.xml</code> 的 <code>0.1.1</code>，全仓库没有一处
+            <code>plugin.id</code> 同名），版本继承父 <code>pom.xml</code> 的 <code>0.1.2</code>，全仓库没有一处
             写 <code>&lt;finalName&gt;</code>，因此产物名就是 <code>&lt;artifactId&gt;-&lt;version&gt;.jar</code>——
-            已构建的 <code>target/</code> 里确实是 <code>jellyfish-plugin-shell-0.1.1.jar</code> 与
-            <code>jellyfish-plugin-session-file-0.1.1.jar</code>（同目录另有一个 shade 留下的
+            已构建的 <code>target/</code> 里确实是 <code>jellyfish-plugin-shell-0.1.2.jar</code> 与
+            <code>jellyfish-plugin-session-file-0.1.2.jar</code>（同目录另有一个 shade 留下的
             <code>original-…jar</code>，上面的通配<strong>不会</strong>命中它）。
           </p>
         </dd>
@@ -636,7 +636,7 @@ cp jellyfish-plugin-session-file/target/jellyfish-plugin-session-file-*.jar ~/.j
 
       <p><strong>验证</strong></p>
       <pre><code class="language-bash"># 重启后，/help 里应该出现插件带来的命令
-java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli -p "/help"</code></pre>
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli -p "/help"</code></pre>
 
       <p><strong>常见问题</strong></p>
       <ul>
@@ -647,7 +647,7 @@ java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli -p "/help"</code></p
           「内核明明改了，插件这边编译却看不到」。</li>
       </ul>
     </div>
-    <div class="src-block">Jellyfish-Plugins/README.md「环境要求」「构建与安装」「插件一览」、Jellyfish/README.md「插件」一节（扫描目录、重启要求、<code>plugins.roots</code> 语义）；jar 产物名：Jellyfish-Plugins/pom.xml:11（父版本 <code>0.1.1</code>）、Jellyfish-Plugins/jellyfish-plugin-shell/pom.xml:14、Jellyfish-Plugins/jellyfish-plugin-session-file/pom.xml:14（artifactId 与 plugin.id 同名，两模块都未写 finalName）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/resources/plugin.properties:5-7、Jellyfish-Plugins/jellyfish-plugin-shell/target/jellyfish-plugin-shell-0.1.1.jar 与 Jellyfish-Plugins/jellyfish-plugin-session-file/target/jellyfish-plugin-session-file-0.1.1.jar（本仓库已构建的产物）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md「环境要求」「构建与安装」「插件一览」、Jellyfish/README.md「插件」一节（扫描目录、重启要求、<code>plugins.roots</code> 语义）；jar 产物名：Jellyfish-Plugins/pom.xml:11（父版本 <code>0.1.2</code>）、Jellyfish-Plugins/jellyfish-plugin-shell/pom.xml:14、Jellyfish-Plugins/jellyfish-plugin-session-file/pom.xml:14（artifactId 与 plugin.id 同名，两模块都未写 finalName）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/resources/plugin.properties:5-7、Jellyfish-Plugins/jellyfish-plugin-shell/target/jellyfish-plugin-shell-0.1.2.jar 与 Jellyfish-Plugins/jellyfish-plugin-session-file/target/jellyfish-plugin-session-file-0.1.2.jar（本仓库已构建的产物）</div>
 
     <h2>第 4 步：问第一句话</h2>
 
@@ -661,13 +661,13 @@ java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli -p "/help"</code></p
         <dt>怎么用</dt>
         <dd>
           <pre><code class="language-bash"># 交互界面（不带参数就等于 -tui，需要可交互终端）
-java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar
 
 # 单次问答：进一句、出一次结果后退出（推荐第一次用这个）
-java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli -p "总结一下这个项目"
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli -p "总结一下这个项目"
 
 # 显式指定交互界面
-java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -tui</code></pre>
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -tui</code></pre>
         </dd>
       </dl>
 
@@ -718,7 +718,7 @@ java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -tui</code></pre>
       </div>
 
       <p><strong>完整示例</strong>：把回答与诊断分开存，回答进 <code>answer.txt</code>、诊断进 <code>diag.txt</code></p>
-      <pre><code class="language-bash">java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli -p "总结这个项目" &gt; answer.txt 2&gt; diag.txt</code></pre>
+      <pre><code class="language-bash">java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli -p "总结这个项目" &gt; answer.txt 2&gt; diag.txt</code></pre>
 
       <p><strong>常见问题</strong></p>
       <ul>
@@ -744,10 +744,10 @@ java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -tui</code></pre>
         <dt>怎么用</dt>
         <dd>
           <pre><code class="language-bash"># 让它读一个真实存在的文件（换上你自己目录里的文件名）
-java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli -p "读一下 README.md 的前 40 行，用三句话总结"
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli -p "读一下 README.md 的前 40 行，用三句话总结"
 
 # 想把调用参数也打出来，加 --show-tool-args
-java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli --show-tool-args -p "读一下 README.md 的前 40 行，用三句话总结"</code></pre>
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli --show-tool-args -p "读一下 README.md 的前 40 行，用三句话总结"</code></pre>
           <p>单次模式的工具轨迹默认<strong>只给「开始」与「结束」两行</strong>（形状示意，参数以你实际那次调用为准）：</p>
           <pre><code class="language-text">→ read_file
 ← read_file 完成（1234 字符）</code></pre>
@@ -933,8 +933,8 @@ flowchart TD
         </dd>
         <dt>怎么用</dt>
         <dd>
-          <pre><code class="language-bash">java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli -p "/reload"
-java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli -p "/model"   # 看模型索引有没有更新</code></pre>
+          <pre><code class="language-bash">java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli -p "/reload"
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli -p "/model"   # 看模型索引有没有更新</code></pre>
           <p>如果改的是<strong>项目级</strong>文件，先确认这一项：项目级文件存在但未被信任时<strong>不加载</strong>，
             会额外发一条配置告警。</p>
         </dd>

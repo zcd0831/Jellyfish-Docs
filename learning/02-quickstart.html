@@ -133,18 +133,18 @@ mvn -q -Pserver-it test            # Server 模式端到端（真 Undertow + 真
 
     <p>
       产物是<strong>一个可执行 fat jar</strong>，三种模式都用它启动：
-      <code>jellyfish-cli/target/jellyfish-cli-0.1.1.jar</code>。
+      <code>jellyfish-cli/target/jellyfish-cli-0.1.2.jar</code>。
       shade 配置在 <code>jellyfish-cli/pom.xml:104-108</code>，主类是
       <code>zcd.jellyfish.cli.JellyfishApplication</code>。
     </p>
 
     <div class="src-block">Jellyfish/jellyfish-cli/pom.xml:105
-Jellyfish/pom.xml:281-296   ← JaCoCo 挂 prepare-agent + report
+Jellyfish/pom.xml:262-277   ← JaCoCo 挂 prepare-agent + report
 Jellyfish/jellyfish-cli/pom.xml:133-158  ← server-it profile（<code>&lt;id&gt;server-it&lt;/id&gt;</code> 在 :142，surefire 的 include 在 :149）</div>
 
     <p>嫌路径长就设个别名：</p>
 
-<pre><code class="language-bash">alias jellyfish='java -jar /绝对路径/jellyfish-cli/target/jellyfish-cli-0.1.1.jar'</code></pre>
+<pre><code class="language-bash">alias jellyfish='java -jar /绝对路径/jellyfish-cli/target/jellyfish-cli-0.1.2.jar'</code></pre>
 
     <!-- ============================================================ -->
     <h2>3. 装官方插件</h2>
@@ -193,16 +193,16 @@ mkdir -p ~/.jellyfish/plugins
     <h2>4. 三种模式跑起来</h2>
 
 <pre><code class="language-bash"># 不带参数 = 交互界面（-tui）
-java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar
 
 # 单次问答
-java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli -p "总结一下这个项目"
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli -p "总结一下这个项目"
 
 # 显式交互
-java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -tui
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -tui
 
 # HTTP 服务
-java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -server 9096</code></pre>
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -server 9096</code></pre>
 
     <h3>输出契约：stdout 与 stderr 分工</h3>
 
@@ -211,8 +211,8 @@ java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -server 9096</code></pre>
       <strong>回答与命令结果走 stdout，诊断、工具进度与日志走 stderr</strong>。因此这样是安全的：
     </p>
 
-<pre><code class="language-bash">java -jar jellyfish-cli-0.1.1.jar -cli -p "总结这个项目" &gt; answer.txt 2&gt; diag.txt
-echo "/help" | java -jar jellyfish-cli-0.1.1.jar -cli</code></pre>
+<pre><code class="language-bash">java -jar jellyfish-cli-0.1.2.jar -cli -p "总结这个项目" &gt; answer.txt 2&gt; diag.txt
+echo "/help" | java -jar jellyfish-cli-0.1.2.jar -cli</code></pre>
 
     <h3>退出码</h3>
 
@@ -565,7 +565,7 @@ Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/AgentHarness.java:193-
             而护栏<strong>只记 loadError 不抛异常</strong>（<code>PluginClasspathGuard.java:47-60</code>），
             表现是「静默不启动」，必须看 WARN。详见 <a href="16-plugins.html">16 页</a>。</li>
         <li><strong>「配置写对了但仍按缺省值跑」的另一个来源</strong>：某些组件在 <code>RuntimeConfig.refresh()</code> <em>之前</em>就被构造了
-            （<code>RunScheduler</code> 曾有此问题，见 CHANGELOG 的 Unreleased/0.1.1 Fixed）。这类参数改完要重启，不要指望 <code>/reload</code>。</li>
+            （<code>RunScheduler</code> 曾有此问题，见 CHANGELOG 的 0.1.1 Fixed）。这类参数改完要重启，不要指望 <code>/reload</code>。</li>
       </ul>
     </div>
 
