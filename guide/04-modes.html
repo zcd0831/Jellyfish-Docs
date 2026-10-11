@@ -1,0 +1,1190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>04 三种运行模式 · Jellyfish 使用指南</title>
+<meta name="description" content="Jellyfish 的 -cli / -tui / -server 三种外壳：完整启动参数表与「哪些参数只归 CLI」、退出码 0/2/3/4/3(TUI)/6/7 的归类判据、CLI 的 stdout 契约、TUI 的界面结构与完整按键表、Server 的鉴权与 Origin 校验、curl 示例、接口速查表与 SSE 终态、以及该怎么选。">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="nav-toggle" id="navToggle" aria-label="切换导航" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">🐙 Jellyfish 使用指南</a>
+  <div class="topbar-tools">
+    <input id="navSearch" type="search" placeholder="搜索页面…" aria-label="搜索页面">
+  </div>
+</header>
+
+<div class="layout">
+
+  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <div class="sidebar-title">文档目录</div>
+    <ul class="nav-list">
+      <li><a href="index.html">首页 · 总览与导航</a></li>
+    </ul>
+    <div class="nav-group">一、入门</div>
+    <ul class="nav-list">
+      <li><a href="01-overview.html">01 Jellyfish 是什么</a></li>
+      <li><a href="02-install.html">02 安装与环境准备</a></li>
+      <li><a href="03-quickstart.html">03 五分钟快速上手</a></li>
+      <li><a href="04-modes.html" aria-current="page">04 三种运行模式</a></li>
+    </ul>
+    <div class="nav-group">二、配置</div>
+    <ul class="nav-list">
+      <li><a href="05-config-overview.html">05 配置体系总览</a></li>
+      <li><a href="06-models.html">06 models.json 详解</a></li>
+      <li><a href="07-agents.html">07 agents.json 与工具权限</a></li>
+    </ul>
+    <div class="nav-group">三、日常使用</div>
+    <ul class="nav-list">
+      <li><a href="08-tools.html">08 内置工具速查</a></li>
+      <li><a href="09-session.html">09 会话与上下文</a></li>
+      <li><a href="10-permissions.html">10 权限与审批</a></li>
+    </ul>
+    <div class="nav-group">四、插件</div>
+    <ul class="nav-list">
+      <li><a href="11-plugin-usage.html">11 安装与使用官方插件</a></li>
+      <li><a href="12-plugin-dev.html">12 从零开发一个插件</a></li>
+      <li><a href="13-plugin-advanced.html">13 插件进阶与发布</a></li>
+    </ul>
+    <div class="nav-group">五、集成与排错</div>
+    <ul class="nav-list">
+      <li><a href="14-spring-boot.html">14 整合到 Spring Boot</a></li>
+      <li><a href="15-troubleshooting.html">15 故障排查</a></li>
+      <li><a href="16-faq.html">16 FAQ 与术语表</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <nav class="breadcrumb" aria-label="面包屑">
+      <span>Jellyfish 使用指南</span><span class="sep">/</span><span>04 三种运行模式</span>
+    </nav>
+
+    <h1>04 三种运行模式</h1>
+    <p class="page-sub">
+      三种模式<strong>共享同一个入口与同一份装配</strong>，只靠启动参数区分。这一页把三种外壳的对照、
+      完整参数表、退出码、CLI 的输出契约、TUI 的按键与浮层、Server 的鉴权与接口契约一次讲清，
+      最后给一张「怎么选」的决策图。所有条目都标了仓库出处。
+    </p>
+
+    <section class="goals">
+      <h2>学习目标</h2>
+      <ul>
+        <li>说出 <code>-cli</code> / <code>-tui</code> / <code>-server</code> 各自的形态、是否需要终端、什么时候用它；</li>
+        <li>背下「一个参数都不带 = <code>-tui</code>」的兜底规则，以及「哪些参数只归 <code>-cli</code>，其余模式带上退 <code>2</code>」；</li>
+        <li>会读退出码 <code>0/2/3/4/3(TUI)/6/7</code>，并知道归类看的是「失败发生在哪一步」；</li>
+        <li>在 TUI 里敲对键：<code>Ctrl+S</code> 发送、<code>Enter</code> 换行，并会用 <code>Ctrl+T</code> / <code>Ctrl+E</code> / <code>Ctrl+O</code> / <code>/ui</code>；</li>
+        <li>把 Server 安全地跑起来：绑非回环地址必须配密钥，写请求要过来源校验，除 <code>GET /health</code> 外都要 Bearer；</li>
+        <li>用一张表决定「要接进自己的程序 / 要脚本化 / 要人机交互 / 要给别人调」分别该用哪种模式。</li>
+      </ul>
+    </section>
+
+    <h2>一个内核，三种外壳</h2>
+
+    <p>
+      <strong>三种启动模式、一个内核</strong>：共用 <code>main</code>、DI、<code>AgentHarness</code>、
+      <code>CommandManager</code>，差异收在 <code>RunMode</code> 里。三种外壳的命令一致（输入以 <code>/</code>
+      开头即走命令域），能力也都来自同一批插件。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>模式</th><th>形态</th><th>交互性</th><th>需要可交互终端</th><th>典型命令</th><th>适用场景</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>-cli</code></td>
+            <td>单次调用、不交互：进一个输入，出一次结果后退出</td>
+            <td>无</td>
+            <td>不需要（可以是被重定向的 shell、管道、CI）</td>
+            <td><code>jellyfish -cli -p "今天天气怎么样？"</code></td>
+            <td>脚本、CI、批处理、把回答重定向到文件；退出码是机器契约</td>
+          </tr>
+          <tr>
+            <td><code>-tui</code></td>
+            <td>交互式终端界面（TamboUI）：消息区 + 输入框 + 状态栏</td>
+            <td>有（浮层式审批与提问）</td>
+            <td><strong>需要</strong>（备用屏 + raw 模式），否则启动即报错退 <code>3</code></td>
+            <td><code>jellyfish -tui</code>（等价于裸跑 <code>jellyfish</code>）</td>
+            <td>自己在终端里干活：多轮对话、看工具轨迹、逐次审批</td>
+          </tr>
+          <tr>
+            <td><code>-server</code></td>
+            <td>HTTP 服务（Undertow），对外暴露 REST + SSE 接口</td>
+            <td>无界面，审批与提问搬到 HTTP 层</td>
+            <td>不需要</td>
+            <td><code>jellyfish -server 9096</code></td>
+            <td>给别人调（前端 / 其它服务）、常驻提供 agent 能力</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      外壳种类是<strong>插件可见的进程级事实</strong>：<code>Launcher</code> 在 <code>bootstrap()</code>
+      <strong>之前</strong>把 <code>RuntimeInfo</code> 写进 <code>RuntimeInfoHolder</code>（插件在 <code>start()</code>
+      里就会读它），因此插件能在启动期就按外壳收窄自己的行为：
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>外壳</th><th><code>shell</code></th><th><code>hasUI</code></th><th><code>supportsApproval</code></th><th><code>interactive</code></th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>-cli</code></td><td><code>CLI</code></td><td><code>false</code></td><td><code>false</code></td><td><code>System.console() != null</code></td></tr>
+          <tr><td><code>-tui</code></td><td><code>TUI</code></td><td><code>true</code></td><td><code>true</code></td><td><code>System.console() != null</code></td></tr>
+          <tr><td><code>-server</code></td><td><code>SERVER</code></td><td><code>false</code></td><td><code>true</code></td><td><code>System.console() != null</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md「三种运行模式」、Jellyfish/docs/constraints.md「三个外壳的共同约定」（<code>RuntimeInfo</code> 四字段表与写入时机早于 <code>bootstrap</code>）</div>
+
+    <h2>启动参数（完整表）</h2>
+
+    <p>下面是全部启动参数，一条不多、一条不少：</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>参数</th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>-cli</code> / <code>-tui</code> / <code>-server</code></td><td>模式旗标，三选一；<strong>一个参数都不带时默认 <code>-tui</code></strong>，否则必填；<code>-server</code> 可带位置端口</td></tr>
+          <tr><td><code>-p, --print &lt;输入&gt;</code></td><td>单次模式的输入；缺省时从 stdin 读到 EOF（管道可用）</td></tr>
+          <tr><td><code>--session &lt;会话&gt;</code></td><td>切换到已有会话（需安装 <code>jellyfish-plugin-session-file</code> 等持久化插件；会话不存在时按用法错误退出 <code>2</code>）</td></tr>
+          <tr><td><code>--agent &lt;agentId&gt;</code></td><td>新建会话时绑定 agent</td></tr>
+          <tr><td><code>--model &lt;provider/模型&gt;</code></td><td>新建会话时指定模型，<strong>必须含 <code>/</code></strong></td></tr>
+          <tr><td><code>--port &lt;端口&gt;</code></td><td>服务器端口（等价于 <code>-server</code> 的位置参数，缺省 <code>9096</code>）</td></tr>
+          <tr><td><code>--host &lt;地址&gt;</code></td><td>服务器绑定地址（缺省 <code>127.0.0.1</code>）</td></tr>
+          <tr><td><code>--show-thinking</code></td><td>在 <code>-cli</code> 的工具轨迹之外单独打出思考过程（TUI 用 <code>Ctrl+T</code> / <code>/thinking</code>）</td></tr>
+          <tr><td><code>--show-tool-args</code></td><td><code>-cli</code> 的工具轨迹行上打出调用参数（单行，过长截断；TUI 用 <code>Ctrl+E</code> / <code>/toolargs</code>）</td></tr>
+          <tr><td><code>--verbose</code></td><td>日志级别降到 DEBUG（也可用 <code>-Djellyfish.log.level=DEBUG</code>）</td></tr>
+          <tr><td><code>--trust-project-config</code></td><td>信任并加载项目级配置（<code>./.jellyfish/*.json</code>），<strong>仅本次进程有效、不落盘</strong>。缺省不加载，理由见 <a href="05-config-overview.html">05 配置体系总览</a></td></tr>
+          <tr><td><code>-h, --help</code> / <code>-V, --version</code></td><td>帮助 / 版本号</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout danger">
+      <span class="callout-title">只归 <code>-cli</code> 的五个参数——带错模式会直接退 2</span>
+      <p>
+        <code>--agent</code> / <code>--model</code> / <code>-p</code> / <code>--show-thinking</code> /
+        <code>--show-tool-args</code> <strong>只归 <code>-cli</code></strong>：<code>-tui</code> /
+        <code>-server</code> 带上它们<strong>一律判用法错误退 <code>2</code></strong>——拒绝而不是静默忽略。
+      </p>
+      <p>
+        为什么是拒绝：静默忽略会让「我明明写了 <code>--model</code>」变成一次跑在别的模型上、却没有任何提示的调用。
+        模式与参数不匹配属于配置错误，越早暴露越好。
+      </p>
+    </div>
+
+    <div class="callout warn">
+      <span class="callout-title">兜底规则：判据只有「参数个数为零」</span>
+      <ul>
+        <li><strong><code>args</code> 为空（含 <code>null</code>）</strong>→ <code>StartupOptionsParser</code> 把模式定为
+          <code>-tui</code>，等价于显式 <code>jellyfish -tui</code>。交互界面是最常用的入口，不必先把旗标背下来。</li>
+        <li><strong>带了任何参数却没给模式</strong>→ 报「请指定启动模式」退 <code>2</code>。
+          <code>jellyfish --verbose</code> 一样如此。兜底<strong>不许扩成内容推断</strong>，这样
+          「敲了没反应」与「悄悄挂在等 stdin」两头都不会发生。</li>
+        <li>兜底收在解析器里，因此 <code>Launcher</code> 与各 <code>RunMode</code> 只面对「模式已定」的世界。</li>
+      </ul>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title"><code>--api-key</code> 为什么不在上面的表里？</span>
+      <p>
+        README 的主参数表里没有 <code>--api-key</code>；它只出现在「Server 模式」一节的示例中
+        （<code>--api-key &lt;密钥&gt;</code>），并与环境变量 <code>JELLYFISH_SERVER_API_KEY</code> 二选一。
+        因此本页把它放在下面的 <a href="#server">Server 小节</a>里讲，不混进通用参数表。
+      </p>
+    </div>
+
+    <div class="callout warn">
+      <span class="callout-title">上游两处口径不一致：<code>--agent</code> / <code>--model</code> 在 Server 下</span>
+      <ul>
+        <li><strong>说「拒绝」的有两处</strong>：<code>Jellyfish/README.md</code> 写「<code>--agent</code> /
+          <code>--model</code> / <code>-p</code> / <code>--show-thinking</code> / <code>--show-tool-args</code>
+          <strong>只归 <code>-cli</code></strong>：<code>-tui</code> / <code>-server</code> 带上它们
+          <strong>一律判用法错误退 <code>2</code></strong>」
+          （<code>Jellyfish/README.md:137</code>，参数表另见 <code>Jellyfish/README.md:127-128</code>）；
+          <code>constraints.md</code> 的「Server」一节写的是同一件事：「<strong>启动期不建会话</strong>。
+          <code>--agent</code> / <code>--model</code> / <code>-p</code> / <code>--show-thinking</code> 只归 CLI，
+          其余模式带上这些参数一律判用法错误退 <code>2</code>——拒绝而不是静默忽略」
+          （<code>Jellyfish/docs/constraints.md:1025-1026</code>）。</li>
+        <li><strong>说「降级」的有一处</strong>：<code>constraints.md</code> 的「会话语义」一节写
+          「<code>--agent</code> / <code>--model</code> 降级为『新建会话的默认值』」
+          （<code>Jellyfish/docs/constraints.md:1184</code>）。</li>
+        <li><strong>该信哪一个：以「拒绝」为准</strong>——这一条在实现里没有含糊的余地：
+          <code>StartupOptionsParser</code> 在解析阶段对 <code>-p</code> / <code>--agent</code> /
+          <code>--model</code> / <code>--show-tool-args</code> / <code>--show-thinking</code> 逐个调
+          <code>requireCliOnly</code>，只要模式不是 <code>-cli</code> 就抛异常
+          （<code>Jellyfish/jellyfish-cli/src/main/java/zcd/jellyfish/cli/StartupOptionsParser.java:257-266</code>，
+          判定本体见 <code>Jellyfish/jellyfish-cli/src/main/java/zcd/jellyfish/cli/StartupOptionsParser.java:314</code>）；该异常在进程入口被翻成退出码 <code>2</code>
+          （<code>Jellyfish/jellyfish-cli/src/main/java/zcd/jellyfish/cli/JellyfishApplication.java:73-77</code> 配
+          <code>Jellyfish/jellyfish-cli/src/main/java/zcd/jellyfish/cli/ExitCodes.java:20</code>）。
+          <code>ServerRunMode</code> 的类注释重申了同一结论并给出理由：「<code>--agent</code> / <code>--model</code>
+          <strong>在解析阶段就被判为用法错误退 2</strong>——新建会话的 agent 与模型由调用方在
+          <code>POST /sessions</code> 的请求体里给定，服务端不另存一份启动参数默认值」
+          （<code>Jellyfish/jellyfish-cli/src/main/java/zcd/jellyfish/cli/mode/ServerRunMode.java:37-40</code>，
+          不另存默认值的理由另见
+          <code>Jellyfish/jellyfish-server/src/main/java/zcd/jellyfish/server/ServerConfig.java:11-12</code>）。</li>
+        <li><strong>「降级」那句要能成立，只能这样读</strong>：它说的是 <code>POST /sessions</code> 请求体里的
+          <code>agentId</code> / <code>provider</code> / <code>model</code>——这三个字段确实存在、且全可空
+          （不填就按内核默认解析）：<code>Jellyfish/jellyfish-server/src/main/java/zcd/jellyfish/server/dto/CreateSessionRequest.java:9-29</code>。
+          也就是说「建会话时可以由请求指定」，而不是「Server 下启动参数会被降级收下」。本页全篇按前者写。</li>
+      </ul>
+    </div>
+    <div class="src-block">Jellyfish/README.md「三种运行模式 · 参数」（全表逐条）、Jellyfish/docs/constraints.md「三个外壳的共同约定」（兜底判据、只归 CLI 的旗标）、Jellyfish/README.md「Server 模式」（<code>--api-key</code>）、Jellyfish/docs/constraints.md「Server」（<code>--agent</code> / <code>--model</code> 只归 CLI、退 2）与「会话语义」（另一种说法）；实现依据：Jellyfish/jellyfish-cli/src/main/java/zcd/jellyfish/cli/StartupOptionsParser.java:257-266,314（<code>requireCliOnly</code>）、Jellyfish/jellyfish-cli/src/main/java/zcd/jellyfish/cli/JellyfishApplication.java:73-77、Jellyfish/jellyfish-cli/src/main/java/zcd/jellyfish/cli/ExitCodes.java:20（退 2）、Jellyfish/jellyfish-cli/src/main/java/zcd/jellyfish/cli/mode/ServerRunMode.java:37-40、Jellyfish/jellyfish-server/src/main/java/zcd/jellyfish/server/ServerConfig.java:11-12、Jellyfish/jellyfish-server/src/main/java/zcd/jellyfish/server/dto/CreateSessionRequest.java:9-29</div>
+
+    <h2>退出码</h2>
+
+    <p>
+      退出码是<strong>机器契约</strong>（<code>-cli</code> 与裸跑的 <code>-tui</code> 都在此口径内；
+      <code>-server</code> 是常驻进程，没有单次退出码语义）：
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>退出码</th><th>含义</th><th>典型触发</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>0</code></td>
+            <td>成功（含「未知命令」这类用户输入错误）</td>
+            <td>正常回答、<code>/help</code> 打出清单</td>
+          </tr>
+          <tr>
+            <td><code>2</code></td>
+            <td>用法错误：参数缺失 / 未知 / 冲突，<code>--session</code> <code>--agent</code> <code>--model</code>
+              指向不存在的东西，或没有输入</td>
+            <td><code>jellyfish --verbose</code>；<code>-tui</code> 带上 <code>--model</code></td>
+          </tr>
+          <tr>
+            <td><code>3</code></td>
+            <td>启动失败：配置、插件或装配出错</td>
+            <td>配置解析失败、插件加载失败、<code>-server</code> 绑定失败</td>
+          </tr>
+          <tr>
+            <td><code>4</code></td>
+            <td>运行失败：回合抛异常，或命令执行失败</td>
+            <td>模型调用报错、工具执行抛错</td>
+          </tr>
+          <tr>
+            <td><code>3</code>（TUI）</td>
+            <td>TUI 需要可交互终端而当前没有（<strong>stdin 或 stdout 被重定向也算</strong>）</td>
+            <td>在管道、CI、被重定向的 shell、IDE 的非真终端控制台里跑 <code>-tui</code></td>
+          </tr>
+          <tr>
+            <td><code>6</code></td>
+            <td>回合未收敛：达到最大轮次仍未给出最终回复</td>
+            <td>模型反复调工具不收尾</td>
+          </tr>
+          <tr>
+            <td><code>7</code></td>
+            <td>回合被插件拦下：一句都没发给模型（<strong>stdout 保持为空</strong>，原因在 stderr）</td>
+            <td>agent 策略或权限插件在回合开始前拦下</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout design">
+      <span class="callout-title">归类看的是「失败发生在哪一步」，不是异常属于哪个类</span>
+      <ul>
+        <li><code>bootstrap</code> 期间的<strong>任何运行时异常</strong>都算「内核没起成」，退 <code>3</code>；</li>
+        <li>内核起来之后的运行期故障一律是 <code>4</code>（<strong>哪怕它不是 <code>JellyfishException</code></strong>）；</li>
+        <li><code>mode.run</code> 与「参数没问题却仍然出错」的会话准备也算运行期故障（<code>4</code>）。</li>
+      </ul>
+      <p>
+        只认 <code>JellyfishException</code> 会让别的运行时异常穿到进程入口、被打成「初始化失败」退 <code>3</code>——
+        而那时内核往往已经起来了，脚本会据此去改一份本来没问题的配置。这就是为什么判据必须按「哪一步」而不是「哪个类」。
+      </p>
+    </div>
+    <div class="src-block">Jellyfish/README.md「输出与退出码」（退出码表与归类说明）、Jellyfish/docs/constraints.md「三个外壳的共同约定」（退出码是机器契约、按步骤归类）</div>
+
+    <h2>CLI（<code>-cli</code>）</h2>
+
+    <div class="feature">
+      <h3>stdout / stderr 分离：重定向是安全的</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          <strong>回答与命令结果走 stdout，诊断、工具进度与日志走 stderr</strong>。因此你可以放心把回答重定向进文件，
+          而不会被进度噪音污染。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-bash"># 回答进 answer.txt，诊断进 diag.txt
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli -p "总结这个项目" &gt; answer.txt 2&gt; diag.txt
+
+# 不写 -p 时从 stdin 读到 EOF，管道可用
+echo "/help" | java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli</code></pre>
+          <p>回答是<strong>按轮缓冲、收敛时整体写出</strong>的，所以不会出现「写了一半的 JSON」这种中间态。</p>
+        </dd>
+      </dl>
+
+      <div class="callout design">
+        <span class="callout-title">写出前一律过 <code>ControlChars</code>，连重定向到文件也不例外</span>
+        <p>
+          写出去的几乎都是<strong>不可信文本</strong>（模型回答、工具输出正文、异常消息、命令回显），因此
+          <code>writeOut</code> / <code>writeErr</code> 走 <code>strip</code>（保留换行——增量诊断靠它断行），
+          <code>writeErrLine</code> 走 <code>singleLine</code>（整行语义下换行是注入手段）。
+        </p>
+        <p>
+          判据取「文本从哪里来」而不是「写到哪里去」：JDK 1.8 没有可靠的「这是不是终端」判定，而
+          「有时过滤有时不过滤」会让行为随运行环境变化。<strong>代价是重定向到文件时回答里的控制字符也会被剔掉</strong>——
+          这是刻意的取舍，不是遗漏。
+        </p>
+      </div>
+
+      <div class="callout warn">
+        <span class="callout-title">TUI 没有 stdout 契约</span>
+        <p>
+          <code>-tui</code> 独占备用屏，<code>&gt; answer.txt</code> 不适用，退出后也不回显会话内容。
+          要把结果存下来就用 <code>-cli</code>。
+        </p>
+      </div>
+    </div>
+
+    <div class="feature">
+      <h3>工具轨迹：默认两行，<code>--show-tool-args</code> 加打参数</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          单次模式的工具轨迹默认只给「开始」与「结束」两行；加旗标后才补上调用参数，且<strong>单行、最多 200 字</strong>。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-bash">java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli -p "跑一下单测并总结失败原因"
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli --show-tool-args -p "跑一下单测并总结失败原因"</code></pre>
+          <p>默认两行的形状（README 的原例）：</p>
+          <pre><code class="language-text">→ shell
+← shell 完成（N 字符）</code></pre>
+          <p>加 <code>--show-tool-args</code> 之后（README 的原例）：</p>
+          <pre><code class="language-text">→ shell {"command": "mvn -q test", "cwd": "/x"}</code></pre>
+        </dd>
+      </dl>
+
+      <div class="callout danger">
+        <span class="callout-title">参数不脱敏——别把带密钥的输出贴出去</span>
+        <p>
+          <strong>参数不脱敏</strong>：外壳按参数名猜不出哪个是密钥，遮不住命令原文与写入正文这些真正会出事的地方。
+          <code>--show-tool-args</code> 与 TUI 的 <code>Ctrl+E</code> 同此口径。
+        </p>
+      </div>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>参数被截断了？</strong>单行 200 码点封顶是刻意的；要看完整参数就去看会话里那次调用的记录。</li>
+        <li><strong><code>-cli</code> 下审批怎么办？</strong>没有审批界面，<code>askTools</code> 里的工具一律按拒绝处理，
+          要人工确认请用 <code>-tui</code> 或 <code>-server</code>（见 <a href="10-permissions.html">10 权限与审批</a>）。</li>
+      </ul>
+    </div>
+    <div class="src-block">Jellyfish/README.md「输出与退出码」「快速开始」、Jellyfish/docs/constraints.md「三个外壳的共同约定」（CLI 输出契约、<code>ControlChars</code> 收口点、200 码点封顶）</div>
+
+    <h2 id="tui">TUI（<code>-tui</code>）</h2>
+
+    <p>
+      <code>-tui</code> 需要<strong>可交互终端</strong>（备用屏 + raw 模式）。在管道、CI 或没有终端的环境里启动会
+      <strong>立刻报错并退出 <code>3</code></strong>，不会挂住。
+    </p>
+
+    <pre><code class="language-bash">java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -tui</code></pre>
+
+    <div class="feature">
+      <h3>界面结构</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>自上而下：消息区（可滚动）、命令输出面板、输入框，底部一行状态栏。</dd>
+        <dt>怎么用</dt>
+        <dd>照着下面这张图认位置：</dd>
+      </dl>
+
+      <pre><code class="language-text">╭ jellyfish · 会话 ─────────────────┐
+│  ❯ 用户消息                        │   ← 消息区（可滚动）
+│  ⏺ jellyfish                       │
+│    助手正文                         │
+│      ⎿ read_file                   │   ← 工具轨迹
+╰────────────────────────────────────╯
+╭ /help · Esc 关闭 ──────────────────╮
+│    ⎿ 可用命令：                     │   ← 命令输出面板（最近一次；没有输出时不占位）
+│      /help [命令]  显示命令帮助     │
+╰────────────────────────────────────╯
+╭ 输入 ──────────────────────────────╮
+│ …                                  │   ← 多行输入（1～6 行自适应）
+╰────────────────────────────────────╯
+ agent · provider/模型 · token 用量（会话被压缩过时追加 `已压缩 N 条（丢弃 M 条）`）</code></pre>
+    </div>
+
+    <div class="feature">
+      <h3>命令输出面板：命令结果不进消息区</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          <code>/help</code>、<code>/session</code>、<code>/status</code>、插件命令这些结果都显示在输入框上方那块
+          <code>DOCK</code> 面板里，<strong>不进消息区</strong>。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          <ul>
+            <li>它<strong>只留最近一次</strong>——再敲一条就替换；</li>
+            <li>内容超长时用 <code>PageUp</code> / <code>PageDown</code>（或滚轮）翻，<code>Esc</code> 关掉；</li>
+            <li><strong>开始新一轮对话或新敲一条命令时自动让位</strong>；</li>
+            <li>面板占用的行数由外壳在纵向预算里分配（最多 8 行内容，超出靠滚动），矮终端上它会变矮，而不是把消息区挤没；</li>
+            <li><code>DOCK</code> 这一格与插件的 <code>DOCK</code> 面板<strong>共用</strong>：有命令输出时它优先，关掉面板后插件面板立刻回来。</li>
+          </ul>
+        </dd>
+      </dl>
+
+      <div class="callout design">
+        <span class="callout-title">为什么命令输出不进消息流</span>
+        <p>
+          首页上那样会让字标被逐条命令输出顶走，会话页上会让命令输出插进对话中间。
+          <strong>插件通知仍然按时间戳插进消息流</strong>（它是异步推送的状态，不是用户敲出来的反馈），两者刻意走不同的路。
+        </p>
+      </div>
+    </div>
+
+    <div class="feature">
+      <h3>按键表</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>键位与直觉相反的那一条是刻意的：<code>Enter</code> 换行、<code>Ctrl+S</code> 发送。</dd>
+        <dt>怎么用</dt>
+        <dd>见下表；最后五行是<strong>由外壳处理、不在 <code>/help</code> 列表里</strong>的命令。</dd>
+      </dl>
+
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>按键 / 命令</th><th>行为</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>Ctrl+S</code></td><td><strong>发送</strong>（<code>Enter</code> 是换行）</td></tr>
+            <tr><td><code>Enter</code></td><td>换行（可写多行，输入框 1～6 行自适应）</td></tr>
+            <tr><td><code>Ctrl+C</code></td><td>退出</td></tr>
+            <tr><td><code>Ctrl+T</code></td><td>展开 / 折叠思考过程（与 <code>/thinking</code> 等价）</td></tr>
+            <tr><td><code>Ctrl+E</code></td><td>展开 / 折叠工具调用参数（与 <code>/toolargs</code> 等价）</td></tr>
+            <tr><td><code>Ctrl+O</code></td><td>交还 / 收回鼠标（与 <code>/mouse</code> 等价）：交还后可直接拖选并复制</td></tr>
+            <tr><td><code>Esc</code></td><td>关闭命令输出面板；面板没开时中断当前回合（输入框内容保留）</td></tr>
+            <tr><td><code>PageUp</code> / <code>PageDown</code></td><td>翻页：命令输出面板可见时翻面板，否则翻消息区</td></tr>
+            <tr><td><code>End</code></td><td>跳到底部：命令输出面板可见时滚到面板末尾，否则消息区恢复跟随</td></tr>
+            <tr><td><code>/exit</code></td><td>退出（由外壳处理，不在 <code>/help</code> 列表里）</td></tr>
+            <tr><td><code>/ui</code></td><td>查看与切换插件的界面贡献（同样由外壳处理；两级选择页）</td></tr>
+            <tr><td><code>/thinking</code></td><td>展开 / 折叠思考过程（同样由外壳处理）</td></tr>
+            <tr><td><code>/toolargs</code></td><td>展开 / 折叠工具调用参数（同样由外壳处理）</td></tr>
+            <tr><td><code>/mouse</code></td><td>交还 / 收回鼠标（同样由外壳处理；<code>/mouse on</code> / <code>/mouse off</code> 显式指定）</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout design">
+        <span class="callout-title">为什么发送不是 <code>Enter</code></span>
+        <p>
+          终端 raw 模式下所有「带修饰的 <code>Enter</code>」都无法与普通 <code>Enter</code> 区分，因此
+          「<code>Enter</code> 发送 + 修饰键换行」在任何终端上都不可实现——反转之后 <code>Enter</code> 稳定换行、
+          <code>Ctrl+S</code> 稳定发送。
+        </p>
+        <p>
+          另外：这五个外壳自有命令<strong>在回合进行中也生效</strong>（它们不写会话，与 <code>Ctrl+T</code> /
+          <code>Ctrl+E</code> / <code>Ctrl+O</code> 是同一个动作）；普通文本仍要等回合结束，草稿留在输入框。
+        </p>
+      </div>
+    </div>
+
+    <div class="feature">
+      <h3>审批浮层与提问浮层</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          agent 策略把工具写进 <code>askTools</code> 时会弹<strong>审批框</strong>；模型调用 <code>ask_user</code>
+          时会弹<strong>提问框</strong>。两者都是阻塞在 <code>react</code> 线程上的浮层。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-text">╭ ⏸ 需要审批 ────────────────────────╮
+│ 工具 bash                          │
+│ 参数 {"command": "rm -rf build"}   │
+│ 理由 agent 策略要求人工审批该工具   │
+│ 会话 a1b2c3d4… · 模式 normal       │
+│                                    │
+│  ❯ 允许一次   本次调用放行…        │
+│    拒绝       本次调用按拒绝处理…  │
+│    ↑/↓ 选择 · Enter 确认 · Esc 拒绝并中断 │
+╰────────────────────────────────────╯</code></pre>
+          <pre><code class="language-text">╭ ❓ 需要你的选择 ──────────────────────╮
+│ 先做通道还是先做 UI？                  │
+│                                        │
+│ ❯ 先做通道：内核与插件先落地，代价是    │
+│   通道要先做完                          │
+│   先做 UI                               │
+│   ✎ 其它（自己输入）                    │
+│ ↑/↓ 选择 · Enter 确认 · Esc 放弃作答    │
+╰────────────────────────────────────────╯</code></pre>
+        </dd>
+      </dl>
+
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>浮层</th><th>优先级</th><th>超时</th><th><code>Esc</code> 的语义</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>审批框</td>
+              <td><strong>最高</strong>，优先于补全面板与二级选择页，可见时吞掉其余按键</td>
+              <td>缺省 120 秒（<code>permission.approvalTimeoutSeconds</code>；写 <code>0</code> 表示永不超时），<strong>等不到答复按拒绝处理</strong></td>
+              <td><strong>拒绝并中断</strong>回合（只拒绝的话模型往往会换个方式接着试）</td>
+            </tr>
+            <tr>
+              <td>提问框</td>
+              <td>低于审批、高于二级选择页与补全</td>
+              <td>缺省 120 秒（<code>ask.timeoutSeconds</code>；写 <code>0</code> 则永不超时），等不到答复时工具回一条「用户没有回答」让模型继续</td>
+              <td><strong>放弃作答</strong>（不是中断回合）——模型收到「用户取消了这次提问」后自己接着判断</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout warn">
+        <span class="callout-title">审批参数按原文显示，不脱敏</span>
+        <p>
+          参数<strong>原样显示</strong>（含 <code>apiKey</code> 这类键的值）：审批要回答的是「放不放行这次调用」，
+          而能回答它的只有原文。超长参数折行显示并在截断处写明省略了几行。
+        </p>
+        <p>
+          提问框则是<strong>选任何一项都不会放行任何工具</strong>，只是把答案告诉模型；选项很长时光标停在哪一项、
+          哪一项就完整折行展开（最多 6 行）——<strong>你准备按 <code>Enter</code> 的那一项一定是完整的</strong>。
+        </p>
+      </div>
+    </div>
+
+    <div class="feature">
+      <h3>插件面板与 <code>/ui</code></h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          插件可以往界面上放两类东西：<strong>状态栏尾部的一小段文本</strong>（例如待办插件的 <code>待办 2/5</code>）
+          与<strong>一块常驻面板</strong>（例如完整的待办清单）。位置、宽度、行数全部由外壳决定，
+          插件无权把消息区挤没；<strong>插件不可能自己造 TamboUI 组件</strong>。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-text">/ui                        选区域（二级页）：每行标出该区域显示的是谁、还有几个候选
+/ui right                  选插件（三级页）：该区域的候选插件 + on / off，当前那个标「（当前）」
+/ui right jellyfish-plugin-todo   直接指定：由某个插件占用该区域
+/ui right cycle            在该区域轮换到下一个候选
+/ui right off              关掉该区域（/ui right on 恢复）
+/ui list                   不弹页面，直接列出所有贡献：区域 | 插件 | 标题 | 是否可见 | 还有哪些候选 | 没生效的插件快捷键</code></pre>
+          <p>
+            打开它有两种方式：把 <code>/ui</code> 敲到输入框里、在补全面板里按 <code>Enter</code> 选中，
+            或者直接把 <code>/ui</code> 发出去——两者打开的是同一个区域选择页。
+          </p>
+        </dd>
+      </dl>
+
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>情形</th><th>行为</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>两个插件抢同一区域</td><td>默认只显示 <code>order</code> 最小的那个，其余进入候选</td></tr>
+            <tr><td>界面窄于 80 列</td><td>左右侧栏自动隐藏；窄到放不下时面板让位给消息区</td></tr>
+            <tr><td>浮层出现时</td><td>面板<strong>不会消失，只会变矮</strong>：<code>DOCK</code> / <code>TOP</code> 在剩余预算里分配行数（<code>DOCK</code> 优先），矮到放不下就暂时不显示；浮层关掉后自动恢复</td></tr>
+            <tr><td>想整体关掉插件 UI</td><td><code>-Djellyfish.tui.pluginPanels=false</code></td></tr>
+            <tr><td>「我绑的键为什么没反应」</td><td>快捷键诊断只在 <code>/ui list</code> 里显示</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="feature">
+      <h3>鼠标捕获与复制</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>滚轮可用，代价是终端本地的鼠标选择被应用截走（鼠标捕获默认开启）。</dd>
+        <dt>怎么用</dt>
+        <dd>
+          <ul>
+            <li>想复制时按 <code>Ctrl+O</code>（或敲 <code>/mouse</code>）把鼠标交还终端：拖选 + <code>⌘C</code> 立刻可用；</li>
+            <li>期间滚轮停用，消息区滚动改用 <code>PageUp</code> / <code>PageDown</code> / <code>End</code>；复制完再按一下收回；</li>
+            <li>整体不要鼠标捕获：<code>-Djellyfish.tui.mouseCapture=false</code>，代价是滚轮在多数终端下<strong>根本到不了应用</strong>。</li>
+          </ul>
+        </dd>
+      </dl>
+    </div>
+
+    <div class="feature">
+      <h3>日志：只写文件，且必须滚动</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          TUI 是唯一写文件的日志目标（长时间驻留，一次开几天），因此单文件涨到上限就轮换，历史档数也有上限。
+          <strong>日志绝不写 stderr</strong>——它独占备用屏。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-text">默认路径    &lt;用户主目录&gt;/.jellyfish/jellyfish-tui.log
+单文件上限  -Djellyfish.log.maxSize=20MB     （缺省 10 MB；20MB / 20 MB / 1048576 三种写法都认，单位 KB/MB/GB）
+历史档数    -Djellyfish.log.maxFiles=10      （缺省 5，因此磁盘上限约 60 MB）
+改路径      -Djellyfish.log.file=/path/to/your.log</code></pre>
+          <p>
+            历史档是 <code>jellyfish-tui.log.1</code>、<code>.2</code>……更早的自动删掉。
+            <strong>当前日志始终写在 <code>jellyfish.log.file</code> 那个名字上</strong>，历史是它的 <code>.%i</code> 后缀。
+          </p>
+        </dd>
+      </dl>
+
+      <div class="callout tip">
+        <span class="callout-title"><code>-cli</code> / <code>-server</code> 没有文件日志</span>
+        <p>
+          这两种模式只写 stderr（你自己把 stderr 重定向到文件，那是你的事，不归这条管）。
+          因此排查「日志去哪了」时先确认自己在哪个模式里。
+        </p>
+      </div>
+    </div>
+
+    <div class="feature">
+      <h3>其它：粘贴上限与已知限制</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>几条不写下来就会浪费你半小时的边界。</dd>
+        <dt>怎么用</dt>
+        <dd>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr><th>项</th><th>行为</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>粘贴</td>
+                  <td>上限 <strong>1 MiB 码点</strong>（判的是「插入之后的总长」，反复粘小段同样能把它堆到失控）。
+                    <strong>超限时一个字都不插入</strong>，并通过外壳提示通道给一句提示——截断会让用户以为粘全了</td>
+                </tr>
+                <tr>
+                  <td>消息区投影</td>
+                  <td>只投影<strong>最近 500 条消息</strong>，更早的以 <code>⎿ N 条更早的消息已折叠</code> 占位</td>
+                </tr>
+                <tr>
+                  <td>自动跟随</td>
+                  <td>滚到内容末尾时自动跟随，用户上翻后不再打扰，状态栏出现 <code>↓ N 行</code>（生成中则显示 <code>↓ 正在生成…</code>）</td>
+                </tr>
+                <tr>
+                  <td>编辑器「光标到行尾」</td>
+                  <td><strong>不可用</strong>——<code>End</code> 归消息区</td>
+                </tr>
+                <tr>
+                  <td><code>\r\n</code> 输入</td>
+                  <td>会变成<strong>两个换行</strong></td>
+                </tr>
+                <tr>
+                  <td>思考过程</td>
+                  <td>默认折叠，屏幕上只占一行（<code>✻ 思考过程（N 字，Ctrl+T 展开）</code>），流式期间是 <code>✻ 思考中…（N 字）</code>；<code>Ctrl+T</code> 是<strong>全局</strong>开关</td>
+                </tr>
+                <tr>
+                  <td>工具轨迹行</td>
+                  <td>形状是 <code>⎿ 工具名 · 结果摘要 · 调用参数</code>，参数按显示列折行、折叠态最多 8 行，超出以
+                    <code>… 参数过长，已省略后续内容（Ctrl+E 展开）</code> 收尾，展开到 200 行</td>
+                </tr>
+                <tr>
+                  <td>助手正文</td>
+                  <td>按 markdown 渲染（表格画成网格）；<strong>用户消息与工具轨迹保持纯文本</strong>，图片与 HTML 原样显示源码</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </dd>
+      </dl>
+
+      <div class="callout tip">
+        <span class="callout-title">在 IDEA 里调试 TUI</span>
+        <p>
+          IDEA 的运行控制台默认不是真终端，直接跑 <code>-tui</code> 会命中「需要可交互终端」的检查。
+          推荐<strong>在真实终端里启动、用 IDEA 远程调试挂接</strong>：
+        </p>
+        <pre><code class="language-bash">mvn -o package -DskipTests
+java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005 \
+     -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -tui</code></pre>
+        <p>
+          然后 <code>Run → Edit Configurations → + → Remote JVM Debug</code>（默认就是 5005）→ 点 Debug。
+          想在启动阶段（DI 装配、<code>bootstrap</code>）下断点就把 <code>suspend=n</code> 改成 <code>suspend=y</code>。
+          IDEA 内置的 Terminal 标签页是真 PTY，也可以直接在那里运行。
+          确认终端可用却被拦下时用 <code>-Djellyfish.tui.skipTerminalCheck=true</code> 跳过检查。
+        </p>
+      </div>
+    </div>
+    <div class="src-block">Jellyfish/README.md「TUI 用法」全节（界面结构、命令输出面板、按键表、思考与参数开关、审批、提问、插件面板与 <code>/ui</code>、鼠标捕获、日志轮换、已知限制、IDEA 调试）、Jellyfish/docs/constraints.md「TUI」（键位反转、输出面板互斥、粘贴上限、日志上限由 <code>TuiLogRollingTest</code> 守着）</div>
+
+    <h2 id="server">Server（<code>-server</code>）</h2>
+
+    <div class="feature">
+      <h3>启动与绑定</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          HTTP 服务（Undertow），对外暴露 REST + SSE 接口。<strong>默认只绑 <code>127.0.0.1</code></strong>，
+          且<strong>没配密钥时不鉴权</strong>——对只绑回环的本地场景够用。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-bash"># 只在本机可用（缺省行为）
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -server 9096
+
+# 对外暴露：必须同时配密钥
+JELLYFISH_SERVER_API_KEY=$(openssl rand -hex 32) java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -server --host 0.0.0.0</code></pre>
+        </dd>
+      </dl>
+
+      <div class="callout danger">
+        <span class="callout-title">绑非回环地址却未配密钥 → 拒绝启动，退 3</span>
+        <p>
+          那等于把「建会话、跑命令、读全部会话正文」交给同网段的任何人，而一行 WARN 是拦不住这种配置的。
+          因此判据用 <code>InetAddress.isLoopbackAddress()</code>（<code>localhost</code> / <code>::1</code> /
+          <code>127.0.0.2</code> 都算回环），<strong>解析不出来按非回环处理</strong>（那多半是主机名写错了，
+          让它在启动期暴露）。回环 + 无密钥仍然允许，那是「本机跑一次」的刻意缺省。
+        </p>
+        <p>
+          另外记住：<strong>绑定失败也退 <code>3</code></strong>（启动条件不具备），不是 <code>4</code>。
+        </p>
+      </div>
+
+      <p><strong>密钥的两条通道</strong></p>
+
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>通道</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>JELLYFISH_SERVER_API_KEY</td>
+              <td>环境变量</td>
+              <td><span class="tag optional">选填</span>（但绑非回环时必配，否则拒绝启动）</td>
+              <td>无（缺省不鉴权）</td>
+              <td>服务端 API key，<strong>推荐用法</strong>：不会出现在 <code>ps</code> 输出里</td>
+              <td><code>JELLYFISH_SERVER_API_KEY=$(openssl rand -hex 32) java -jar ... -server --host 0.0.0.0</code></td>
+            </tr>
+            <tr>
+              <td>--api-key</td>
+              <td>命令行参数</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>无</td>
+              <td>同上，走命令行。<strong>argv 会出现在 <code>ps</code> 里，同机其他用户看得见</strong></td>
+              <td><code>--api-key &lt;你的密钥&gt;</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout warn">
+        <span class="callout-title">密钥不要走 query 参数</span>
+        <p>
+          <strong>不接受用 query 参数传密钥</strong>（URL 会进访问日志、浏览器历史与 <code>Referer</code>）。
+          密钥比较是常时比较；密钥短于 16 位会在启动日志里告警，但<strong>不拒绝启动</strong>。
+        </p>
+        <p>
+          <strong>命令域与对话域同权</strong>：<code>POST /sessions/{id}/commands</code> 能执行 <code>/reload</code>
+          等系统命令，因此密钥泄露等于整机权限泄露。
+        </p>
+      </div>
+
+      <p><strong>鉴权与来源校验</strong></p>
+
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>情形</th><th>行为</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>没配密钥（缺省）</td>
+              <td><strong>不鉴权</strong>：任何能访问该端口的人都能建会话、跑命令、读全部会话正文。对只绑回环的本地场景够用</td>
+            </tr>
+            <tr>
+              <td>配了密钥</td>
+              <td>除 <code>GET /health</code> 外<strong>所有接口</strong>都要 <code>Authorization: Bearer &lt;密钥&gt;</code>，否则 <code>401</code> + <code>{"error":"UNAUTHORIZED"}</code> 并带 <code>WWW-Authenticate: Bearer realm="jellyfish"</code></td>
+            </tr>
+            <tr>
+              <td>写请求（<code>POST</code> / <code>PUT</code> / <code>PATCH</code> / <code>DELETE</code>）带 <code>Origin</code></td>
+              <td>其主机必须与本服务一致，否则回 <code>403</code>（不带 <code>Origin</code> 时退到 <code>Referer</code>；两个头都不带则放行）。<code>Origin</code> 为字面量 <code>null</code> 一律拒绝</td>
+            </tr>
+            <tr>
+              <td><code>GET /health</code></td>
+              <td><strong>不校验</strong>：探活必须能在「还没有密钥」的场景下工作；路径按归一化后比对（尾斜杠等价）</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout design">
+        <span class="callout-title">为什么写请求要查 <code>Origin</code></span>
+        <p>
+          这挡的是<strong>浏览器被恶意页面指使</strong>去驱动你本机的 agent——浏览器对 <code>text/plain</code>
+          这类「简单请求」会照常发出并执行副作用，只是响应不可读，因此仅靠「只绑回环」挡不住
+          （请求确实来自本机，只是由别人的页面发起）。不带这两个头的客户端（<code>curl</code>、SDK）不受影响。
+        </p>
+      </div>
+    </div>
+
+    <div class="feature">
+      <h3>跑通一次（完整 curl 示例）</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>建会话 → 对话（恒为 SSE）→ 从流里读结论。这是所有接入方的最小流程。</dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-bash"># 1. 探活（不需要密钥）
+curl -s localhost:9096/health
+
+# 2. 建会话，取出 sessionId
+SID=$(curl -s -X POST localhost:9096/sessions | jq -r .sessionId)
+
+# 3. 对话：恒为 SSE，用 -N 关掉 curl 的缓冲，才能看到增量
+curl -sN -X POST localhost:9096/sessions/$SID/chat \
+     -H 'Content-Type: application/json' -d '{"message":"总结这个项目"}'</code></pre>
+          <p>配上密钥后，除 <code>GET /health</code> 外的每个请求都要带这个头：</p>
+          <pre><code class="language-bash">curl -s -X POST localhost:9096/sessions \
+     -H "Authorization: Bearer &lt;你的密钥&gt;" \
+     -H 'Content-Type: application/json' -d '{}'</code></pre>
+        </dd>
+      </dl>
+    </div>
+
+    <div class="feature">
+      <h3>接口速查（全表）</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>Server 暴露的全部接口，一条不多、一条不少。</dd>
+      </dl>
+
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>方法</th><th>路径</th><th>说明</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>POST</code></td><td><code>/sessions</code></td><td>建会话（body 可选 <code>agentId</code> / <code>provider</code> / <code>model</code>）</td></tr>
+            <tr><td><code>GET</code></td><td><code>/sessions</code></td><td>会话摘要列表（不含消息正文）</td></tr>
+            <tr><td><code>GET</code></td><td><code>/sessions/{id}</code></td><td>完整会话快照（含消息与用量）</td></tr>
+            <tr><td><code>DELETE</code></td><td><code>/sessions/{id}</code></td><td>删除会话</td></tr>
+            <tr><td><code>POST</code></td><td><code>/sessions/{id}/chat</code></td><td>对话，<strong>恒为 SSE</strong>（body 为 <code>{"message":"…"}</code>）</td></tr>
+            <tr><td><code>POST</code></td><td><code>/sessions/{id}/cancel</code></td><td>取消在途回合</td></tr>
+            <tr><td><code>POST</code></td><td><code>/sessions/{id}/commands</code></td><td>执行命令</td></tr>
+            <tr><td><code>GET</code></td><td><code>/commands</code></td><td>结构化命令清单</td></tr>
+            <tr><td><code>GET</code></td><td><code>/commands/{name}/options</code></td><td>命令候选值</td></tr>
+            <tr><td><code>GET</code></td><td><code>/approvals</code></td><td>跨会话最早的那一条待审批项（子代理的审批只在这里看得到）</td></tr>
+            <tr><td><code>GET</code> · <code>POST</code></td><td><code>/sessions/{id}/approvals</code> · <code>/sessions/{id}/approvals/{requestId}</code></td><td>本会话待审批项与裁决</td></tr>
+            <tr><td><code>GET</code></td><td><code>/asks</code></td><td>跨会话最早的那一条待答提问（同上）</td></tr>
+            <tr><td><code>GET</code> · <code>POST</code></td><td><code>/sessions/{id}/asks</code> · <code>/sessions/{id}/asks/{requestId}</code></td><td>本会话待答提问与作答</td></tr>
+            <tr><td><code>GET</code></td><td><code>/health</code></td><td>健康报告（UP / WARN / DOWN）</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="feature">
+      <h3>接入方必须知道的规则</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>这一小节里的每一条都对应一个真实的失败模式。</dd>
+      </dl>
+
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>规则</th><th>具体行为</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>同会话同时只允许一个回合</strong></td>
+              <td>第二个请求返回 <code>409</code>；要打断用 <code>POST /sessions/{id}/cancel</code>，或直接断开 SSE 连接（服务端据此取消回合）。这是内核不变量，槽位占位早于 <code>AgentHarness.chat</code></td>
+            </tr>
+            <tr>
+              <td><strong>命令端点有一道闸门</strong></td>
+              <td><code>/new</code>、<code>/resume</code>、<code>/reload</code>、<code>/session</code>、<code>/delete</code> 这类「改进程级状态或按参数操作别的会话」的命令回 <code>403 COMMAND_NOT_ALLOWED</code>——本外壳按会话 id 寻址，建会话用 <code>POST /sessions</code>、删会话用 <code>DELETE /sessions/{id}</code>。<code>GET /commands</code> 仍会如实列出全部命令（过滤器与闸门是两件事）</td>
+            </tr>
+            <tr>
+              <td><strong><code>/sessions/{id}/commands</code> 先校验会话存在</strong></td>
+              <td>不存在回 <code>404</code>（与 <code>/chat</code>、<code>GET /sessions/{id}</code> 同口径）；命令自身不认识则回 <code>404</code> + <code>kind=UNKNOWN</code>，两者靠 <code>kind</code> 与状态码并存可区分</td>
+            </tr>
+            <tr>
+              <td><strong>人工审批必须按会话寻址</strong></td>
+              <td>流里推 <code>approval_required</code>，拿 <code>requestId</code> 调 <code>POST /sessions/{id}/approvals/{requestId}</code>：要求 <code>requestId</code> 属于路径里那个会话、且是它的<strong>头槽位</strong>，否则 <code>404</code>。头槽位<strong>每会话一个</strong>，会话之间互不排队；同一会话内是 FIFO 队列、上限 8 条，超出只拒新请求、已排队的不受影响</td>
+            </tr>
+            <tr>
+              <td><strong><code>GET /approvals</code> 是只读的发现入口</strong></td>
+              <td>跨会话最早那一条，带 <code>sessionId</code>——子代理的审批落在它自己的会话上，按主会话订阅的流看不到它，没有这个入口就只能等超时被拒</td>
+            </tr>
+            <tr>
+              <td><strong>向用户提问同理</strong></td>
+              <td>流里推 <code>ask_required</code>，拿 <code>requestId</code> 调 <code>POST /sessions/{id}/asks/{requestId}</code>，请求体给 <code>{"optionId":"…"}</code> 或 <code>{"text":"…"}</code>；<strong>两种都不给回 <code>400</code></strong>（「用户自己填的答案」与「客户端写错了请求」必须能分开）</td>
+            </tr>
+            <tr>
+              <td><strong>带体的请求要声明 <code>application/json</code></strong></td>
+              <td>回 <code>415</code> 的是 <code>text/plain</code> 这类浏览器能跨站发出的内容类型</td>
+            </tr>
+            <tr>
+              <td><strong>错误体统一</strong></td>
+              <td><code>{"error":"CODE","message":"…"}</code>，且 <code>message</code> 不携带调用方给的文本</td>
+            </tr>
+            <tr>
+              <td><strong><code>POST /chat</code> 不执行命令、不解析输入指令</strong></td>
+              <td>要与命令域打交道走 <code>/commands</code>；输入指令 <code>!</code> / <code>@</code> 也在这里被忽略</td>
+            </tr>
+            <tr>
+              <td><strong>带 <code>handoff</code> 的命令只走半程</strong></td>
+              <td><code>POST /sessions/{id}/commands</code> 是纯 JSON，与 <code>/chat</code> 的 SSE 契约分开，因此「让模型接着干」的命令（如 <code>/init</code>）需要客户端拿回那段文本<strong>再 POST 一次 <code>/chat</code></strong>。TUI / CLI 由内核一次做完</td>
+            </tr>
+            <tr>
+              <td><strong>并发流有上限</strong></td>
+              <td>并发 SSE 流用 <code>maxStreams</code> 封顶（缺省 <code>16</code>，超限 <code>503</code>）。慢客户端会一直占着它那条许可与一个线程直到断开，这是刻意的</td>
+            </tr>
+            <tr>
+              <td><strong>单主体模型</strong></td>
+              <td>一个 API key 就是一个信任域，内核不认识「哪个调用方」。按调用方区分的会话归属与审批归属在 Spring starter 的 <code>user</code> 包里——<strong>不要用本服务做多租户</strong></td>
+            </tr>
+            <tr>
+              <td><strong><code>-server</code> 明确不做</strong></td>
+              <td>自带 Web 前端、TLS</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>SSE 事件（<code>POST /sessions/{id}/chat</code>）</strong></p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>事件</th><th>说明</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>turn_start</code></td><td>回合开始</td></tr>
+            <tr><td><code>text</code></td><td>助手正文增量</td></tr>
+            <tr><td><code>thinking</code></td><td>思考过程增量</td></tr>
+            <tr><td><code>tool_start</code></td><td>工具调用开始</td></tr>
+            <tr><td><code>tool_output</code></td><td>工具执行期的实时输出（<strong>可丢</strong>，按待发条数封顶；权威结果是 <code>tool_done</code> 的 <code>output</code>）</td></tr>
+            <tr><td><code>tool_done</code></td><td>工具调用结束（<strong>权威结果</strong>）；<code>metadata</code> 里 <code>terminal</code> 取值含 <code>FAILED</code> 与 <code>REJECTED</code>，前端据字段渲染失败标记，不要解析 <code>output</code> 首行文案</td></tr>
+            <tr><td><code>approval_required</code></td><td>需要人工审批</td></tr>
+            <tr><td><code>approval_resolved</code></td><td>审批已裁决（<strong>不带结论</strong>）</td></tr>
+            <tr><td><code>ask_required</code></td><td>模型在向用户提问，载荷即 <code>AskDto</code>（<code>requestId</code> / <code>question</code> / <code>options</code>）</td></tr>
+            <tr><td><code>ask_resolved</code></td><td>提问已被作答（或超时 / 收敛），<strong>不带答案</strong>——结果随后以 <code>tool_done</code> 到达</td></tr>
+            <tr><td><code>shell_notice</code></td><td>插件推的一条通知，载荷 <code>{owner,sessionId,key,severity,lines}</code>（<strong>尽力 lane、可丢、不落盘、不进模型上下文</strong>）</td></tr>
+            <tr><td><code>shell_invalidated</code></td><td>插件说「我贡献的内容脏了」，载荷 <code>{owner,sessionId,what}</code></td></tr>
+            <tr><td><code>input_handled</code></td><td><strong>终态</strong>：输入被插件接过去了，根本没有回合（不带 <code>turnId</code>，也不占在途回合槽位）</td></tr>
+            <tr><td><code>done</code></td><td><strong>终态</strong>：回合正常结束</td></tr>
+            <tr><td><code>cancelled</code></td><td><strong>终态</strong>：回合被取消</td></tr>
+            <tr><td><code>turn_blocked</code></td><td><strong>终态</strong>：回合被插件在开始前拦下，载荷 <code>{turnId,sessionId,reason}</code></td></tr>
+            <tr><td><code>error</code></td><td><strong>终态</strong>：回合出错</td></tr>
+            <tr><td><code>run_started</code></td><td>子代理 run 开始（与回合事件穿插，<strong>不参与流的终态判定</strong>）</td></tr>
+            <tr><td><code>run_finished</code></td><td>子代理 run 终结</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        写出终态事件后流结束；空闲超时写 <code>: keepalive</code> 注释帧。
+        <code>shell_notice</code> / <code>shell_invalidated</code> 是<strong>尽力 lane</strong>：与回合没有关系、
+        可丢、时延最多一秒，客户端<strong>不得把它们当状态真源</strong>。
+      </p>
+
+      <div class="callout design">
+        <span class="callout-title"><code>done</code> 事件的载荷：<code>notice</code> 不是回答</span>
+        <p>回合收敛时 <code>done</code> 的载荷是：</p>
+        <pre><code class="language-json">{turnId, sessionId, content, rounds, truncated, notice}</code></pre>
+        <ul>
+          <li><code>truncated=true</code> 表示「达到最大轮次仍未收敛」，此时 <code>content</code> 是一句可读提示而<strong>非模型回答</strong>；</li>
+          <li><code>notice</code> 表示「收敛了，但有一处从正文看不出来的例外」——目前是<strong>回复被输出上限截断</strong>或<strong>模型一个字都没回</strong>，没有例外时为 <code>null</code>；</li>
+          <li><strong><code>notice</code> 不是回答</strong>：它应当用提示样式渲染，不要拼进 <code>content</code> 之后当正文显示（那会让用户以为模型说过这句话）。</li>
+        </ul>
+      </div>
+    </div>
+    <div class="src-block">Jellyfish/README.md「Server 模式」全节（启动与绑定、密钥两通道、Origin 校验、Bearer 鉴权、curl 示例、接口速查表、接入规则、<code>done</code> 载荷）、Jellyfish/docs/constraints.md「Server」「Server 接口契约」（鉴权表、SSE 事件表、会话语义、<code>maxStreams</code>、绑定失败退 3）</div>
+
+    <h2>怎么选：一张决策图</h2>
+
+    <div class="diagram">
+      <div class="mermaid">
+flowchart TD
+  Q["你要怎么用它？"] --> A["在自己的 Java 服务里用 agent"]
+  Q --> B["脚本 / CI / 管道里跑一次"]
+  Q --> C["自己在终端里跟它对话"]
+  Q --> D["给别人（前端 / 其它服务）调"]
+
+  B --> B1["-cli 单次调用<br/>回答走 stdout、诊断走 stderr<br/>退出码是机器契约"]
+  C --> C1["-tui 交互界面<br/>需要可交互终端<br/>审批与提问是浮层"]
+  D --> D1["-server REST + SSE<br/>除 GET /health 外都要 Bearer<br/>绑非回环必须配密钥"]
+  A --> A1["14 整合到 Spring Boot<br/>jellyfish-spring-boot-starter"]
+
+  B1 --> E["三种外壳共用同一份装配<br/>能力一律由插件提供<br/>换外壳不换插件"]
+  C1 --> E
+  D1 --> E
+  A1 --> E
+      </div>
+    </div>
+    <p class="figure-cap">图 4-1　先按「谁来调它」挑外壳：程序调、脚本调、人调、别人调，判据互不重叠</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>你的判据</th><th>选它</th><th>关键理由 / 代价</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>要接进<strong>已有的 Java 程序</strong>，还要按用户隔离</td>
+            <td><a href="14-spring-boot.html">Spring Boot Starter</a></td>
+            <td>内核不认识「哪个调用方」，多用户护栏（<code>SessionOwnerStore</code> / <code>ApprovalGateway</code>）只在 Starter 的 <code>user</code> 包里</td>
+          </tr>
+          <tr>
+            <td>要<strong>脚本化</strong>：一条命令进、一条结果出</td>
+            <td><code>-cli</code></td>
+            <td>stdout / stderr 分离、重定向安全、退出码可判；代价是<strong>没有审批界面</strong>，<code>askTools</code> 一律拒绝</td>
+          </tr>
+          <tr>
+            <td>要<strong>人机交互</strong>：多轮、看轨迹、逐次审批</td>
+            <td><code>-tui</code></td>
+            <td>浮层式审批与提问、命令输出面板、插件面板；代价是必须真终端，管道 / CI 里直接退 <code>3</code></td>
+          </tr>
+          <tr>
+            <td>要<strong>给别人调</strong>（前端、其它服务、跨语言）</td>
+            <td><code>-server</code></td>
+            <td>REST + SSE、审批走 HTTP；代价是要自己处理 Bearer 鉴权、来源校验、同会话单回合与 <code>409</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">可以先在 <code>-tui</code> 里试，再照抄成 <code>-cli</code></span>
+      <p>
+        三种外壳<strong>命令一致</strong>（输入以 <code>/</code> 开头即走命令域），所以你在 <code>-tui</code>
+        里调顺的那串命令与参数，几乎可以直接搬进 <code>-cli -p "..."</code>。反过来不要：<code>-cli</code>
+        下 <code>askTools</code> 一律被拒，那是一次跑不通的体验，不是配置问题。
+      </p>
+    </div>
+    <div class="src-block">Jellyfish/README.md「三种运行模式」「Server 模式」（形态与适用场景）、Jellyfish/docs/constraints.md「与另外两种模式的口径差异」「边界与明确不做」、Jellyfish-Spring-Boot-Starter/README.md（多用户维度）</div>
+
+    <h2>常见问题</h2>
+
+    <div class="feature">
+      <h3><code>-tui</code> 启动就退出 3？</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          它在管道、CI、被重定向的 shell 或 IDE 的非真终端控制台里都会这样（这是有意的：否则终端界面会永久挂住）。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          在真实终端里运行，或按「在 IDEA 里调试」一节用远程调试挂接。确认终端可用却被拦下时用
+          <code>-Djellyfish.tui.skipTerminalCheck=true</code> 跳过检查。
+        </dd>
+      </dl>
+    </div>
+
+    <div class="feature">
+      <h3>为什么 <code>jellyfish --verbose</code> 报「请指定启动模式」？</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>兜底只认「一个参数都不带」。带了参数就必须显式给模式，因此 <code>--verbose</code> 改不了这个结论。</dd>
+        <dt>怎么用</dt>
+        <dd><code>jellyfish -cli --verbose -p "..."</code>，或 <code>jellyfish -tui --verbose</code>。</dd>
+      </dl>
+    </div>
+
+    <div class="feature">
+      <h3><code>-server</code> 起不来，退出码是 3？</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>两条已知的启动期拒绝：<strong>绑非回环地址却没配密钥</strong>，以及<strong>绑定失败</strong>
+          （启动条件不具备，算 <code>3</code> 而不是 <code>4</code>）。</dd>
+        <dt>怎么用</dt>
+        <dd>
+          先配密钥再用 <code>--host 0.0.0.0</code>。测「绑定失败」请用<strong>不可用地址</strong>，不要用「占端口」——
+          macOS 上 Undertow 会设 <code>SO_REUSEPORT</code>，已占端口仍可能绑上。
+        </dd>
+      </dl>
+    </div>
+
+    <div class="feature">
+      <h3>想让 agent 无人值守地跑，但工具总被拒绝？</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          <code>-cli</code> 没有审批界面，<code>askTools</code> 里的工具一律按拒绝处理（绝不静默放行）；
+          <code>-server</code> 恰好相反，审批被显式搬到 HTTP 层。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          要么把该工具从 <code>askTools</code> 里拿掉（见 <a href="07-agents.html">07 agents.json 与工具权限</a>），
+          要么换 <code>-tui</code> / <code>-server</code> 安排人（或程序）来裁决。
+        </dd>
+      </dl>
+    </div>
+
+    <div class="feature">
+      <h3><code>-server</code> 有没有单次退出码？</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          <strong>没有</strong>。它是常驻进程，因此没有 <code>-cli</code> 那套单次退出码语义，
+          一轮对话的结果<strong>只能从 SSE 流里读</strong>。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          客户端按终态事件判断这一轮结束（<code>done</code> / <code>cancelled</code> / <code>turn_blocked</code> /
+          <code>input_handled</code> / <code>error</code>），权威回答在 <code>done</code> 的 <code>content</code>，
+          权威工具结果在 <code>tool_done</code> 的 <code>output</code>。
+        </dd>
+      </dl>
+    </div>
+    <div class="src-block">Jellyfish/README.md「常见问题」（<code>-tui</code> 启动退出 3、<code>-cli</code> 下工具被拒）、Jellyfish/docs/constraints.md「Server」（绑定失败退 3、测绑定失败的正确方法）、Jellyfish/docs/constraints.md「会话语义」（<code>-server</code> 没有单次退出码语义、终态事件）</div>
+
+    <div class="conclusion">
+      <h2>关键结论</h2>
+      <ol>
+        <li>三种外壳<strong>一个内核、一份装配</strong>，差异收在 <code>RunMode</code>；命令一致，能力都由插件提供。插件还能读到进程级事实 <code>RuntimeInfo</code>（<code>shell</code> / <code>hasUI</code> / <code>supportsApproval</code> / <code>interactive</code>）。</li>
+        <li>兜底只有一处：<strong>一个参数都不带 = <code>-tui</code></strong>；带了任何参数就必须显式给模式，否则退 <code>2</code>。</li>
+        <li><code>--agent</code> / <code>--model</code> / <code>-p</code> / <code>--show-thinking</code> / <code>--show-tool-args</code> <strong>只归 <code>-cli</code></strong>；其余模式带上它们一律退 <code>2</code>（拒绝而不是静默忽略）。<code>--api-key</code> 只出现在 Server 模式一节。</li>
+        <li>退出码是机器契约，<strong>归类看「失败发生在哪一步」</strong>：<code>bootstrap</code> 期间任何运行时异常都是 <code>3</code>，内核起来之后一律 <code>4</code>。</li>
+        <li>CLI：回答走 stdout、诊断走 stderr，重定向安全；工具轨迹默认两行，<code>--show-tool-args</code> 单行最多 200 字且<strong>不脱敏</strong>。</li>
+        <li>TUI：<code>Ctrl+S</code> 发送、<code>Enter</code> 换行；命令输出进 <code>DOCK</code> 面板不进消息区；审批优先级最高且 <code>Esc</code> 是「拒绝并中断」，提问的 <code>Esc</code> 是「放弃作答」。</li>
+        <li>Server：默认只绑 <code>127.0.0.1</code>；<strong>绑非回环却未配密钥拒绝启动退 3</strong>；除 <code>GET /health</code> 外都要 Bearer；写请求查 <code>Origin</code>/<code>Referer</code>；同会话只允许一个回合（第二个 <code>409</code>）；审批按会话寻址。</li>
+        <li>选型判据：要接进自己的程序用 Starter，要脚本化用 <code>-cli</code>，要人机交互用 <code>-tui</code>，要给别人调用 <code>-server</code>。</li>
+      </ol>
+    </div>
+
+    <div class="next-steps">
+      <h2>下一步阅读</h2>
+      <ul>
+        <li><a href="05-config-overview.html">05 配置体系总览</a>——三种外壳跑的是同一份配置；这一页讲清五份文件各管什么、全局级与项目级怎么合并、哪些改动能热生效。</li>
+        <li><a href="10-permissions.html">10 权限与审批</a>——本页只说了「哪种外壳有没有审批界面」；这一页讲清谁能拦谁、三态取最严、超时与 <code>!命令</code> 的边界。</li>
+        <li><a href="14-spring-boot.html">14 整合到 Spring Boot</a>——如果 <code>-server</code> 的「单主体模型」不够用，多用户护栏在 Starter 里。</li>
+      </ul>
+    </div>
+
+    <nav class="pager" aria-label="翻页">
+      <a class="prev" href="03-quickstart.html"><span class="pager-dir">上一页</span>03 五分钟快速上手</a>
+      <a class="next" href="05-config-overview.html"><span class="pager-dir">下一页</span>05 配置体系总览</a>
+    </nav>
+
+  </main>
+</div>
+
+<footer class="footer">
+  <div class="doc-meta">
+    Jellyfish 使用指南 · 本页依据：<code>Jellyfish/README.md</code>、<code>Jellyfish/docs/constraints.md</code>、
+    <code>Jellyfish-Spring-Boot-Starter/README.md</code> 等。
+    示例中的密钥、token 一律以占位符表示；<code>【待确认】</code>表示该结论在仓库中未找到出处，请以实际代码为准。
+  </div>
+</footer>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

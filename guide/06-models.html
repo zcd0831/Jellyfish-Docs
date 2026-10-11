@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>06 models.json 详解 · Jellyfish 使用指南</title>
+<meta name="description" content="models.json 全字段详解：providers 与 models 的六列表格、type 的合法取值与别名、maxTokensField 与 OpenAI 推理模型的 400 陷阱、sampling 到 OpenAI / Claude / Gemini 协议的逐项映射、vendorBody 与 vendorHeaders 的直通规则与保留键、四家厂商的思考强度写法、prompt cache 的两项旋钮与两个坑，以及一份四厂商可复制配置。">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="nav-toggle" id="navToggle" aria-label="切换导航" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">🐙 Jellyfish 使用指南</a>
+  <div class="topbar-tools">
+    <input id="navSearch" type="search" placeholder="搜索页面…" aria-label="搜索页面">
+  </div>
+</header>
+
+<div class="layout">
+
+  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <div class="sidebar-title">文档目录</div>
+    <ul class="nav-list">
+      <li><a href="index.html">首页 · 总览与导航</a></li>
+    </ul>
+    <div class="nav-group">一、入门</div>
+    <ul class="nav-list">
+      <li><a href="01-overview.html">01 Jellyfish 是什么</a></li>
+      <li><a href="02-install.html">02 安装与环境准备</a></li>
+      <li><a href="03-quickstart.html">03 五分钟快速上手</a></li>
+      <li><a href="04-modes.html">04 三种运行模式</a></li>
+    </ul>
+    <div class="nav-group">二、配置</div>
+    <ul class="nav-list">
+      <li><a href="05-config-overview.html">05 配置体系总览</a></li>
+      <li><a href="06-models.html" aria-current="page">06 models.json 详解</a></li>
+      <li><a href="07-agents.html">07 agents.json 与工具权限</a></li>
+    </ul>
+    <div class="nav-group">三、日常使用</div>
+    <ul class="nav-list">
+      <li><a href="08-tools.html">08 内置工具速查</a></li>
+      <li><a href="09-session.html">09 会话与上下文</a></li>
+      <li><a href="10-permissions.html">10 权限与审批</a></li>
+    </ul>
+    <div class="nav-group">四、插件</div>
+    <ul class="nav-list">
+      <li><a href="11-plugin-usage.html">11 安装与使用官方插件</a></li>
+      <li><a href="12-plugin-dev.html">12 从零开发一个插件</a></li>
+      <li><a href="13-plugin-advanced.html">13 插件进阶与发布</a></li>
+    </ul>
+    <div class="nav-group">五、集成与排错</div>
+    <ul class="nav-list">
+      <li><a href="14-spring-boot.html">14 整合到 Spring Boot</a></li>
+      <li><a href="15-troubleshooting.html">15 故障排查</a></li>
+      <li><a href="16-faq.html">16 FAQ 与术语表</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <nav class="breadcrumb" aria-label="面包屑">
+      <span>Jellyfish 使用指南</span><span class="sep">/</span><span>06 models.json 详解</span>
+    </nav>
+
+    <h1>06 models.json 详解</h1>
+    <p class="page-sub">
+      要配的只有三件事：<strong>每个 provider 怎么访问</strong>（<code>type</code> / <code>apiKey</code> /
+      <code>baseUrl</code>）、<strong>它有哪些模型</strong>、<strong>按需调参</strong>。
+      这一页按「先抄一份、再逐字段、最后看坑」的顺序展开：所有键名与取值都逐字来自仓库文档，
+      <code>sampling</code> 与 <code>vendorBody</code> 的边界、四家厂商的思考强度写法、
+      prompt cache 要花的那笔钱，都会讲清楚。
+    </p>
+
+    <section class="goals">
+      <h2>学习目标</h2>
+      <ul>
+        <li>照着抄一份能跑的 <code>models.json</code>，并说清每一段在管什么；</li>
+        <li>记住 <code>providers.&lt;name&gt;</code> 的八个字段与 <code>models[]</code> 的七个字段，知道哪些只有 provider 级、哪些只有模型级；</li>
+        <li>选对 <code>type</code>（含 <code>google</code> / <code>anthropic</code> 两个别名），并知道写错时会得到什么报错；</li>
+        <li>避开 <code>maxTokensField</code> 的 400 陷阱，知道 OpenAI 的推理模型与 gpt-5 之后只认 <code>max_completion_tokens</code>；</li>
+        <li>把 <code>sampling</code> 的七项参数对应到 OpenAI 系 / Claude / Gemini 的协议字段，并接受「不认这项就不下发」；</li>
+        <li>用 <code>vendorBody</code> 配思考强度、<code>vendorHeaders</code> 配自定义请求头，并知道哪些键会被丢弃；</li>
+        <li>按需要开 prompt cache（<code>promptCacheKey</code> / <code>keepAliveSeconds</code>），并知道保活是要花钱的。</li>
+      </ul>
+    </section>
+
+    <h2>先看一份完整的 <code>models.json</code></h2>
+
+    <p>
+      下面这份就是 README 里的示例，逐段加了注释说明它在管什么。
+      <strong>注释里的 <code>//</code> 在 JSON 里是非法的</strong>，抄的时候请删掉——本页「多厂商完整配置示例」
+      一节另给了一份可直接复制的干净版本。想先跑起来、不想读长文档的，直接看下面那个 callout 里的最小版本。
+    </p>
+
+    <pre><code class="language-json">{
+  // 全局默认：/model 不带参数时用它；agent 也可以用 model 字段覆盖
+  "defaultProvider": "openai",
+  "defaultModel": "gpt-4o",
+
+  "providers": {
+    // 这里的 key（openai）是自取的名字，也就是 /model 里 provider/model 的前半段
+    "openai": {
+      "type": "openai",                        // 用哪套传输实现：openai / claude / deepseek / gemini / minimax（含别名）
+      "apiKey": "${OPENAI_API_KEY}",           // 密钥一律走环境变量，不要写进这个文件
+
+      // provider 级：缓存治理两项，缺省都是关的
+      "cache": {
+        "promptCacheKey": false,               // true = 把会话标识作为缓存路由键下发给厂商
+        "keepAliveSeconds": 0                  // >0 = 空闲时每隔这么久续一次缓存 TTL（要花钱）
+      },
+
+      // provider 级：采样参数基线，给这家所有模型用
+      "sampling": { "temperature": 0.2, "topP": 0.95, "stop": ["&lt;/done&gt;"] },
+
+      // provider 级：内核不解释、原样透传进请求体的厂商私有字段
+      "vendorBody": { "service_tier": "flex" },
+
+      // provider 级：原样加进出站请求的自定义请求头（模型级没有这个字段）
+      "vendorHeaders": { "x-tenant": "team-a" },
+
+      "models": [{
+        "id": "gpt-5",                         // 模型标识：/model 里后半段，也是发给厂商的模型名
+        "name": "gpt-5",                       // 展示名，缺省与 id 相同
+        "contextLength": 400000,               // 上下文窗口（token），内核用它算压缩预算
+        "maxOutputTokens": 8192,               // 单次最大输出 token，内核按次下发
+        "maxTokensField": "max_completion_tokens",  // 输出上限写进哪个请求体字段名；只有模型级有它
+        "sampling": { "temperature": 1 },       // 模型级覆盖：只改这一项，其余沿用 provider 级
+        "vendorBody": { "reasoning_effort": "low" }  // 模型级直通，与 provider 级深合并
+      }]
+    }
+  }
+}</code></pre>
+
+    <div class="callout tip">
+      <span class="callout-title">最短可用版本只要这几行</span>
+      <p>如果你只是想在本地跑通一家 OpenAI 兼容端点，下面这些就够了——其余字段全都有缺省。</p>
+      <pre><code class="language-json">{
+  "defaultProvider": "openai",
+  "defaultModel": "gpt-4o",
+  "providers": {
+    "openai": {
+      "type": "openai",
+      "apiKey": "${OPENAI_API_KEY}",
+      "models": [{
+        "id": "gpt-4o", "name": "gpt-4o", "contextLength": 128000, "maxOutputTokens": 4096
+      }]
+    }
+  }
+}</code></pre>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:515-549（models.json：完整示例、表里没列出的字段就是不支持的、双源与 /reload）、Jellyfish/README.md:72-99（快速开始里的最小 models.json）</div>
+
+    <h2><code>providers.&lt;name&gt;</code> 的八个字段</h2>
+
+    <p>
+      <code>&lt;name&gt;</code> 是自取的名字，也是 <code>/model</code> 里 <code>provider/model</code> 的前半段。
+      同一个 name 在项目级出现时会<strong>整对象</strong>覆盖全局级（见 <a href="05-config-overview.html">05</a>）。
+    </p>
+
+    <div class="table-scroll field-table">
+      <table>
+        <thead>
+          <tr>
+            <th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>type</td>
+            <td>string</td>
+            <td><span class="tag required">必填</span></td>
+            <td>无（留空会报 <code>provider type must not be blank</code>）</td>
+            <td>用哪套传输实现，取值见下一节；写错会报错并列出内核认识的类型</td>
+            <td><code>"openai"</code></td>
+          </tr>
+          <tr>
+            <td>apiKey</td>
+            <td>string</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>未配置（空）</td>
+            <td>访问密钥。<strong>建议写 <code>${ENV_VAR}</code> 由环境变量注入</strong>，不要把密钥写进配置文件</td>
+            <td><code>"${OPENAI_API_KEY}"</code></td>
+          </tr>
+          <tr>
+            <td>baseUrl</td>
+            <td>string</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>该 <code>type</code> 的官方地址（<code>https://api.openai.com</code> / <code>https://api.deepseek.com</code> / <code>https://api.anthropic.com</code> / <code>https://generativelanguage.googleapis.com</code> / <code>https://api.minimax.io</code>）</td>
+            <td>服务地址。<strong>必须填最终地址</strong>：客户端不跟随重定向</td>
+            <td><code>"https://gateway.example.com/v1/chat/completions"</code></td>
+          </tr>
+          <tr>
+            <td>models</td>
+            <td>array</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>空列表</td>
+            <td>该 provider 下的模型清单，字段见下一节；被插件接管时会整体替换</td>
+            <td><code>[{ "id": "gpt-4o", … }]</code></td>
+          </tr>
+          <tr>
+            <td>cache</td>
+            <td>object</td>
+            <td><span class="tag optional">选填</span></td>
+            <td><code>promptCacheKey=false</code>、<code>keepAliveSeconds=0</code></td>
+            <td>缓存治理两项，只影响命中率（详见本节后的 cache 专节）</td>
+            <td><code>{ "promptCacheKey": true, "keepAliveSeconds": 240 }</code></td>
+          </tr>
+          <tr>
+            <td>sampling</td>
+            <td>object</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>七项都不表态（<strong>不下发</strong>）</td>
+            <td>采样参数基线；模型级逐字段覆盖它</td>
+            <td><code>{ "temperature": 0.2, "topP": 0.95 }</code></td>
+          </tr>
+          <tr>
+            <td>vendorBody</td>
+            <td>object</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>空映射</td>
+            <td>原样透传进请求体的厂商私有字段；内核只搬运、不解释、不校验</td>
+            <td><code>{ "service_tier": "flex" }</code></td>
+          </tr>
+          <tr>
+            <td>vendorHeaders</td>
+            <td>object</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>空映射</td>
+            <td>原样加进出站请求的自定义请求头；<strong>只有 provider 级</strong>，同名时覆盖内核的头</td>
+            <td><code>{ "x-tenant": "team-a" }</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      三个字段的边界值得单独记一遍：<code>type</code> 决定「用哪套传输」；<code>sampling</code> 是<strong>内核定义的封闭字段集</strong>，
+      带校验、带「未表态」语义；<code>vendorBody</code> / <code>vendorHeaders</code> 是<strong>厂商定义的自由字段</strong>，
+      内核不解释。名字上先分开，是为了「配了不生效」时你至少知道该怀疑哪一边。
+    </p>
+
+    <div class="callout pitfall">
+      <span class="callout-title"><code>baseUrl</code> 要填最终地址：出站请求不跟随重定向</span>
+      <p>
+        Claude 的密钥走 <code>x-api-key</code>、Gemini 走 <code>x-goog-api-key</code>，而 OkHttp 在跨主机重定向时
+        只剥 <code>Authorization</code>——跟随重定向就等于允许上游把一个我们的密钥头送到任意主机去。
+        因此上游真回 <code>301/302</code> 时请求会失败，错误信息里写明「重定向被禁止」以及目标主机与路径
+        （只给主机与路径，不复制 <code>Location</code> 的 query，那里可能挂着一次性凭据）。
+      </p>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:550-577（<code>providers.&lt;name&gt;</code> 字段表与三条硬规则、重定向与 baseUrl）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/Provider.java（字段与清洗时机）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm/OpenAiLlmClient.java、DeepSeekLlmClient.java、ClaudeLlmClient.java、GeminiLlmClient.java、MiniMaxLlmClient.java（各家 <code>DEFAULT_BASE_URL</code>）、Jellyfish-Spring-Template/src/main/resources/jellyfish/models.json（仓库内现成的 DeepSeek 示例配置）</div>
+
+    <h2><code>type</code> 的合法取值</h2>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>取值</th><th>别名</th><th>接到哪个客户端</th><th>该 type 的缺省 <code>baseUrl</code></th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>openai</code></td>
+            <td>—</td>
+            <td><code>OpenAiLlmClient</code></td>
+            <td><code>https://api.openai.com</code></td>
+            <td>OpenAI 及一切 OpenAI 兼容端点（走 <code>/v1/chat/completions</code> 那一套）</td>
+          </tr>
+          <tr>
+            <td><code>claude</code></td>
+            <td><code>anthropic</code></td>
+            <td><code>ClaudeLlmClient</code></td>
+            <td><code>https://api.anthropic.com</code></td>
+            <td>Anthropic Messages 格式；密钥走 <code>x-api-key</code></td>
+          </tr>
+          <tr>
+            <td><code>deepseek</code></td>
+            <td>—</td>
+            <td><code>DeepSeekLlmClient</code></td>
+            <td><code>https://api.deepseek.com</code></td>
+            <td>DeepSeek 官方端点（OpenAI 兼容格式）</td>
+          </tr>
+          <tr>
+            <td><code>gemini</code></td>
+            <td><code>google</code></td>
+            <td><code>GeminiLlmClient</code></td>
+            <td><code>https://generativelanguage.googleapis.com</code></td>
+            <td>Google Gemini；密钥走 <code>x-goog-api-key</code></td>
+          </tr>
+          <tr>
+            <td><code>minimax</code></td>
+            <td>—</td>
+            <td><code>MiniMaxLlmClient</code></td>
+            <td><code>https://api.minimax.io</code></td>
+            <td>MiniMax 官方端点（OpenAI 兼容格式）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      别名是<strong>独立注册的类型</strong>：<code>google</code> 与 <code>gemini</code> 接到同一个客户端，
+      <code>anthropic</code> 与 <code>claude</code> 同理。匹配时<strong>忽略大小写与首尾空白</strong>，
+      因此 <code>"type": "OpenAI "</code> 也能命中。
+    </p>
+
+    <div class="callout pitfall">
+      <span class="callout-title">type 写错：报错会列出内核认识的类型</span>
+      <p>报错长这样（把已注册的类型一并列出来，让你能直接把配置改成能跑的那个）：</p>
+      <pre><code class="language-text">unsupported provider type: &lt;你写的值&gt; (provider=&lt;provider 名&gt;); builtin types: [openai, deepseek, minimax, gemini, google, claude, anthropic]. 装一个提供该类型的插件，或把它改成上面已支持的类型</code></pre>
+      <p>报错发生在<strong>创建客户端时</strong>，而不是加载配置时——也就是「真正用到这个 provider」的那一刻。</p>
+    </div>
+
+    <h3><code>type</code> 也可以由插件提供，但内核自带的挤不掉</h3>
+
+    <p>
+      自建网关、私有协议、本地 llama.cpp 这类场景，可以让插件注册一个新 type，配置里写一个指向它的
+      <code>provider</code> 即可（见 <a href="13-plugin-advanced.html">13 插件进阶与发布</a>）。两条硬规则：
+    </p>
+
+    <ul>
+      <li>
+        <strong>内核自带的 type 不能被插件顶替。</strong>这不是优先级问题：传输请求里带的是已解析好的
+        <code>apiKey</code>，能顶替 <code>openai</code> 的插件等于把所有用户的密钥转发到自己的服务器上。
+        重复注册只记 WARN 并忽略，插件卸载也不会把内核类型一起带走。
+      </li>
+      <li>
+        <strong><code>models</code> 可以由插件动态发现。</strong>被插件接管的 provider 会被问一次
+        「现在有哪些模型」，非空时<strong>整体替换</strong>这里写的 <code>models</code>；
+        发现结果<strong>不落盘</strong>——<code>models.json</code> 始终是模型的唯一持久事实，删掉插件后配置里那份依旧有效。
+      </li>
+    </ul>
+
+    <p>
+      目录发现<strong>只换规格</strong>：插件报回的目录按 <code>id</code> 覆盖 <code>contextLength</code> /
+      <code>maxOutputTokens</code>，而用户写的 <code>sampling</code> / <code>vendorBody</code> /
+      <code>maxTokensField</code> 按 <code>id</code> 带过来——否则一次元数据刷新会悄悄清掉配置里还写着的参数。
+    </p>
+
+    <div class="src-block">Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/support/ProviderTypes.java（五个常量与两个别名）、Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/LlmModule.java（七个 <code>@StringKey</code> 注册位）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm/LlmClientFactory.java（内建类型优先、插件类型后问、<code>unknownType</code> 报错文案）、Jellyfish/README.md:550-577（插件提供 type 的两条硬规则、目录发现整体替换且不落盘）、Jellyfish/docs/constraints.md:1085-1097（目录发现只换规格）</div>
+
+    <h2><code>models[]</code> 的七个字段</h2>
+
+    <div class="table-scroll field-table">
+      <table>
+        <thead>
+          <tr>
+            <th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>id</td>
+            <td>string</td>
+            <td><span class="tag required">必填</span></td>
+            <td>无</td>
+            <td>模型标识：<code>/model</code> 里 <code>provider/model</code> 的后半段，也是发给厂商的模型名</td>
+            <td><code>"gpt-4o"</code></td>
+          </tr>
+          <tr>
+            <td>name</td>
+            <td>string</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>与 <code>id</code> 相同</td>
+            <td>展示名</td>
+            <td><code>"GPT-4o"</code></td>
+          </tr>
+          <tr>
+            <td>contextLength</td>
+            <td>int</td>
+            <td><span class="tag optional">选填</span></td>
+            <td><code>0</code>（＝未配置，此时内核<strong>不做上下文裁剪</strong>）</td>
+            <td>上下文窗口（token），内核用它算压缩预算</td>
+            <td><code>128000</code></td>
+          </tr>
+          <tr>
+            <td>maxOutputTokens</td>
+            <td>int</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>未配置（OpenAI 系兼容端点不下发该字段；Claude 未配时内核发的是 <code>4096</code>）</td>
+            <td>单次最大输出 token，内核按次下发</td>
+            <td><code>8192</code></td>
+          </tr>
+          <tr>
+            <td>maxTokensField</td>
+            <td>string</td>
+            <td><span class="tag optional">选填</span></td>
+            <td><code>max_tokens</code></td>
+            <td>承载输出上限的<strong>请求体字段名</strong>：<code>max_tokens</code> 或 <code>max_completion_tokens</code>；写别的值会在加载时告警并回退</td>
+            <td><code>"max_completion_tokens"</code></td>
+          </tr>
+          <tr>
+            <td>sampling</td>
+            <td>object</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>七项都不表态（沿用 provider 级）</td>
+            <td>在这个模型上覆盖 provider 的采样基线（<strong>逐字段</strong>覆盖，没写的沿用 provider 级）</td>
+            <td><code>{ "temperature": 1 }</code></td>
+          </tr>
+          <tr>
+            <td>vendorBody</td>
+            <td>object</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>空映射</td>
+            <td>在这个模型上覆盖 provider 的直通字段（<strong>深合并</strong>，model 级优先）</td>
+            <td><code>{ "reasoning_effort": "low" }</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><code>maxTokensField</code>：只有模型级，写错就是一次 400</h3>
+
+    <div class="feature">
+      <h3>输出上限的字段名由配置决定</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          <code>maxOutputTokens</code> 由内核下发，但<strong>承载它的请求体字段名各家不同、同一家不同代际也不同</strong>。
+          <code>maxTokensField</code> 就是回答「写进哪个字段」的那一项。内核<strong>不按模型名猜</strong>——
+          「哪个模型认哪个字段」是厂商知识，交给配置显式声明。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          按模型填：推理模型（OpenAI o 系）与 gpt-5 及之后填 <code>"max_completion_tokens"</code>；
+          DeepSeek / MiniMax / OpenRouter 这类兼容端点用缺省的 <code>"max_tokens"</code>（可以不写这一项）。
+          <pre><code class="language-json">{
+  "models": [{
+    "id": "gpt-5", "name": "gpt-5", "contextLength": 400000, "maxOutputTokens": 8192,
+    "maxTokensField": "max_completion_tokens"
+  }]
+}</code></pre>
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr>
+              <th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>maxTokensField</td>
+              <td>string</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>max_tokens</code></td>
+              <td>只认两个取值：<code>max_tokens</code>（缺省）、<code>max_completion_tokens</code>；其他值在加载时告警并回退缺省</td>
+              <td><code>"max_completion_tokens"</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        <span class="tag hot">/reload 生效</span>
+        它是<strong>模型级字段</strong>：同一个端点下 <code>gpt-4o</code> 与 <code>gpt-5</code> 认的字段名不一样，
+        端点级给不出一个成立的缺省。另外它只对 OpenAI 兼容客户端有意义——Claude 的 Messages API 固定叫
+        <code>max_tokens</code>（且必填），Gemini 的生成参数固定住在 <code>generationConfig.maxOutputTokens</code>，
+        两者都不看这个字段。
+      </p>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>报 <code>Unsupported parameter</code> 400？</strong>给推理模型 / gpt-5 之后填了 <code>max_tokens</code>。改填 <code>max_completion_tokens</code>。</li>
+        <li><strong>反过来会怎样？</strong>给只认 <code>max_tokens</code> 的兼容端点填 <code>max_completion_tokens</code>，同样是 400（或该字段被忽略）。</li>
+        <li><strong>写了个不认识的值？</strong>加载时告警并回退到 <code>max_tokens</code>，不阻断启动。</li>
+        <li><strong>为什么不留成 provider 级？</strong>同一端点下不同模型答案不同，provider 级没有成立的缺省值。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:578-593（<code>models[]</code> 字段表、<code>maxTokensField</code> 只有模型级、400 陷阱）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/Model.java（两个合法取值与构造期校验、只对 OpenAI 兼容客户端有意义）、Jellyfish/docs/constraints.md:613-614（模型未配 <code>contextLength</code> 时不裁剪）、Jellyfish/docs/constraints.md:1090-1096（<code>maxTokensField</code> 由配置决定且构造期校验）</div>
+
+    <h2><code>sampling</code>：内核定义的七项参数</h2>
+
+    <p>
+      收录标准只有一条：<strong>多家厂商有「同名同义」的对应物</strong>。内核只声明意图，
+      <strong>由各客户端翻成自家协议字段</strong>，不认这一项的客户端不下发它（且<strong>不报错</strong>）。
+    </p>
+
+    <div class="table-scroll field-table">
+      <table>
+        <thead>
+          <tr>
+            <th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义（校验）</th><th>示例</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>temperature</td>
+            <td>number</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>未表态（不下发）</td>
+            <td>采样温度；<strong>非负且有限</strong>才下发。上限各家不同（OpenAI 系 0–2、Anthropic 0–1），内核只校验它确定的那部分</td>
+            <td><code>0.2</code></td>
+          </tr>
+          <tr>
+            <td>topP</td>
+            <td>number</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>未表态（不下发）</td>
+            <td>核采样概率；要求落在 <code>(0, 1]</code></td>
+            <td><code>0.95</code></td>
+          </tr>
+          <tr>
+            <td>topK</td>
+            <td>int</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>未表态（不下发）</td>
+            <td>Top-K 采样；要求<strong>正整数</strong>（<code>0</code> 与负数被丢弃）</td>
+            <td><code>40</code></td>
+          </tr>
+          <tr>
+            <td>seed</td>
+            <td>int</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>未表态（不下发）</td>
+            <td>随机种子，任意整数；<strong>厂商只说「尽力而为」，不保证可复现</strong></td>
+            <td><code>42</code></td>
+          </tr>
+          <tr>
+            <td>frequencyPenalty</td>
+            <td>number</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>未表态（不下发）</td>
+            <td>频率惩罚；要求落在 <code>[-2, 2]</code></td>
+            <td><code>0.3</code></td>
+          </tr>
+          <tr>
+            <td>presencePenalty</td>
+            <td>number</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>未表态（不下发）</td>
+            <td>存在惩罚；要求落在 <code>[-2, 2]</code></td>
+            <td><code>0.3</code></td>
+          </tr>
+          <tr>
+            <td>stop</td>
+            <td>string[]</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>空列表（不下发）</td>
+            <td>停止序列；<strong>丢弃空白项</strong>，有效条目原样保留（空格 / 换行可能就是它的一部分）</td>
+            <td><code>["&lt;/done&gt;"]</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p><strong>内核声明的意图，各客户端翻成什么</strong>（「—」＝该家没有这个字段，配了也不会下发，不报错）：</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>字段</th><th>校验</th><th>OpenAI 系</th><th>Claude</th><th>Gemini</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>temperature</td><td>非负且有限</td><td><code>temperature</code></td><td><code>temperature</code></td><td><code>generationConfig.temperature</code></td></tr>
+          <tr><td>topP</td><td><code>(0, 1]</code></td><td><code>top_p</code></td><td><code>top_p</code></td><td><code>generationConfig.topP</code></td></tr>
+          <tr><td>topK</td><td>正整数</td><td>—</td><td><code>top_k</code></td><td><code>generationConfig.topK</code></td></tr>
+          <tr><td>seed</td><td>任意整数</td><td><code>seed</code></td><td>—</td><td><code>generationConfig.seed</code></td></tr>
+          <tr><td>frequencyPenalty</td><td><code>[-2, 2]</code></td><td><code>frequency_penalty</code></td><td>—</td><td><code>generationConfig.frequencyPenalty</code></td></tr>
+          <tr><td>presencePenalty</td><td><code>[-2, 2]</code></td><td><code>presence_penalty</code></td><td>—</td><td><code>generationConfig.presencePenalty</code></td></tr>
+          <tr><td>stop</td><td>丢弃空白项</td><td><code>stop</code></td><td><code>stop_sequences</code></td><td><code>generationConfig.stopSequences</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout warn">
+      <span class="callout-title">两条口径必须记住</span>
+      <ul>
+        <li><strong>没写的字段不下发</strong>：厂商自己的缺省才是缺省——内核不替厂商猜缺省值（猜错就是一次 400）。</li>
+        <li><strong>非法值丢弃并告警，不阻断启动</strong>：例如 <code>"temperature": -1</code> 会被丢掉并记一条告警（<code>SamplingSettings.warnings()</code>，同时进 <code>ConfigWarningEvent</code>）。</li>
+      </ul>
+    </div>
+
+    <div class="callout design">
+      <span class="callout-title">为什么推理控制不在 <code>sampling</code> 里</span>
+      <p>
+        DeepSeek 是 <code>thinking.type</code> 加 <code>reasoning_effort</code>、OpenAI 只有
+        <code>reasoning_effort</code>、Anthropic 换成了 <code>thinking.type: adaptive</code> 加
+        <code>output_config.effort</code>、Gemini 是 <code>thinkingConfig.thinkingLevel</code>——
+        四家四种形状、四种取值，内核认了就等于替厂商背书一个不成立的抽象。这些走下一节的 <code>vendorBody</code>。
+      </p>
+      <p>
+        另外两类也被排除：<code>n</code> / <code>candidateCount</code>（与内核「一个候选对应一条 assistant 消息」
+        的逻辑冲突，且被列为保留键）；<code>response_format</code> / <code>service_tier</code> /
+        <code>logit_bias</code> / <code>logprobs</code>（单家能力）。
+      </p>
+    </div>
+
+    <p><strong>合并规则</strong>：<code>sampling</code> 在 provider 级给基线、模型级<strong>逐字段覆盖</strong>；
+    <code>null</code>（没写）的含义是「沿用」而不是「清空」——代价是<strong>模型级无法单独关掉 provider 级已配的某项</strong>，
+    要关掉就把那一项从 provider 级拿下来。</p>
+
+    <div class="src-block">Jellyfish/README.md:594-614（<code>sampling</code> 字段表与各厂商映射、两条口径、为什么其余参数不在这里）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/SamplingSettings.java（七项校验与 <code>warnings()</code>、<code>merge</code> 的「沿用」语义）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm/AbstractOpenAiCompatibleLlmClient.java（不下发 <code>top_k</code>、「哪家认哪项由客户端判断」）、Jellyfish/docs/constraints.md:1074-1091（一个参数只能有一个入口、厂商知识不在内核里）</div>
+
+    <h2><code>vendorBody</code> 与 <code>vendorHeaders</code>：直通字段</h2>
+
+    <div class="feature">
+      <h3>厂商私有字段直通</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          这两段里的键<strong>由厂商定义</strong>，内核只搬运、不解释、不校验：
+          <code>reasoning_effort</code>、<code>thinking</code>、<code>service_tier</code>、
+          <code>generationConfig.*</code> 这些各家专有的东西都从这儿走。
+          代价是明说过的——<strong>键名逐字抄厂商文档、大小写敏感，拼错就是静默无效</strong>（厂商多半忽略不认识的字段）。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          <code>vendorBody</code> 往请求体里加字段（provider 级与模型级都可写）；
+          <code>vendorHeaders</code> 往出站请求加头（<strong>只有 provider 级</strong>）。排查办法：
+          <code>vendorBody</code> 生效时会在 <strong>DEBUG 日志</strong>里打一行实际下发的键名（不打值）。
+          <pre><code class="language-bash">java -jar /path/to/jellyfish-cli-0.1.1.jar -cli --verbose -p "你好"</code></pre>
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr>
+              <th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>provider.vendorBody</td>
+              <td>object</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>空映射</td>
+              <td>provider 级直通请求体字段；解析配置时就已清洗（保留键 / 超深子树 / 非法值丢弃并 WARN）</td>
+              <td><code>{ "service_tier": "flex" }</code></td>
+            </tr>
+            <tr>
+              <td>model.vendorBody</td>
+              <td>object</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>空映射</td>
+              <td>模型级直通字段，与 provider 级<strong>深合并</strong>（对象递归、数组与标量整体替换，model 级优先）</td>
+              <td><code>{ "reasoning_effort": "low" }</code></td>
+            </tr>
+            <tr>
+              <td>provider.vendorHeaders</td>
+              <td>object</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>空映射</td>
+              <td>出站请求头；同名时<strong>覆盖</strong>内核的头（写 <code>anthropic-version</code> 就能试新版本）</td>
+              <td><code>{ "x-tenant": "team-a" }</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        <span class="tag hot">/reload 生效</span>
+        两段都随 <code>models.json</code> 一起热更新。
+      </p>
+
+      <p><strong>完整示例</strong>：provider 级放公共字段，模型级只写这一个模型要多加的东西</p>
+      <pre><code class="language-json">{
+  "providers": {
+    "gemini": {
+      "type": "gemini",
+      "apiKey": "${GEMINI_API_KEY}",
+      "baseUrl": "${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com}",
+      "vendorHeaders": { "x-tenant": "team-a" },
+      "models": [{
+        "id": "gemini-1.5-pro",
+        "name": "gemini-1.5-pro",
+        "maxOutputTokens": 8192,
+        "vendorBody": { "generationConfig": { "thinkingConfig": { "thinkingLevel": "low" } } }
+      }]
+    }
+  }
+}</code></pre>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>配了没反应？</strong>键名拼错（静默无效），或这个模型不认这个键。先把日志级别调低，看它实际下发了哪些键名。</li>
+        <li><strong>为什么不能拿它改 <code>temperature</code>？</strong>采样类键已有正式入口（<code>sampling</code>），写在 <code>vendorBody</code> 里会被丢弃并告警——同一参数两个入口，迟早起冲突。</li>
+        <li><strong>模型级能写请求头吗？</strong>不能。请求头是端点属性，同一 provider 下所有模型共享同一套地址与网关规则，因此 <code>vendorHeaders</code> 只有 provider 级。</li>
+      </ul>
+    </div>
+
+    <h3>会被丢弃的键（保留键表）</h3>
+
+    <p>
+      它们要么决定请求形状，要么已经有正式入口。<strong>保留键在任意嵌套深度都挡</strong>——
+      Gemini 的生成参数在 <code>generationConfig</code> 里，只看顶层等于给同一个参数留了后门。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>类别</th><th>键</th><th>为什么挡住</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>请求形状与缓存前缀</td>
+            <td><code>model</code> <code>messages</code> <code>contents</code> <code>system</code> <code>systemInstruction</code> <code>tools</code> <code>toolConfig</code> <code>tool_choice</code> <code>stream</code> <code>stream_options</code> <code>prompt_cache_key</code> <code>prompt_cache_retention</code></td>
+            <td>覆盖 <code>messages</code> 等于换一份对话发出去</td>
+          </tr>
+          <tr>
+            <td>候选数</td>
+            <td><code>n</code> <code>candidateCount</code></td>
+            <td>内核只解析第一个候选，配了只会让计费翻倍</td>
+          </tr>
+          <tr>
+            <td>采样类</td>
+            <td><code>temperature</code> <code>top_p</code> <code>topP</code> <code>top_k</code> <code>topK</code> <code>seed</code> <code>frequency_penalty</code> <code>frequencyPenalty</code> <code>presence_penalty</code> <code>presencePenalty</code> <code>stop</code> <code>stop_sequences</code> <code>stopSequences</code> <code>max_tokens</code> <code>max_completion_tokens</code> <code>maxOutputTokens</code></td>
+            <td>已有正式入口（<code>sampling</code> / <code>maxOutputTokens</code> / <code>maxTokensField</code>），两个入口迟早起冲突</td>
+          </tr>
+          <tr>
+            <td>Anthropic 缓存断点</td>
+            <td><code>cache_control</code></td>
+            <td>内核按断点数与 TTL 在 <code>system</code> / <code>messages</code> / <code>tools</code> 块上标注，用户再标一份会与块级 TTL 冲突（Anthropic 对不一致的 TTL 直接 400）</td>
+          </tr>
+          <tr>
+            <td>过深嵌套</td>
+            <td>—（超过 8 层）</td>
+            <td>整棵子树丢弃。真需要嵌套的字段只有两三层，写超了多半是配错了层级</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><code>vendorHeaders</code> 另有六个头会被丢弃</h3>
+
+    <p>
+      <code>Content-Type</code>、<code>Accept</code>、<code>Host</code>、<code>Content-Length</code>、
+      <code>Accept-Encoding</code>、<code>Range</code>——这六个由内核 / HTTP 客户端按协议语义生成，
+      用户覆盖它只会弄坏请求（其中 <code>Accept-Encoding</code> 与 <code>Range</code> 尤其隐蔽：
+      一旦自带，传输层就不再走透明解压那条路径，响应体会以压缩字节送进 JSON 解析）。
+      反过来，<strong>鉴权类头部是放行的</strong>：网关要求的自定义鉴权头正是这条路的正经用途，而密钥本来就是用户自己的。
+    </p>
+
+    <p>
+      头名按 HTTP 语义<strong>大小写不敏感</strong>地判重与判保留（<code>Content-Type</code> 与
+      <code>content-type</code> 是同一个头），下发时保留你写的原始形式。头名须为 HTTP token、
+      头值只允许可见 ASCII 与制表符；不合规的条目丢弃且<strong>日志只记头名</strong>——
+      头值可能就是密钥。
+    </p>
+
+    <div class="src-block">Jellyfish/README.md:615-668（<code>vendorBody</code> / <code>vendorHeaders</code>：直通、深合并、保留键表、六个被丢弃的头）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/support/VendorBody.java（保留键集合、<code>MAX_DEPTH=8</code>、配置期清洗 / 请求期只做深合并、DEBUG 只打键名）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/support/VendorHeaders.java（六个保留头、token 与可见 ASCII 校验、只记头名）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/Provider.java（构造期清洗）</div>
+
+    <h2>思考强度怎么配</h2>
+
+    <div class="feature">
+      <h3>思考强度（reasoning effort）</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          控制模型「想多久」的那一组参数。内核<strong>没有</strong> <code>thinkLevel</code> /
+          <code>reasoningEffort</code> 这类字段——四家的形状与取值全不通约，不符合 <code>sampling</code> 的收录标准，
+          因此统一从 <code>vendorBody</code> 走。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          键名与取值<strong>逐字抄厂商文档</strong>（大小写敏感），写进 <code>vendorBody</code>；
+          想确认真的发出去了，就打开 DEBUG 日志看它下发的<strong>键名</strong>。
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong>：四家的键名与取值</p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>厂商</th><th>键</th><th>取值（<strong>可用集合随模型，以官方文档为准</strong>）</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>OpenAI 系</td>
+              <td><code>reasoning_effort</code></td>
+              <td><code>none</code> <code>minimal</code> <code>low</code> <code>medium</code> <code>high</code> <code>xhigh</code> <code>max</code></td>
+            </tr>
+            <tr>
+              <td>DeepSeek</td>
+              <td><code>thinking.type</code> + <code>reasoning_effort</code></td>
+              <td>开关 <code>enabled</code>（缺省）/ <code>disabled</code>；强度 <code>low</code> <code>high</code> <code>max</code></td>
+            </tr>
+            <tr>
+              <td>Claude</td>
+              <td><code>thinking.type</code> + <code>output_config.effort</code></td>
+              <td><code>adaptive</code>（当前推荐）；老代际用 <code>enabled</code> + <code>budget_tokens</code>；强度 <code>low</code>–<code>max</code></td>
+            </tr>
+            <tr>
+              <td>Gemini</td>
+              <td><code>generationConfig.thinkingConfig.thinkingLevel</code></td>
+              <td><code>minimal</code> <code>low</code> <code>medium</code> <code>high</code>；2.5 系改用整数 <code>thinkingBudget</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>完整示例</strong>：各厂商最小写法（键名与取值都随厂商接口演进，抄前对一遍官方文档）</p>
+      <pre><code class="language-json">{
+  "providers": {
+    "openai": {
+      "type": "openai", "apiKey": "${OPENAI_API_KEY}",
+      "vendorBody": { "reasoning_effort": "high" }
+    },
+    "deepseek": {
+      "type": "deepseek", "apiKey": "${DEEPSEEK_API_KEY}",
+      "vendorBody": { "thinking": { "type": "disabled" } }
+    },
+    "claude": {
+      "type": "claude", "apiKey": "${ANTHROPIC_API_KEY}",
+      "vendorBody": { "thinking": { "type": "adaptive" }, "output_config": { "effort": "high" } }
+    },
+    "gemini": {
+      "type": "gemini", "apiKey": "${GEMINI_API_KEY}",
+      "vendorBody": { "generationConfig": { "thinkingConfig": { "thinkingLevel": "low" } } }
+    }
+  }
+}</code></pre>
+
+      <p>
+        DeepSeek 那条注释写全一点：<code>{ "thinking": { "type": "disabled" } }</code> 是关掉思考；
+        开着则再加 <code>"reasoning_effort": "low"</code>。
+      </p>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>同一家的键名还会变？</strong>会，取决于<strong>走哪种协议</strong>——见下一小节。</li>
+        <li><strong>配了没反应？</strong>键名写错（静默无效）、模型不认这个档位（可能 400）、或者被采样参数的坑盖住了（下节「坑」第 2、3 条）。</li>
+        <li><strong>想看见思考文本？</strong>要两边都开——厂商侧（Claude 要 <code>display: "summarized"</code>、Gemini 要 <code>includeThoughts: true</code>）加外壳侧（<code>-cli</code> 的 <code>--show-thinking</code> 打到 stderr，或 TUI 的 <code>Ctrl+T</code> / <code>/thinking</code>）。</li>
+      </ul>
+    </div>
+
+    <h3>同一家的键名取决于走哪种协议：以 DeepSeek 为例</h3>
+
+    <p>
+      DeepSeek 同时提供三种格式，键名各不相同（OpenAI 与 Anthropic 各家只有自己那一种，不存在这个问题）：
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>协议</th><th>在 Jellyfish 里怎么到达</th><th>思考开关</th><th>思考强度</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Chat Completions（OpenAI 格式）</td>
+            <td><code>type: openai</code> / <code>deepseek</code> / <code>minimax</code>，请求发到 <code>/v1/chat/completions</code></td>
+            <td><code>{"thinking": {"type": "enabled/disabled"}}</code></td>
+            <td><code>reasoning_effort</code>：<code>low</code> <code>high</code> <code>max</code>（<code>medium</code> / <code>xhigh</code> 折算为 <code>high</code>）</td>
+          </tr>
+          <tr>
+            <td>Anthropic Messages 格式</td>
+            <td><code>type: claude</code>，baseUrl 指向 <code>https://api.deepseek.com/anthropic</code>，请求发到 <code>/v1/messages</code></td>
+            <td><code>thinking</code>（其中 <code>budget_tokens</code> 被忽略）</td>
+            <td><code>output_config.effort</code>：<code>low</code> <code>high</code> <code>max</code></td>
+          </tr>
+          <tr>
+            <td>Responses API 格式</td>
+            <td><strong>到不了</strong>——内核没有 Responses 客户端</td>
+            <td><code>{"reasoning": {"effort": "none/low/high/max"}}</code>（<code>none</code> 即关掉思考）</td>
+            <td>与开关是同一个字段</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout pitfall">
+      <span class="callout-title">形状错了不报错，也不生效</span>
+      <p>
+        <code>type: deepseek</code> 下写 <code>{"reasoning": {"effort": "high"}}</code> 是 Responses 的形状：
+        它会原样进 Chat Completions 的请求体，然后<strong>被端点忽略</strong>——不报错，也不生效。
+        同理 <code>output_config.effort</code> 只在「Claude 客户端 + Anthropic 端点」这条路上才有意义，
+        后端是 Claude 官方还是别的 Anthropic 兼容端点都一样。
+      </p>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:625-660（<code>vendorBody</code> 与思考强度：四家键名取值表、DeepSeek 三协议对照）、Jellyfish/README.md:669-689（坑 第 5 条：想看见思考文本要两边都开）、Jellyfish/README.md:1121-1128（常见问题：配了思考强度却没反应的四类原因）</div>
+
+    <h2><code>cache</code>：让缓存更可能是热的</h2>
+
+    <div class="feature">
+      <h3>prompt cache 的两项旋钮</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          让厂商侧的前缀缓存更容易命中的两个开关。它们挂在 <strong>provider 上</strong>而不是全局——
+          两条都与具体厂商的缓存实现绑死（TTL 是 5 分钟还是几小时、是否支持显式缓存路由键，各家都不一样）。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          想要「同一会话的请求尽量落到同一台机器上」就打开 <code>promptCacheKey</code>；
+          想「空闲时把缓存 TTL 续上」就设 <code>keepAliveSeconds</code>——但先读完它的代价。
+          <pre><code class="language-json">{
+  "providers": {
+    "openai": {
+      "type": "openai",
+      "apiKey": "${OPENAI_API_KEY}",
+      "cache": { "promptCacheKey": true, "keepAliveSeconds": 240 }
+    }
+  }
+}</code></pre>
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr>
+              <th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>cache.promptCacheKey</td>
+              <td>boolean</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>false</code></td>
+              <td>
+                把<strong>会话标识</strong>作为缓存路由键下发给厂商，让同一会话的请求尽量落到同一台机器上。
+                目前明确支持的是 OpenAI 系（<code>prompt_cache_key</code> 字段）；缺省关闭，因为老模型 / 老端点收到不认识的字段可能直接报错
+              </td>
+              <td><code>true</code></td>
+            </tr>
+            <tr>
+              <td>cache.keepAliveSeconds</td>
+              <td>int</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>0</code>（关闭）</td>
+              <td>
+                空闲时每隔这么久重发一次「复用同一前缀」的最小请求，把缓存 TTL 续上。
+                <strong>它是要花钱的</strong>；每个空闲期最多续 <code>3</code> 次；上限 1 小时（<code>3600</code> 秒），
+                再长就没有续 TTL 的意义了
+              </td>
+              <td><code>240</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        <span class="tag hot">/reload 生效</span>
+        两项都随 <code>models.json</code> 热更新；<strong>非法值（负数、超过上限）回退到缺省值</strong>，
+        不阻断启动。
+      </p>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>为什么最多只续 3 次？</strong>一次保活命中按约 <code>0.1×</code> 计费，而它要防的是一次未命中（约 <code>1×</code>）：续 3 次的总代价约 <code>0.3×</code> 前缀，只要它能换掉一次未命中就是净赚；再往上续则开始有亏的风险，而那时用户多半已经离开。</li>
+        <li><strong>保活失败会怎样？</strong>只记 DEBUG 日志。症状是「配了保活但命中率没改善」——怀疑时先关掉它。</li>
+        <li><strong>Anthropic 需要额外做什么吗？</strong>不需要用户做——你<strong>不标 <code>cache_control</code> 它一个字节都不缓存</strong>，而内核默认替它标两个断点（插件可用 <code>RequestTuningRequest</code> 接管）。这也是 <code>cache_control</code> 被列为保留键的原因。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:550-577（<code>cache</code> 两项与缺省）、Jellyfish/README.md:671-689（坑 第 4 条：<code>keepAliveSeconds</code> 要花钱，以及两个坑）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ProviderCacheSettings.java（缺省值、上限 3600、每个空闲期最多续 3 次的理由）</div>
+
+    <h2>七个坑</h2>
+
+    <ol>
+      <li>
+        <strong>表里没有的字段 = 不支持。</strong>
+        不报错、也不生效（未知键是静默忽略的）。<code>vendorBody</code> 同理——键名拼错就是静默无效，
+        排查靠把日志级别调低，看它实际下发了哪些<strong>键名</strong>（不打值，值可能含凭据）。
+      </li>
+      <li>
+        <strong>采样参数与思考模式互相挑食。</strong>
+        DeepSeek 思考模式下 <code>temperature</code> 与两个惩罚项完全无效（不报错），而 <code>top_p</code> 反过来
+        <strong>只在</strong>思考模式下生效、且被夹到 <code>0.95–1.0</code>；OpenAI 旧 GPT-5 系对非缺省温度直接 400，
+        gpt-5.1 之后只在 <code>reasoning_effort</code> 为 <code>none</code> 时才接受。「温度没反应」先查这一条。
+      </li>
+      <li>
+        <strong>Claude 的两处代际差异。</strong>
+        新代际不再接受 <code>temperature</code> / <code>top_p</code> / <code>top_k</code>（设非缺省值 400），
+        这类参数要按 <strong>model 级</strong> <code>sampling</code> 分开配；老代际用 <code>thinking.budget_tokens</code> 时
+        它必须<strong>小于</strong>当次下发的 <code>max_tokens</code>（未配 <code>maxOutputTokens</code> 时内核发的是
+        <code>4096</code>），而报错只提 <code>max_tokens</code>，不会提 <code>maxOutputTokens</code>。
+      </li>
+      <li>
+        <strong><code>keepAliveSeconds</code> 是要花钱的，还会踩两个坑。</strong>
+        保活请求按「最省输出」只发极小输出（Claude 发 <code>max_tokens: 0</code>），因此与 Claude 的
+        <code>thinking.budget_tokens</code> 互斥（会被 400 拒）；部分新模型对输出上限有最小值要求（如 GPT-5 是 <code>16</code>）。
+        保活失败只记 DEBUG 日志，症状是「配了保活但命中率没改善」——怀疑时先关掉它。
+        另外 Anthropic 不标 <code>cache_control</code> 就一个字节都不缓存，内核默认替它标两个断点。
+      </li>
+      <li>
+        <strong>想看见思考文本要两边都开。</strong>
+        厂商侧（Claude 要 <code>display: "summarized"</code>、Gemini 要 <code>includeThoughts: true</code>）
+        加外壳侧（<code>-cli</code> 的 <code>--show-thinking</code> 打到 stderr，或 TUI 的 <code>Ctrl+T</code> / <code>/thinking</code>）。
+      </li>
+      <li>
+        <strong><code>sampling</code> 里「没写」与「写了 0」是两回事。</strong>
+        没写就不下发（厂商自己的缺省才是缺省），写了 <code>0</code> 就发 <code>0</code>。
+        温度上限各家不同（OpenAI 系 <code>0–2</code>、Anthropic <code>0–1</code>），内核只校验它确定的那部分，越界由厂商拒。
+      </li>
+      <li>
+        <strong>密钥一律走环境变量。</strong>
+        <code>"apiKey": "${DEEPSEEK_API_KEY}"</code>。注意 <code>${VAR}</code> 缺失会让<strong>整份配置加载失败</strong>，
+        想容错就写 <code>${VAR:-默认值}</code>（详见 <a href="05-config-overview.html">05 配置体系总览</a> 的插值一节）。
+      </li>
+    </ol>
+
+    <div class="src-block">Jellyfish/README.md:669-689（坑 · 七条逐条）</div>
+
+    <h2>多厂商完整配置示例</h2>
+
+    <p>
+      下面这份把四家放在一起，<code>defaultProvider</code> 指向 <code>openai</code>。
+      里面每条 <code>baseUrl</code> 都等于该 <code>type</code> 的缺省地址（可以直接删掉这些行），
+      密钥全部走环境变量占位符。
+    </p>
+
+    <pre><code class="language-json">{
+  "defaultProvider": "openai",
+  "defaultModel": "gpt-4o",
+  "providers": {
+    "openai": {
+      "type": "openai",
+      "apiKey": "${OPENAI_API_KEY}",
+      "baseUrl": "https://api.openai.com",
+      "cache": { "promptCacheKey": false, "keepAliveSeconds": 0 },
+      "sampling": { "temperature": 0.2, "topP": 0.95 },
+      "models": [
+        { "id": "gpt-4o", "name": "gpt-4o", "contextLength": 128000, "maxOutputTokens": 4096 },
+        { "id": "gpt-5", "name": "gpt-5", "contextLength": 400000, "maxOutputTokens": 8192,
+          "maxTokensField": "max_completion_tokens",
+          "vendorBody": { "reasoning_effort": "low" } }
+      ]
+    },
+    "deepseek": {
+      "type": "deepseek",
+      "apiKey": "${DEEPSEEK_API_KEY}",
+      "baseUrl": "https://api.deepseek.com",
+      "models": [
+        { "id": "deepseek-chat", "name": "deepseek-chat", "contextLength": 65536, "maxOutputTokens": 8192 },
+        { "id": "deepseek-reasoner", "name": "deepseek-reasoner", "contextLength": 65536, "maxOutputTokens": 8192,
+          "vendorBody": { "thinking": { "type": "enabled" }, "reasoning_effort": "low" } }
+      ]
+    },
+    "claude": {
+      "type": "claude",
+      "apiKey": "${ANTHROPIC_API_KEY}",
+      "baseUrl": "https://api.anthropic.com",
+      "models": [
+        { "id": "claude-3-5-sonnet", "name": "claude-3-5-sonnet", "maxOutputTokens": 8192,
+          "vendorBody": { "thinking": { "type": "adaptive" }, "output_config": { "effort": "high" } } }
+      ]
+    },
+    "gemini": {
+      "type": "gemini",
+      "apiKey": "${GEMINI_API_KEY}",
+      "baseUrl": "https://generativelanguage.googleapis.com",
+      "models": [
+        { "id": "gemini-1.5-pro", "name": "gemini-1.5-pro", "maxOutputTokens": 8192,
+          "vendorBody": { "generationConfig": { "thinkingConfig": { "thinkingLevel": "low" } } } }
+      ]
+    }
+  }
+}</code></pre>
+
+    <div class="callout warn">
+      <span class="callout-title">示例里哪些值有出处、哪些必须自己填</span>
+      <ul>
+        <li><strong>有仓库出处的数值</strong>：<code>gpt-4o</code> 的 <code>128000</code> / <code>4096</code>
+          （README 快速开始）、<code>gpt-5</code> 的 <code>400000</code> / <code>8192</code>（README 的 models.json 示例）、
+          <code>deepseek-chat</code> 与 <code>deepseek-reasoner</code> 的 <code>65536</code> / <code>8192</code>
+          与 <code>https://api.deepseek.com</code>（<code>Jellyfish-Spring-Template/src/main/resources/jellyfish/models.json</code>）。</li>
+        <li><strong>各家缺省 <code>baseUrl</code></strong> 都取自各客户端源码里的 <code>DEFAULT_BASE_URL</code>。</li>
+        <li><strong>必须你自己填的</strong>：<code>claude</code> 与 <code>gemini</code> 两条的
+          <code>contextLength</code> 我<strong>故意没写</strong> <code>【待确认】</code>——仓库里没有这两家的示例数值，
+          写一个数字就是编造。<strong>不写这一项的后果是「内核不做上下文裁剪」</strong>，请按厂商文档把上下文窗口填上。</li>
+        <li><strong>模型 id</strong>同样以厂商文档为准：<code>claude-3-5-sonnet</code> 与 <code>gemini-1.5-pro</code>
+          只是仓库测试里出现的名字，能跑通但随时可能被厂商下线。</li>
+      </ul>
+    </div>
+
+    <h3>怎么切换模型</h3>
+
+    <p>
+      <code>/model</code> 支持查看或切换，参数就是 <code>provider/model</code>（也就是配置里
+      <code>providers</code> 的 key 与 <code>models[].id</code> 拼起来）。<code>/model</code> <strong>不需要模型配置</strong>，
+      离线也能用来看当前值。
+    </p>
+
+    <pre><code class="language-bash"># 看当前用的是哪个
+java -jar /path/to/jellyfish-cli-0.1.1.jar -cli -p "/model"
+
+# 切到 gpt-5（配置文件里已配好 openai 这个 provider）
+java -jar /path/to/jellyfish-cli-0.1.1.jar -cli -p "/model openai/gpt-5"
+
+# 切到 DeepSeek 的推理模型
+java -jar /path/to/jellyfish-cli-0.1.1.jar -cli -p "/model deepseek/deepseek-reasoner"
+
+# 交互界面里同样直接敲
+# /model claude/claude-3-5-sonnet</code></pre>
+
+    <p>
+      另外两条相关入口：启动参数 <code>--model &lt;provider/模型&gt;</code> 在<strong>新建会话时</strong>指定模型，
+      而且<strong>必须含 <code>/</code></strong>（只归 <code>-cli</code>，见 <a href="04-modes.html">04 三种运行模式</a>）；
+      agent 的 <code>model</code> 字段可以给某个 agent 指定偏好模型（见 <a href="07-agents.html">07 agents.json 与工具权限</a>）。
+      模型解析是三级回落：<strong>会话显式 → <code>agent.model</code> → 全局默认</strong>。
+    </p>
+
+    <div class="src-block">Jellyfish/README.md:515-549（示例配置与字段语义）、Jellyfish/README.md:72-99（最小示例：gpt-4o / 128000 / 4096）、Jellyfish/README.md:367-387（<code>/model [provider/model]</code> 与离线可用命令）、Jellyfish/README.md:120-139（<code>--model</code> 必须含 <code>/</code>）、Jellyfish/docs/constraints.md:429-434（模型解析三级回落）、Jellyfish-Spring-Template/src/main/resources/jellyfish/models.json（DeepSeek 示例配置）</div>
+
+    <h2>常见问题</h2>
+
+    <ul>
+      <li>
+        <strong>改了 <code>models.json</code> 不生效？</strong>
+        内容类配置要敲 <code>/reload</code>；只有 <code>config.json</code>、插件 jar 增删、项目级配置的信任需要重启。
+        另外先确认改的是哪一份——项目级同名 provider 会<strong>整对象</strong>覆盖全局级（见 05 页的双源一节）。
+      </li>
+      <li>
+        <strong>报「没有可用模型」？</strong>
+        先确认 <code>defaultProvider</code> / <code>defaultModel</code> 指向的 provider 与模型 id 确实在文件里；
+        再确认项目级配置到底有没有被加载（未被信任时只发一条告警）。命令本身不需要模型，可以先 <code>/model</code> 看当前值。
+      </li>
+      <li>
+        <strong>加了模型但 <code>/model</code> 里看不到？</strong>
+        <code>id</code> 必须是 <code>models[]</code> 里真实存在的那一项；被插件接管的 provider，
+        它报回的目录会<strong>整体替换</strong>你写的那份。
+      </li>
+      <li>
+        <strong>请求 400 / <code>Unsupported parameter</code>？</strong>
+        按顺序查三件事：<code>maxTokensField</code> 是否与模型代际匹配（推理模型与 gpt-5 之后只认
+        <code>max_completion_tokens</code>）、温度类参数是否被该模型拒收（Claude 新代际）、
+        <code>vendorBody</code> 是否写进了该端点不认的键。
+      </li>
+      <li>
+        <strong>配了 <code>temperature</code> 没变化？</strong>
+        先看是不是思考模式吃掉了它（坑 2）；再确认它没被写进 <code>vendorBody</code>（那是保留键，会被丢弃并告警）；
+        最后确认值本身合法（非法值丢弃并告警，日志与事件面都有一条）。
+      </li>
+      <li>
+        <strong>能不能把同一份 provider 配两次（比如同厂商两个网关）？</strong>
+        可以——<code>providers</code> 的 key 是自取的名字，写两个条目分别指向不同 <code>baseUrl</code> 即可，
+        <code>/model</code> 里用不同的前半段区分。
+      </li>
+      <li>
+        <strong><code>minimax</code> 用哪种格式？</strong>
+        走 OpenAI 兼容的 Chat Completions 格式（与 <code>openai</code> / <code>deepseek</code> 同一条路），
+        因此思考强度也按 Chat Completions 那一列的键名写。
+      </li>
+    </ul>
+
+    <div class="src-block">Jellyfish/README.md:1075-1131（常见问题：没配模型、改了配置不生效、配了思考强度却没反应）、Jellyfish/README.md:511-514（哪些改动要重启）、Jellyfish/README.md:669-689（坑 · 七条）、Jellyfish/README.md:615-668（DeepSeek 三协议对照：MiniMax 走 Chat Completions 那一列）</div>
+
+    <div class="conclusion">
+      <h2>关键结论</h2>
+      <ol>
+        <li><code>models.json</code> 只需回答三件事：provider 怎么访问（<code>type</code> / <code>apiKey</code> / <code>baseUrl</code>）、有哪些模型（<code>models[]</code>）、按需调参（<code>sampling</code> / <code>vendorBody</code> / <code>cache</code>）。</li>
+        <li><code>type</code> 的合法取值是 <code>openai</code> / <code>claude</code> / <code>deepseek</code> / <code>gemini</code> / <code>minimax</code> 加两个别名 <code>anthropic</code> / <code>google</code>；写错时报错会列出内核认识的类型，插件可以新增类型但<strong>顶不掉内核自带的</strong>。</li>
+        <li><code>maxTokensField</code> <strong>只有模型级</strong>，且只对 OpenAI 兼容客户端有意义：推理模型与 gpt-5 之后只认 <code>max_completion_tokens</code>，DeepSeek / MiniMax / OpenRouter 这类只认 <code>max_tokens</code>——用错就是 400。</li>
+        <li><code>sampling</code> 是内核定义的七项封闭字段集，<strong>没写就不下发、不认就不下发、非法值丢弃并告警</strong>，一切由客户端翻成自家协议字段；推理控制不在其中。</li>
+        <li><code>vendorBody</code> / <code>vendorHeaders</code> 是「厂商定义、内核不解释」的直通段：键名拼错静默无效，排查靠 DEBUG 日志里的<strong>键名</strong>；保留键、超深子树、六个 HTTP 头会被丢弃并告警。</li>
+        <li>思考强度从 <code>vendorBody</code> 配，四家键名与取值全不同，而且<strong>同一家还会随协议变</strong>（DeepSeek 三协议对照表）。</li>
+        <li><code>cache</code> 的两项都缺省关闭：<code>promptCacheKey</code> 下发会话级缓存路由键，<code>keepAliveSeconds</code> 会真的产生费用（每个空闲期最多续 3 次）。</li>
+      </ol>
+    </div>
+
+    <div class="next-steps">
+      <h2>下一步阅读</h2>
+      <ul>
+        <li>模型配好了，接下来限制它能用哪些工具：读 <a href="07-agents.html">07 agents.json 与工具权限</a>，那里讲清 <code>allowedTools</code> / <code>deniedTools</code> / <code>askTools</code> 的优先级。</li>
+        <li>想知道这些参数怎么影响花费与上下文：读 <a href="09-session.html">09 会话与上下文</a>，<code>contextLength</code> 与压缩预算、工具结果落盘都在那里。</li>
+        <li>手上有自建网关或私有协议：读 <a href="13-plugin-advanced.html">13 插件进阶与发布</a>，看插件如何注册一个新的 provider <code>type</code>。</li>
+      </ul>
+    </div>
+
+    <nav class="pager" aria-label="翻页">
+      <a class="prev" href="05-config-overview.html"><span class="pager-dir">上一页</span>05 配置体系总览</a>
+      <a class="next" href="07-agents.html"><span class="pager-dir">下一页</span>07 agents.json 与工具权限</a>
+    </nav>
+
+  </main>
+</div>
+
+<footer class="footer">
+  <div class="doc-meta">
+    Jellyfish 使用指南 · 本页依据：<code>Jellyfish/README.md</code>「配置 · <code>models.json</code>」全节与「常见问题」、
+    <code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/</code>（<code>Provider</code> / <code>Model</code> /
+    <code>SamplingSettings</code> / <code>ProviderCacheSettings</code>）、
+    <code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/support/</code>（<code>ProviderTypes</code> /
+    <code>VendorBody</code> / <code>VendorHeaders</code>）、
+    <code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm/</code>（<code>LlmClientFactory</code> 与各客户端）、
+    <code>Jellyfish/jellyfish-di/src/main/java/zcd/jellyfish/di/LlmModule.java</code>、
+    <code>Jellyfish/docs/constraints.md</code>、<code>Jellyfish-Spring-Template/src/main/resources/jellyfish/models.json</code> 等。
+    示例中的密钥、token 一律以占位符表示；<code>【待确认】</code>表示该结论在仓库中未找到出处，请以实际代码为准。
+  </div>
+</footer>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

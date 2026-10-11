@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>05 配置体系总览 · Jellyfish 使用指南</title>
+<meta name="description" content="Jellyfish 的配置体系总览：五份配置文件各管什么、config.json 全字段、全局级与项目级的双源合并规则、${VAR} 环境变量插值（含缺失即整份加载失败的硬红线）、路径展开规则、项目级配置的信任闸门与三种授予方式、未知字段在 0.1.1 后的告警范围、哪些改动能 /reload 热生效、哪些必须重启进程，以及五条常见配置任务的完整 JSON。">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="nav-toggle" id="navToggle" aria-label="切换导航" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">🐙 Jellyfish 使用指南</a>
+  <div class="topbar-tools">
+    <input id="navSearch" type="search" placeholder="搜索页面…" aria-label="搜索页面">
+  </div>
+</header>
+
+<div class="layout">
+
+  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <div class="sidebar-title">文档目录</div>
+    <ul class="nav-list">
+      <li><a href="index.html">首页 · 总览与导航</a></li>
+    </ul>
+    <div class="nav-group">一、入门</div>
+    <ul class="nav-list">
+      <li><a href="01-overview.html">01 Jellyfish 是什么</a></li>
+      <li><a href="02-install.html">02 安装与环境准备</a></li>
+      <li><a href="03-quickstart.html">03 五分钟快速上手</a></li>
+      <li><a href="04-modes.html">04 三种运行模式</a></li>
+    </ul>
+    <div class="nav-group">二、配置</div>
+    <ul class="nav-list">
+      <li><a href="05-config-overview.html" aria-current="page">05 配置体系总览</a></li>
+      <li><a href="06-models.html">06 models.json 详解</a></li>
+      <li><a href="07-agents.html">07 agents.json 与工具权限</a></li>
+    </ul>
+    <div class="nav-group">三、日常使用</div>
+    <ul class="nav-list">
+      <li><a href="08-tools.html">08 内置工具速查</a></li>
+      <li><a href="09-session.html">09 会话与上下文</a></li>
+      <li><a href="10-permissions.html">10 权限与审批</a></li>
+    </ul>
+    <div class="nav-group">四、插件</div>
+    <ul class="nav-list">
+      <li><a href="11-plugin-usage.html">11 安装与使用官方插件</a></li>
+      <li><a href="12-plugin-dev.html">12 从零开发一个插件</a></li>
+      <li><a href="13-plugin-advanced.html">13 插件进阶与发布</a></li>
+    </ul>
+    <div class="nav-group">五、集成与排错</div>
+    <ul class="nav-list">
+      <li><a href="14-spring-boot.html">14 整合到 Spring Boot</a></li>
+      <li><a href="15-troubleshooting.html">15 故障排查</a></li>
+      <li><a href="16-faq.html">16 FAQ 与术语表</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <nav class="breadcrumb" aria-label="面包屑">
+      <span>Jellyfish 使用指南</span><span class="sep">/</span><span>05 配置体系总览</span>
+    </nav>
+
+    <h1>05 配置体系总览</h1>
+    <p class="page-sub">
+      Jellyfish 的配置不是「一份文件配完」，而是<strong>五份文件各管一段 + 全局级与项目级双源合并</strong>。
+      这一页把「谁管什么」「两级怎么合并」「环境变量怎么插值」「项目级为什么默认不加载」
+      「改了要不要重启」一次讲清，最后给五条可以直接抄的常见配置任务。
+      字段级细节分别落在 <a href="06-models.html">06 models.json 详解</a> 与
+      <a href="07-agents.html">07 agents.json 与工具权限</a>。
+    </p>
+
+    <section class="goals">
+      <h2>学习目标</h2>
+      <ul>
+        <li>说出五份配置文件各自的配置类、管什么、放在哪，以及哪几份参与「全局级 + 项目级」双源；</li>
+        <li>看懂并会改 <code>config.json</code>：进程名、三份内容文件的双源路径、插件扫描目录；</li>
+        <li>记住双源合并的四种单位：整对象覆盖、整段回退、名单整体替换、非空值回退；</li>
+        <li>正确使用 <code>${VAR}</code> / <code>${VAR:-default}</code> / <code>\${VAR}</code>，并知道 <code>${VAR}</code> 缺失会让<strong>整份配置加载失败</strong>；</li>
+        <li>解释项目级配置为什么默认不加载，并用 <code>--trust-project-config</code> 或 TUI 确认框把它放进来；</li>
+        <li>判断一次改动是敲 <code>/reload</code> 就行，还是必须重启进程；</li>
+        <li>照着抄五条常见配置任务：全域统一模型、单项目覆盖、关自动压缩、临时禁插件、关子代理。</li>
+      </ul>
+    </section>
+
+    <h2>五份配置文件，各管什么</h2>
+
+    <p>
+      README 的口径是<strong>五份文件</strong>：一份管「其它文件在哪」，三份管内容（模型 / agent / 运行期设置），
+      还有一份是随构件发布、用户改不了的内置默认 agent。用户日常真正要维护的通常只有前四份，
+      其中 <code>config.json</code> 多数时候一行都不用改。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>配置文件</th>
+            <th>对应配置类</th>
+            <th>内容</th>
+            <th>缺省寻找位置</th>
+            <th>是否参与双源</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>config.json</code></td>
+            <td><code>AppConfig</code></td>
+            <td>进程名 + 各配置文件路径 + 插件扫描目录</td>
+            <td>classpath 根（本仓库 <code>jellyfish-cli/src/main/resources/config.json</code>）</td>
+            <td><strong>不参与</strong>，也不热更新</td>
+          </tr>
+          <tr>
+            <td><code>models.json</code></td>
+            <td><code>ModelSettings</code></td>
+            <td><code>defaultProvider</code> / <code>defaultModel</code> / <code>providers</code></td>
+            <td><code>~/.jellyfish/</code> → <code>./.jellyfish/</code></td>
+            <td>参与，项目级优先</td>
+          </tr>
+          <tr>
+            <td><code>agents.json</code></td>
+            <td><code>AgentSettings</code></td>
+            <td>用户自定义 agent</td>
+            <td>同上</td>
+            <td>参与，项目级优先</td>
+          </tr>
+          <tr>
+            <td><code>jellyfish.json</code></td>
+            <td><code>JellyfishSettings</code></td>
+            <td>插件名单与配置段、<code>react</code> / <code>permission</code> / <code>subAgent</code>（另有 <code>ask</code> 段）</td>
+            <td>同上</td>
+            <td>参与，项目级优先</td>
+          </tr>
+          <tr>
+            <td><code>default-agent.json</code></td>
+            <td><code>AgentDefinition</code></td>
+            <td>内置系统默认 agent</td>
+            <td>classpath 根，<strong>不走双源、用户改不了</strong></td>
+            <td><strong>不参与</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout design">
+      <span class="callout-title">为什么「文件在哪」要单独一份文件</span>
+      <p>
+        <code>config.json</code> 里只有路径与目录，没有内容；<code>models.json</code> / <code>agents.json</code> /
+        <code>jellyfish.json</code> 里只有内容，没有路径。这么分的好处是：换机器、换目录布局只改一处，
+        而内容类配置可以自由地在「全局级」与「项目级」各放一份。
+      </p>
+      <p>
+        另一半理由在源码里写得很直白：<code>plugins.roots</code>（插件扫描目录）属于「内核去哪找能力」的部署事实，
+        与「去哪个文件读配置」同一性质，放在一起才不用两处找；而 <code>jellyfish.json</code> 的
+        <code>plugins</code> 段只保留「加载后怎么用」的运行期设置（<code>enabled</code> / <code>disabled</code> /
+        <code>configurations</code>）。
+      </p>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:482-494（配置 · 五份文件表）、Jellyfish/README.md:458-481（插件扫描目录）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/PluginPaths.java（为什么扫描目录放在 config.json）</div>
+
+    <h2><code>config.json</code>：唯一管「其它文件在哪」的那份</h2>
+
+    <div class="feature">
+      <h3><code>config.json</code></h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          应用级配置，绑定到 <code>AppConfig</code>，固定从 <code>classpath:config.json</code> 读取。
+          它声明三份内容类配置的「全局级 / 项目级」路径，以及插件扫描根目录——
+          <strong>它自己不是内容，只回答「去哪读」</strong>。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          它是一份 classpath 资源，因此改它的方式是改源码里的
+          <code>jellyfish-cli/src/main/resources/config.json</code> 后重新构建；
+          也可以在 classpath 上放一份同名资源（<span class="tag focus">注意</span>
+          classpath 上同名资源谁生效取决于顺序）。
+          Spring Boot 接入方<strong>不走这份文件</strong>，而是用 <code>application.yml</code> 里的
+          <code>jellyfish.*</code> 属性（见 <a href="14-spring-boot.html">14 整合到 Spring Boot</a>）。
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong>（仓库自带的原文如下）</p>
+      <pre><code class="language-json">{
+  "processName": "Jellyfish",
+  "model": {
+    "globalPath": "~/.jellyfish/models.json",
+    "projectPath": "./.jellyfish/models.json"
+  },
+  "agent": {
+    "globalPath": "~/.jellyfish/agents.json",
+    "projectPath": "./.jellyfish/agents.json"
+  },
+  "jellyfish": {
+    "globalPath": "~/.jellyfish/jellyfish.json",
+    "projectPath": "./.jellyfish/jellyfish.json"
+  },
+  "plugins": {
+    "roots": ["~/.jellyfish/plugins/"]
+  }
+}</code></pre>
+
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr>
+              <th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>processName</td>
+              <td>string</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>Jellyfish</code></td>
+              <td>进程名；写空白按缺省值处理</td>
+              <td><code>"Jellyfish"</code></td>
+            </tr>
+            <tr>
+              <td>model.globalPath</td>
+              <td>string</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>""</code>（空串＝该层级未配置）</td>
+              <td>模型配置的<strong>全局级</strong>文件路径；支持 <code>~</code> 与 <code>classpath:</code> 前缀</td>
+              <td><code>"~/.jellyfish/models.json"</code></td>
+            </tr>
+            <tr>
+              <td>model.projectPath</td>
+              <td>string</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>""</code>（空串＝该层级未配置）</td>
+              <td>模型配置的<strong>项目级</strong>文件路径；相对进程工作目录解析</td>
+              <td><code>"./.jellyfish/models.json"</code></td>
+            </tr>
+            <tr>
+              <td>agent.globalPath</td>
+              <td>string</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>""</code></td>
+              <td>agent 配置的全局级文件路径</td>
+              <td><code>"~/.jellyfish/agents.json"</code></td>
+            </tr>
+            <tr>
+              <td>agent.projectPath</td>
+              <td>string</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>""</code></td>
+              <td>agent 配置的项目级文件路径</td>
+              <td><code>"./.jellyfish/agents.json"</code></td>
+            </tr>
+            <tr>
+              <td>jellyfish.globalPath</td>
+              <td>string</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>""</code></td>
+              <td>运行期设置（插件段 / <code>react</code> / <code>permission</code> / <code>ask</code> / <code>subAgent</code>）的全局级文件路径</td>
+              <td><code>"~/.jellyfish/jellyfish.json"</code></td>
+            </tr>
+            <tr>
+              <td>jellyfish.projectPath</td>
+              <td>string</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>""</code></td>
+              <td>运行期设置的项目级文件路径</td>
+              <td><code>"./.jellyfish/jellyfish.json"</code></td>
+            </tr>
+            <tr>
+              <td>plugins.roots</td>
+              <td>string[]</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>空列表 → 回退默认目录 <code>plugins</code></td>
+              <td>
+                插件扫描根目录，<strong>顺序即扫描顺序</strong>；展开行首 <code>~</code>、丢弃空白条目，
+                相对路径相对进程工作目录解析
+              </td>
+              <td><code>["~/.jellyfish/plugins/"]</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        <span class="tag restart">需重启</span>
+        <code>config.json</code> 与 <code>plugins.roots</code> <strong>不参与双源合并、也不参与热更新</strong>：
+        改完要重启进程；新增 / 删除插件 jar 同样只在启动期确定。
+      </p>
+
+      <p><strong>完整示例</strong>（把插件扫描目录指到两个位置，其余保持约定）</p>
+      <pre><code class="language-json">{
+  "processName": "Jellyfish",
+  "model":     { "globalPath": "~/.jellyfish/models.json",    "projectPath": "./.jellyfish/models.json" },
+  "agent":     { "globalPath": "~/.jellyfish/agents.json",    "projectPath": "./.jellyfish/agents.json" },
+  "jellyfish": { "globalPath": "~/.jellyfish/jellyfish.json", "projectPath": "./.jellyfish/jellyfish.json" },
+  "plugins":   { "roots": ["~/.jellyfish/plugins/", "/opt/jellyfish/plugins"] }
+}</code></pre>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>把 <code>plugins.roots</code> 写成 <code>[]</code> 会怎样？</strong>空列表回退默认目录 <code>plugins</code>（相对进程工作目录），不是「一个目录都不扫」。</li>
+        <li><strong>两份路径写成同一个文件？</strong>内核识别到 global 与 project 指向同一路径时只读一次，此时「项目级覆盖」等价于单源。</li>
+        <li><strong>我只想改模型配置的存放位置？</strong>改 <code>model.globalPath</code> / <code>model.projectPath</code> 即可，内容格式完全不变。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:495-514（config.json 全文与说明）、Jellyfish/jellyfish-cli/src/main/resources/config.json（原文）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/AppConfig.java（<code>classpath:config.json</code>、<code>processName</code> 缺省值）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ConfigPaths.java（空串＝未配置）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/PluginPaths.java、Jellyfish-Spring-Boot-Starter/README.md:61-90（接入方用 application.yml 与 <code>classpath:</code>）</div>
+
+    <h2>双源：全局级 vs 项目级</h2>
+
+    <p>
+      三份内容类配置都是<strong>双源</strong>：先读全局级（<code>~/.jellyfish/</code>），再读项目级
+      （<code>&lt;工作目录&gt;/.jellyfish/</code>），项目级优先。但「优先」的单位并不统一——
+      记住下面四种单位，就不会出现「我明明覆盖了却没生效」。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>合并单位</th><th>规则</th><th>典型后果</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>同名 <code>provider</code> / <code>agent</code> / 插件配置段</td>
+            <td>项目级<strong>整对象</strong>覆盖全局级（不是逐字段合并）；agent 的提示词 md 也随来源一起覆盖</td>
+            <td>项目级写 provider 时，必须把 <code>type</code> / <code>apiKey</code> / <code>models</code> 一整套写全，否则那些字段等于没配</td>
+          </tr>
+          <tr>
+            <td><code>defaultProvider</code> / <code>defaultModel</code></td>
+            <td>取项目级<strong>非空值</strong>，否则回退全局级</td>
+            <td>项目级写 <code>""</code> 或省略 = 继续用全局级</td>
+          </tr>
+          <tr>
+            <td><code>react</code> / <code>permission</code> / <code>ask</code> / <code>subAgent</code> 段</td>
+            <td>项目级<strong>写了这一段</strong>才整对象覆盖，没写就整段回退全局级；判据是段级「声明标记」，不是「取到的段非空」</td>
+            <td>写 <code>"ask": {}</code> 也算「写过」，此时该段按<strong>缺省值</strong>生效（不是继承全局级）</td>
+          </tr>
+          <tr>
+            <td><code>plugins.enabled</code> / <code>plugins.disabled</code> 名单</td>
+            <td>项目级<strong>已声明则整体替换</strong>（写 <code>[]</code> 即清空该名单），<strong>不做并集</strong></td>
+            <td>项目级写 <code>"disabled": ["a"]</code> 会把全局级的禁用名单整份顶掉</td>
+          </tr>
+          <tr>
+            <td><code>plugins.roots</code></td>
+            <td>只在 <code>config.json</code> 一处，<strong>不参与双源合并</strong></td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td><code>default-agent.json</code></td>
+            <td>内置只读定义，<strong>不走双源、用户改不了</strong>；用户 <code>agents.json</code> 里写同名 <code>jellyfish</code> 会被忽略并告警</td>
+            <td>想用自定义 agent 只能 <code>/agent &lt;agentId&gt;</code> 切换</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="diagram">
+      <div class="mermaid">
+flowchart TD
+  L["要读一份配置"] --> S{"这份配置走双源吗？"}
+  S -- "config.json / default-agent.json" --> S1["单文件即全部：不走双源"]
+  S -- "models.json / agents.json / jellyfish.json" --> G["读全局级 ~/.jellyfish/"]
+  G --> P{"项目级文件存在<br/>且被信任？"}
+  P -- "不存在 / 未信任" --> P1["只用全局级<br/>缺失部分落缺省值"]
+  P -- "是" --> M{"按什么单位合并"}
+  M -- "同名 provider / agent / 插件配置段" --> M1["项目级整对象覆盖"]
+  M -- "defaultProvider / defaultModel" --> M2["项目级非空才覆盖，否则回退全局级"]
+  M -- "react / permission / ask / subAgent" --> M3["项目级写了这一段才整段覆盖"]
+  M -- "plugins.enabled / disabled" --> M4["项目级已声明则整体替换，写 [] 即清空"]
+      </div>
+    </div>
+    <p class="figure-cap">图 5-1　双源合并的决策路径：先问「走不走双源」，再问「被不被信任」，最后问「按什么单位合并」</p>
+
+    <div class="callout tip">
+      <span class="callout-title">容错口径：配置可疑不拦启动</span>
+      <ul>
+        <li>配置缺失或可疑只发<strong>配置告警事件</strong>（<code>ConfigWarningEvent</code>），<strong>不中断启动</strong>，真正用到时才报错。</li>
+        <li>项目级被跳过时<strong>必发一条告警</strong>（源为 <code>project-config</code>）：静默跳过会让用户以为配置生效了。</li>
+        <li>插件还能问出「我这个配置段是哪一级给的」：<code>PluginContext.configScope()</code> 给来源层级，<code>PluginContext.globalConfiguration()</code> 给只由全局级决定的那一份（见 <a href="13-plugin-advanced.html">13 插件进阶</a>）。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:942-957（双源合并与插值）、Jellyfish/docs/constraints.md:377-410（配置加载：四份配置对四类、段级声明标记、项目级被跳过必发告警）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/RuntimeConfig.java（<code>load</code> / <code>mergeModelSettings</code> / <code>mergeJellyfishSettings</code> / <code>isSamePath</code>）</div>
+
+    <h2>环境变量插值</h2>
+
+    <div class="feature">
+      <h3><code>${VAR}</code> 环境变量占位符</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          让配置里<strong>不出现明文密钥</strong>：值写成 <code>${OPENAI_API_KEY}</code>，真实密钥放环境变量，
+          由绑定器在解析 JSON 之后替换。它解决的是「配置文件会被提交、会被共享，而密钥不该」。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          在配置文件的<strong>字符串值</strong>里写占位符，然后导出环境变量：
+          <pre><code class="language-bash">export OPENAI_API_KEY=sk-***
+export DEEPSEEK_API_KEY=sk-***
+java -jar /path/to/jellyfish-cli-0.1.1.jar -cli -p "/model"</code></pre>
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong>：三种写法</p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr>
+              <th>写法</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>${VAR}</code></td>
+              <td>字符串占位符</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>无（缺失即报错）</td>
+              <td>
+                <strong>必需</strong>：环境变量缺失就抛 <code>JellyfishException</code>，
+                整份配置加载失败；它不会退化成「这一项为空」
+              </td>
+              <td><code>"apiKey": "${OPENAI_API_KEY}"</code></td>
+            </tr>
+            <tr>
+              <td><code>${VAR:-default}</code></td>
+              <td>字符串占位符</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>分隔符后的 <code>default</code></td>
+              <td>可选：环境变量缺失时用 <code>default</code>（<strong>可为空</strong>），配置照常加载</td>
+              <td><code>"baseUrl": "${LLM_BASE_URL:-https://gateway.example.com/v1/chat/completions}"</code></td>
+            </tr>
+            <tr>
+              <td><code>\${VAR}</code></td>
+              <td>转义写法</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>无</td>
+              <td>输出<strong>字面量</strong> <code>${VAR}</code>，不做替换（值本身就长这样时用）</td>
+              <td>JSON 里要写成 <code>"note": "\\${NOT_A_VAR}"</code>——JSON 文本里是两个反斜杠，解析后字符串里只剩一个反斜杠，绑定器见到的正是 <code>\${NOT_A_VAR}</code>，于是原样输出 <code>${NOT_A_VAR}</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        两条边界（源码口径）：<strong>只替换字符串值</strong>——JSON 的 key 不替换，数组元素里的字符串同样替换；
+        <code>{agentId}.md</code> 提示词是<strong>原文</strong>，不做模板插值。
+      </p>
+
+      <div class="callout danger">
+        <span class="callout-title">缺一个 <code>${VAR}</code>，整份配置都加载不了</span>
+        <p>
+          <code>${VAR}</code>（不带默认值）是硬要求。环境变量没设时绑定阶段直接抛
+          <code>JellyfishException</code>，报 <code>environment variable is not set: &lt;名字&gt;, source: &lt;配置文件路径&gt;</code>，
+          <strong>整份配置加载失败</strong>；启动期属于「配置出错」，按退出码表的归类是启动失败（退 <code>3</code>）。
+          它<strong>不会</strong>变成「这一项为空、其余照常」。
+        </p>
+        <p>两种容错写法：</p>
+        <ul>
+          <li>给默认值：<code>"apiKey": "${OPENAI_API_KEY:-}"</code>——<strong>默认值可以是空串</strong>：变量没设时该字段得到空串，配置照常加载；</li>
+          <li>对不需要替换的 <code>${...}</code> 文本加反斜杠转义 <code>\${VAR}</code>，让它原样留在配置里。</li>
+        </ul>
+        <p>
+          注意 <code>${VAR:-}</code> 只是<strong>不再让加载失败</strong>，它把该字段变成空串——
+          空串在具体字段上意味着什么，要按该字段的语义判断。
+        </p>
+      </div>
+
+      <p><strong>完整示例</strong>（密钥走环境变量，网关地址可被环境变量覆盖）</p>
+      <pre><code class="language-json">{
+  "providers": {
+    "openai": {
+      "type": "openai",
+      "apiKey": "${OPENAI_API_KEY}",
+      "baseUrl": "${LLM_BASE_URL:-https://gateway.example.com/v1/chat/completions}",
+      "models": [{ "id": "gpt-4o", "name": "gpt-4o", "contextLength": 128000, "maxOutputTokens": 4096 }]
+    }
+  }
+}</code></pre>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>启动时报 <code>environment variable is not set</code>？</strong>照着报错里的名字导出环境变量；报错里还带上了是哪份配置文件（<code>source</code>）。</li>
+        <li><strong>能不能把密钥直接写进配置文件？</strong>能跑，但不要这么做——配置文件会被提交、会被复制，而密钥不该。README 的「坑」第 7 条就是这一条。</li>
+        <li><strong><code>export</code> 了却不生效？</strong>确认导出发生在启动进程的同一个 shell / 同一份环境里（容器、systemd、IDE 的运行配置各有各的环境变量）。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:942-957（插值三条写法与路径规则）、Jellyfish/README.md:669-689（坑 第 7 条：密钥一律走环境变量、<code>${VAR}</code> 缺失会让整份配置加载失败）、Jellyfish/README.md:140-168（退出码：配置出错属启动失败退 3）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/SettingsBinder.java:20-31、39-43、131-171（必需 / 可选 / 转义三种语义、可选反斜杠前缀、<code>:-</code> 后可为空、只替换字符串值）、Jellyfish/jellyfish-infra/src/test/java/zcd/jellyfish/infra/config/SettingsBinderTest.java:81-95（<code>${VAR:-}</code> 得空串、<code>\\${VAR}</code> 得字面量两个用例）、Jellyfish-Spring-Template/src/main/resources/jellyfish/models.json（仓库自用配置里就写着 <code>"apiKey": "${DEEPSEEK_API_KEY:-}"</code>）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/AgentDefinition.java（提示词是原文、不做模板插值）</div>
+
+    <h2>路径规则</h2>
+
+    <p>
+      所有路径字段（三份内容文件的 <code>globalPath</code> / <code>projectPath</code>、<code>plugins.roots</code>）
+      走同一套规则：
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>规则</th><th>行为</th><th>依据</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>行首 <code>~</code> / <code>~/</code></td>
+            <td>展开为<strong>用户主目录</strong></td>
+            <td><code>HomePaths.expand</code> 在读取前展开；这是唯一的内容加工，其余一律原样</td>
+          </tr>
+          <tr>
+            <td>相对路径</td>
+            <td>相对<strong>进程工作目录</strong>解析，<strong>不是</strong>相对 jar 位置</td>
+            <td>因此「在哪个目录里启动」决定 <code>./.jellyfish/</code> 指向哪里</td>
+          </tr>
+          <tr>
+            <td><code>classpath:</code> 前缀</td>
+            <td>读 classpath 资源，而不是文件系统文件</td>
+            <td>Spring 接入方靠它把配置放进自己的 <code>resources</code></td>
+          </tr>
+          <tr>
+            <td>文件不存在</td>
+            <td>视为「该源未配置」，跳过、不阻断启动</td>
+            <td>「这个目录没有项目级配置」是常态</td>
+          </tr>
+          <tr>
+            <td>路径指向目录</td>
+            <td>抛 <code>JellyfishException</code>（<code>settings path is a directory</code>）</td>
+            <td><code>SettingsReader</code> 先判目录再看内容</td>
+          </tr>
+          <tr>
+            <td>文件存在但读不到内容</td>
+            <td>发一条告警：「配置段文件缺失或为空，将按未配置处理」</td>
+            <td><code>RuntimeConfig.read</code>：路径已配置而结果为 <code>null</code> 时发事件</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout warn">
+      <span class="callout-title">「文件不存在」与「文件存在但没被信任」是两件事</span>
+      <p>
+        文件不存在：不发告警（常态）。文件存在但未被信任：<strong>不加载，并发一条告警</strong>说明怎么才能加载。
+        另外，「内容为空」与「路径已配置但文件确实缺失」都会命中那条「配置段文件缺失或为空」的告警——
+        README 把这组情况概括为「静默跳过」，指的是<strong>不中断、不要求确认</strong>。
+        这条告警在源码里是明文：<code>RuntimeConfig.read</code>（<code>RuntimeConfig.java:416-421</code>）在
+        <code>path</code> 非空白而读到的结果是 <code>null</code> 时发一条 <code>ConfigWarningEvent</code>，
+        消息就是「配置段文件缺失或为空，将按未配置处理」（<code>RuntimeConfig.java:420</code>）；<code>0.1.1</code> 起由
+        <code>ConfigWarningReporter</code> 渲染成一行 WARN 落到终端与日志文件。
+      </p>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:942-957（路径：<code>~</code> 展开、相对进程工作目录、文件不存在视为未配置）、Jellyfish/docs/constraints.md:377-410（插件扫描目录不参与双源、展开行首 <code>~</code>、空列表回退）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/SettingsReader.java（<code>classpath:</code> 与本地文件两条读法、目录报错）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/RuntimeConfig.java:416-421（缺失/为空的告警）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ConfigWarningReporter.java（把 <code>ConfigWarningEvent</code> 渲染成一行 WARN）、Jellyfish/CHANGELOG.md:37-41（<code>0.1.1</code> 新增 <code>ConfigWarningReporter</code>）</div>
+
+    <h2>项目级配置的信任</h2>
+
+    <div class="feature">
+      <h3>项目级配置的信任闸门</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          项目级配置（<code>&lt;工作目录&gt;/.jellyfish/*.json</code>）<strong>默认不加载</strong>，
+          只有被显式信任过才参与合并。它挡的不是「格式错误」，而是「这份内容会不会随着
+          <code>git clone</code> / <code>git pull</code> 凭空出现在你的工作目录里」。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          <code>-cli</code> / <code>-server</code> 加启动参数；<code>-tui</code> 在启动时回答确认框：
+          <pre><code class="language-bash"># 命令行：本次进程内信任并加载 ./.jellyfish/*.json（不落盘）
+java -jar /path/to/jellyfish-cli-0.1.1.jar -cli --trust-project-config -p "读一下这个项目"
+
+# TUI：启动时弹确认框，y = 加载并记住，o = 仅本次加载
+java -jar /path/to/jellyfish-cli-0.1.1.jar -tui</code></pre>
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong>：三种授予方式</p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr>
+              <th>场景</th><th>做法</th><th>必填</th><th>是否落盘</th><th>含义</th><th>示例</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>-cli</code> / <code>-server</code></td>
+              <td>启动参数</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><strong>否</strong>，仅本次进程</td>
+              <td>信任并加载项目级配置</td>
+              <td><code>--trust-project-config</code></td>
+            </tr>
+            <tr>
+              <td><code>-tui</code></td>
+              <td>确认框选 <code>y</code>（加载并记住）</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><strong>是</strong>，写入 <code>~/.jellyfish/trusted-project-configs.json</code></td>
+              <td>按当前内容记进信任仓库，后续进程直接生效</td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td><code>-tui</code></td>
+              <td>同一确认框里选 <code>o</code>（仅本次加载）</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><strong>否</strong></td>
+              <td>只让这一个文件在本次进程内生效</td>
+              <td>—</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        <strong>信任的单位是「文件绝对路径 + 内容指纹」，不是目录</strong>：内容一变（指纹用 SHA-256）信任立即失效，
+        需要重新确认。这是刻意的——只记目录的话，「信任一次」会变成「永远信任这个仓库，无论它以后写什么」。
+        <code>classpath:</code> 形式的项目级路径（如 <code>classpath:jellyfish/models.json</code>）
+        <strong>不受这道闸管辖</strong>：它属于运行构件本身，由打包与部署的人决定，与全局级同性质。
+      </p>
+
+      <p><strong>完整示例</strong>（项目根建一份只覆盖模型的配置，然后带信任参数启动）</p>
+      <pre><code class="language-bash">mkdir -p ./.jellyfish
+# 写入 ./.jellyfish/models.json（内容见 06 页的多厂商示例）
+java -jar /path/to/jellyfish-cli-0.1.1.jar -cli --trust-project-config -p "/model"</code></pre>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>为什么默认不加载？</strong>它的读取基准是进程当前目录，内容取决于「在哪个目录里启动」；而它能决定的东西很重：<code>models.json</code> 里同名 provider 是整对象替换，改掉 <code>baseUrl</code> / <code>apiKey</code> 就等于把密钥与全部对话正文送到别处；<code>agents.json</code> 可以新增 agent（未声明权限的 agent 不受限）；<code>jellyfish.json</code> 可以改落盘目录与插件配置。</li>
+        <li><strong>没有终端可问时会怎样？</strong><code>-cli</code> / <code>-server</code> <strong>只会打印一行提示</strong>告诉你怎么才能加载，绝不擅自加载；确认框的缺省答案、无法识别的输入、读不到应答，一律按<strong>不加载</strong>处理。</li>
+        <li><strong>改了文件内容还要重新确认吗？</strong>要。指纹对不上就重新征求确认。</li>
+        <li><strong>信任仓库本身读不出来？</strong>失败一律按<strong>不信任</strong>处理：闸门只会关得更紧，不会因为异常而自己打开。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:958-984（项目级配置的信任）、Jellyfish/docs/constraints.md:377-410（项目级默认不加载、三种授予方式、缺省答案与读取失败按不加载、<code>classpath:</code> 不受闸管辖）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ProjectConfigTrust.java（信任仓库位置、SHA-256 指纹、失败按不信任）、Jellyfish/CHANGELOG.md:48-52（<code>--trust-project-config</code> 与 TUI 两种选项）</div>
+
+    <h2>未知字段怎么处理</h2>
+
+    <p>
+      这一节要分清三件事：<strong>会不会报错</strong>、<strong>会不会有告警</strong>、<strong>写错的字段会不会生效</strong>。
+      答案是：不报错、字段不生效；而「有没有告警」在 <code>0.1.1</code> 起变了。
+    </p>
+
+    <div class="callout pitfall">
+      <span class="callout-title">两处明文口径不一致，以 CHANGELOG 与源码为准</span>
+      <ul>
+        <li><strong>README（<code>models.json</code> 一节，<code>Jellyfish/README.md:546</code>）</strong>：本文件关掉了「未知字段」的报错，多写一个键<strong>既不会有提示、也不会有任何效果</strong>；表里没列出的字段就是不支持的。</li>
+        <li><strong>CHANGELOG <code>0.1.1</code>（<code>Jellyfish/CHANGELOG.md:32-36</code>）</strong>：配置里拼错字段名<strong>不再无声</strong>——读取配置时会比对字段名，发现内核不认识的字段就发一条 <code>ConfigWarningEvent</code> 并打出 WARN 行，带上文件路径与字段名；只比字段名、不做类型转换；<strong>自由格式的位置一概不看</strong>（<code>vendorBody</code>、逐插件配置段这类键名由使用方决定），宁可漏报也不报假警。</li>
+      </ul>
+      <p>
+        两句说的不是同一件事，但要一起读：<strong>「不报错、不阻断启动、字段照样不生效」在 <code>0.1.1</code> 前后都成立</strong>，
+        变的只是「完全无声」这一条——<code>0.1.1</code> 起会多一条 WARN。
+      </p>
+      <p>
+        <strong>该信哪个：以 CHANGELOG 为准，源码也站在 CHANGELOG 这一边。</strong>
+        README 那句「既不会有提示」是 <code>0.1.1</code> 之前的措辞（两份文件分头维护，这类旧句子会滞后）。
+        源码里有三处互相印证的事实：
+      </p>
+      <ul>
+        <li>绑定确实<strong>容忍</strong>未知字段：<code>ObjectMapperWrapper.java:43</code> 里
+          <code>FAIL_ON_UNKNOWN_PROPERTIES=false</code>，所以「不报错、不阻断启动」成立；</li>
+        <li>读取这一层另有一条「比对字段名」的流程：<code>ConfigLoader.read(path, type, unknownFieldReport)</code>
+          （<code>ConfigLoader.java:76-84</code>）比对后把每个未知字段名交给调用方；</li>
+        <li><code>RuntimeConfig.read</code>（<code>RuntimeConfig.java:416-421</code>）把它包成
+          <code>ConfigWarningEvent</code> 发出去，消息形如「配置里有内核不认识的字段：&lt;路径.字段名&gt;（拼错了？它会被静默忽略）」
+          （<code>RuntimeConfig.java:417-418</code>），再由 <code>ConfigWarningReporter</code> 渲染成一行 WARN。</li>
+      </ul>
+      <p>
+        <strong>三份内容文件口径一致</strong>：<code>models.json</code>（<code>RuntimeConfig.java:114</code>）、
+        <code>jellyfish.json</code>（<code>RuntimeConfig.java:116</code>）、<code>agents.json</code>（<code>RuntimeConfig.java:169</code>）都走同一个
+        <code>read(path, type)</code>，全局级与项目级都一样，因此三者都报未知字段、且报的范围相同。
+        不报的只有两份非内容文件：<code>config.json</code>（<code>ConfigLoader.loadAppConfig</code>，
+        <code>ConfigLoader.java:44-46</code>，用的是两参重载）与 <code>default-agent.json</code>
+        （<code>BuiltinAgentLoader.java:78</code>，同样是两参重载）。
+      </p>
+    </div>
+
+    <p><strong>拼错字段名时，<code>0.1.1</code> 起到底覆盖到哪</strong>：</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>位置</th><th>未知字段是否有告警</th><th>依据</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>models.json</code> 顶层、<code>providers.&lt;name&gt;</code>、<code>models[]</code></td>
+            <td><strong>有</strong>（WARN + <code>ConfigWarningEvent</code>，带文件路径与可定位字段名），字段仍不生效</td>
+            <td>该文件走 <code>RuntimeConfig.read</code> → <code>ConfigLoader.read(path, type, 报告未知字段)</code></td>
+          </tr>
+          <tr>
+            <td><code>agents.json</code>、<code>jellyfish.json</code> 的已声明段</td>
+            <td><strong>有</strong>（同上）</td>
+            <td>同一读取路径</td>
+          </tr>
+          <tr>
+            <td><code>vendorBody</code> 内部的键</td>
+            <td><strong>没有</strong>（自由格式：键名由使用方决定）</td>
+            <td>CHANGELOG 0.1.1 的「自由格式的位置一概不看」</td>
+          </tr>
+          <tr>
+            <td><code>plugins.configurations.&lt;pluginId&gt;</code> 内部的键</td>
+            <td><strong>没有</strong>（同上）</td>
+            <td>同上</td>
+          </tr>
+          <tr>
+            <td><code>config.json</code></td>
+            <td><strong>没有</strong>（<code>loadAppConfig</code> 走的是不接收未知字段报告的那条重载）</td>
+            <td><code>ConfigLoader.loadAppConfig</code> / <code>read(path, type)</code></td>
+          </tr>
+          <tr>
+            <td><code>default-agent.json</code></td>
+            <td><strong>没有</strong>（同一条重载）</td>
+            <td><code>BuiltinAgentLoader.read</code></td>
+          </tr>
+          <tr>
+            <td><code>sampling</code> 里的非法<strong>值</strong>（不是字段名）</td>
+            <td><strong>有</strong>：丢弃该项并发告警（写入 <code>ConfigWarningEvent</code>）</td>
+            <td><code>SamplingSettings.warnings()</code> 与 <code>reject()</code></td>
+          </tr>
+          <tr>
+            <td><code>vendorBody</code> 的保留键 / 超深子树、<code>vendorHeaders</code> 的保留头</td>
+            <td><strong>有</strong>：丢弃并记 WARN（头只记头名，不打值）</td>
+            <td><code>VendorBody.sanitize</code> / <code>VendorHeaders.sanitize</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">这条告警以前没人看得见</span>
+      <p>
+        <code>0.1.1</code> 同时补了 <code>ConfigWarningReporter</code>：它把 <code>ConfigWarningEvent</code>
+        渲染成日志行。此前唯一的订阅方是指标计数器，「配置文件缺失」「项目级配置未信任」「未知的 agent 标识」
+        这些提示其实都到不了用户眼前，关停时那句 <code>config.warnings=N</code> 只说数量不说内容。
+      </p>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:515-549（models.json：未知字段不报错、表里没有的就是不支持）、Jellyfish/README.md:546（「多写一个键既不会有提示、也不会有任何效果」——被 <code>0.1.1</code> 的变更条目取代）、Jellyfish/CHANGELOG.md:30-44（0.1.1：拼错字段名不再无声、自由格式不看、<code>ConfigWarningReporter</code>）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ConfigLoader.java:44-46、58-60、76-84（两条读取重载）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/RuntimeConfig.java:114、116、169、416-421（三份内容文件都报未知字段；<code>config.json</code> / <code>default-agent.json</code> 不报）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/BuiltinAgentLoader.java:78、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/support/ObjectMapperWrapper.java:43、172（<code>FAIL_ON_UNKNOWN_PROPERTIES=false</code>、<code>unknownFields</code> 与自由格式判定）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ConfigWarningReporter.java（渲染成一行 WARN）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/SamplingSettings.java（非法值丢弃并告警）</div>
+
+    <h2>哪些改动要重启、哪些热生效</h2>
+
+    <p>
+      一句话记法：<strong>「文件在哪」与「有哪些插件 jar」要重启，「文件里写了什么」敲 <code>/reload</code></strong>。
+      但有三个例外必须单独记住（见下表最后几行）。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>你改了什么</th><th>生效方式</th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>config.json</code> 的内容（三份文件路径、<code>plugins.roots</code>、进程名）</td>
+            <td><span class="tag restart">需重启</span></td>
+            <td><code>config.json</code> 不参与热更新</td>
+          </tr>
+          <tr>
+            <td>新增 / 删除插件 jar</td>
+            <td><span class="tag restart">需重启</span></td>
+            <td>插件在启动期扫描加载</td>
+          </tr>
+          <tr>
+            <td><code>models.json</code> / <code>agents.json</code> / <code>jellyfish.json</code> 的内容</td>
+            <td><span class="tag hot">/reload 生效</span></td>
+            <td>重读配置、重建模型 / agent 索引，并<strong>只重启配置段变了的插件</strong>，同步等结果</td>
+          </tr>
+          <tr>
+            <td>项目级配置的信任（<code>--trust-project-config</code> / TUI 确认框）</td>
+            <td><span class="tag restart">需重启</span></td>
+            <td>启动期决定要不要读；内容指纹一变信任立即失效，需重新确认</td>
+          </tr>
+          <tr>
+            <td><code>subAgent.maxDepth</code> / <code>maxConcurrentRuns</code> / <code>maxQueuedRuns</code></td>
+            <td><span class="tag restart">需重启</span></td>
+            <td>在本次进程第一次派子代理时定型，此后不再变（<code>runTimeoutMillis</code> 例外，<code>/reload</code> 后下一个 run 就按新值计时）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout warn">
+      <span class="callout-title"><code>/reload</code> 做了什么、没做什么</span>
+      <ul>
+        <li><strong>顺序固定</strong>：<code>modelManager.refresh(true)</code> → <code>agentManager.refresh(false)</code> →
+          <code>pluginRuntimeConfig.refresh</code> → 比对插件配置段 → <code>pluginManager.reload</code> →
+          <code>modelManager.refreshCatalogs</code> → 广播 <code>ConfigReloadedEvent</code>。</li>
+        <li><strong>单飞、不回滚</strong>：<code>synchronized</code> 串行执行，触发只有 <code>/reload</code> 一条路；出错不会退回旧配置。</li>
+        <li><strong>「重启插件」= stop + start</strong>：PF4J 插件实例在装载期缓存，stop 不会重置它。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:511-514（改完不用重启 vs config.json 不热更新）、Jellyfish/README.md:458-481（插件 jar 增删要重启）、Jellyfish/README.md:913-941（<code>subAgent</code> 各键何时读取）、Jellyfish/docs/constraints.md:418-428（热更新顺序、单飞不回滚、stop+start）、Jellyfish/CHANGELOG.md:8-27（Unreleased：并发 / 等待区 / 墙钟的读取时机修正）</div>
+
+    <h2>常见配置任务</h2>
+
+    <h3>1. 让这台机器上的所有项目都用同一套模型配置</h3>
+    <p>把同一份文件放到 <code>~/.jellyfish/</code>。项目级若有同名条目，会整对象覆盖全局级。</p>
+    <pre><code class="language-json">{
+  "defaultProvider": "openai",
+  "defaultModel": "gpt-4o",
+  "providers": {
+    "openai": {
+      "type": "openai",
+      "apiKey": "${OPENAI_API_KEY}",
+      "models": [{ "id": "gpt-4o", "name": "gpt-4o", "contextLength": 128000, "maxOutputTokens": 4096 }]
+    }
+  }
+}</code></pre>
+    <p>写完之后确认生效：<code>java -jar /path/to/jellyfish-cli-0.1.1.jar -cli -p "/model"</code>（<code>/model</code> 离线可用，不需要模型也能看出当前选的是哪个）。</p>
+
+    <h3>2. 只给某个项目换模型</h3>
+    <p>
+      在项目根建 <code>.jellyfish/models.json</code>，只写要覆盖的 <code>provider</code>；
+      然后启动时加 <code>--trust-project-config</code>（<code>-tui</code> 则在确认框里选加载）。
+      注意<strong>同名 provider 是整对象替换</strong>，所以 <code>type</code> / <code>apiKey</code> / <code>models</code> 要写全。
+    </p>
+    <pre><code class="language-json">{
+  "providers": {
+    "openai": {
+      "type": "openai",
+      "apiKey": "${CORP_GATEWAY_KEY}",
+      "baseUrl": "https://gateway.example.com/v1/chat/completions",
+      "models": [{ "id": "gpt-4o", "name": "gpt-4o", "contextLength": 128000, "maxOutputTokens": 4096 }]
+    }
+  }
+}</code></pre>
+
+    <h3>3. 关掉自动压缩</h3>
+    <p>写 <code>0</code> 关闭自动压缩，只留手动 <code>/compact</code>；建议先 <code>/compact preview</code> 看会压多少再压。</p>
+    <pre><code class="language-json">{
+  "react": { "autoCompactPercent": 0 }
+}</code></pre>
+
+    <h3>4. 临时禁用某个插件</h3>
+    <p>写进 <code>jellyfish.json</code> 的 <code>plugins.disabled</code>，然后 <code>/reload</code>。同一 pluginId 同时出现在启用与禁用名单里时按<strong>禁用</strong>处理，并发一条配置告警。</p>
+    <pre><code class="language-json">{
+  "plugins": { "disabled": ["jellyfish-plugin-todo"] }
+}</code></pre>
+
+    <h3>5. 关掉子代理委派</h3>
+    <p><code>/reload</code> 后 <code>task</code> 工具<strong>直接不再注册</strong>，模型看不到它。</p>
+    <pre><code class="language-json">{
+  "subAgent": { "enabled": false }
+}</code></pre>
+
+    <div class="src-block">Jellyfish/README.md:985-992（常见配置任务五条）、Jellyfish/README.md:811-834（<code>plugins.enabled</code> / <code>disabled</code> 语义）、Jellyfish/README.md:835-863（<code>react.autoCompactPercent</code>）、Jellyfish/README.md:913-941（<code>subAgent.enabled</code>）、Jellyfish/README.md:367-387（<code>/reload</code> 与离线可用命令）</div>
+
+    <h2>这些文件接下来去哪儿读</h2>
+
+    <div class="cards">
+
+      <div class="card focus">
+        <div class="card-no">06</div>
+        <h3><a href="06-models.html">models.json 详解</a></h3>
+        <p>provider 与 model 的全部字段、采样参数到各厂商协议的映射、思考强度怎么配、<code>vendorBody</code> 保留键、prompt cache 的两个坑。</p>
+        <div class="card-file">本页的下一站：内容类配置里最常改的一份</div>
+      </div>
+
+      <div class="card focus">
+        <div class="card-no">07</div>
+        <h3><a href="07-agents.html">agents.json 与工具权限</a></h3>
+        <p>agent 的字段、<code>{agentId}.md</code> 提示词文件、<code>allowedTools</code> / <code>deniedTools</code> / <code>askTools</code> 三段权限与优先级。</p>
+        <div class="card-file">「谁能用哪些工具」的答案都在这份文件里</div>
+      </div>
+
+      <div class="card">
+        <div class="card-no">11</div>
+        <h3><a href="11-plugin-usage.html">安装与使用官方插件</a></h3>
+        <p>13 个官方插件分别装哪几个、<code>plugins.roots</code> 与 <code>plugins.configurations</code> 怎么配合、逐插件的配置段怎么写。</p>
+        <div class="card-file">本页的 <code>plugins.roots</code> 与 <code>jellyfish.json</code> 的插件段在这里落地</div>
+      </div>
+
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:482-494（五份文件的分工）、Jellyfish/README.md:458-481（插件扫描与名单的两处落点）</div>
+
+    <div class="conclusion">
+      <h2>关键结论</h2>
+      <ol>
+        <li>配置分<strong>五份</strong>：<code>config.json</code> 管「其它文件在哪」，<code>models.json</code> / <code>agents.json</code> / <code>jellyfish.json</code> 管内容（三份走双源），<code>default-agent.json</code> 是内置只读兜底。</li>
+        <li>双源合并有四种单位，别混：<strong>同名 provider / agent / 插件段整对象覆盖</strong>、<strong>默认模型非空才覆盖</strong>、<strong>段级「写了才覆盖」</strong>、<strong>启禁名单整体替换（写 <code>[]</code> 即清空）</strong>。</li>
+        <li><code>${VAR}</code> 缺失会让<strong>整份配置加载失败</strong>（不退化成空值），要容错就写 <code>${VAR:-默认值}</code>；密钥一律走环境变量，不进配置文件。</li>
+        <li>项目级配置默认不加载，信任单位是「文件绝对路径 + 内容指纹」，内容一变即失效；<code>classpath:</code> 形式的项目级路径不受这道闸管辖。</li>
+        <li>未列出的字段永远不会生效；<code>0.1.1</code> 起拼错字段名会多一条 WARN + <code>ConfigWarningEvent</code>，但 <code>vendorBody</code> 与逐插件配置段这些自由格式位置不看。</li>
+        <li>生效方式只有两种：内容类改完敲 <code>/reload</code>；<code>config.json</code>、插件 jar 增删、项目级信任、<code>subAgent</code> 的三个并发键要重启进程。</li>
+      </ol>
+    </div>
+
+    <div class="next-steps">
+      <h2>下一步阅读</h2>
+      <ul>
+        <li>马上要加一个模型 / 换一家厂商：读 <a href="06-models.html">06 models.json 详解</a>，那里有可复制的一份四厂商配置。</li>
+        <li>要限制模型能用哪些工具：读 <a href="07-agents.html">07 agents.json 与工具权限</a>，权限三段与优先级写得很细。</li>
+        <li>想让改动立刻生效：先看 <a href="09-session.html">09 会话与上下文</a> 里 <code>/reload</code> 与会话状态的关系，再看 <a href="11-plugin-usage.html">11 安装与使用官方插件</a> 的插件配置段。</li>
+      </ul>
+    </div>
+
+    <nav class="pager" aria-label="翻页">
+      <a class="prev" href="04-modes.html"><span class="pager-dir">上一页</span>04 三种运行模式</a>
+      <a class="next" href="06-models.html"><span class="pager-dir">下一页</span>06 models.json 详解</a>
+    </nav>
+
+  </main>
+</div>
+
+<footer class="footer">
+  <div class="doc-meta">
+    Jellyfish 使用指南 · 本页依据：<code>Jellyfish/README.md</code>、<code>Jellyfish/CHANGELOG.md</code>、
+    <code>Jellyfish/docs/constraints.md</code>、<code>Jellyfish/jellyfish-cli/src/main/resources/config.json</code>、
+    <code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/</code>（<code>AppConfig</code> /
+    <code>ConfigPaths</code> / <code>PluginPaths</code> / <code>SettingsBinder</code> / <code>SettingsReader</code> /
+    <code>ConfigLoader</code> / <code>RuntimeConfig</code> / <code>ProjectConfigTrust</code> / <code>SamplingSettings</code>）、
+    <code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/support/ObjectMapperWrapper.java</code>、
+    <code>Jellyfish-Spring-Boot-Starter/README.md</code> 等。
+    示例中的密钥、token 一律以占位符表示；<code>【待确认】</code>表示该结论在仓库中未找到出处，请以实际代码为准。
+  </div>
+</footer>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

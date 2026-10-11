@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>01 Jellyfish 是什么 · Jellyfish 使用指南</title>
+<meta name="description" content="一页说清 Jellyfish 的定位：三种形态（-cli / -tui / -server）共享同一个内核、三个仓库各负责什么、能力为什么全在插件里、技术栈与版本号，以及四条「不该用它」的红线。所有结论均标注仓库出处。">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="nav-toggle" id="navToggle" aria-label="切换导航" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">🐙 Jellyfish 使用指南</a>
+  <div class="topbar-tools">
+    <input id="navSearch" type="search" placeholder="搜索页面…" aria-label="搜索页面">
+  </div>
+</header>
+
+<div class="layout">
+
+  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <div class="sidebar-title">文档目录</div>
+    <ul class="nav-list">
+      <li><a href="index.html">首页 · 总览与导航</a></li>
+    </ul>
+    <div class="nav-group">一、入门</div>
+    <ul class="nav-list">
+      <li><a href="01-overview.html" aria-current="page">01 Jellyfish 是什么</a></li>
+      <li><a href="02-install.html">02 安装与环境准备</a></li>
+      <li><a href="03-quickstart.html">03 五分钟快速上手</a></li>
+      <li><a href="04-modes.html">04 三种运行模式</a></li>
+    </ul>
+    <div class="nav-group">二、配置</div>
+    <ul class="nav-list">
+      <li><a href="05-config-overview.html">05 配置体系总览</a></li>
+      <li><a href="06-models.html">06 models.json 详解</a></li>
+      <li><a href="07-agents.html">07 agents.json 与工具权限</a></li>
+    </ul>
+    <div class="nav-group">三、日常使用</div>
+    <ul class="nav-list">
+      <li><a href="08-tools.html">08 内置工具速查</a></li>
+      <li><a href="09-session.html">09 会话与上下文</a></li>
+      <li><a href="10-permissions.html">10 权限与审批</a></li>
+    </ul>
+    <div class="nav-group">四、插件</div>
+    <ul class="nav-list">
+      <li><a href="11-plugin-usage.html">11 安装与使用官方插件</a></li>
+      <li><a href="12-plugin-dev.html">12 从零开发一个插件</a></li>
+      <li><a href="13-plugin-advanced.html">13 插件进阶与发布</a></li>
+    </ul>
+    <div class="nav-group">五、集成与排错</div>
+    <ul class="nav-list">
+      <li><a href="14-spring-boot.html">14 整合到 Spring Boot</a></li>
+      <li><a href="15-troubleshooting.html">15 故障排查</a></li>
+      <li><a href="16-faq.html">16 FAQ 与术语表</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <nav class="breadcrumb" aria-label="面包屑">
+      <span>Jellyfish 使用指南</span><span class="sep">/</span><span>01 Jellyfish 是什么</span>
+    </nav>
+
+    <h1>01 Jellyfish 是什么</h1>
+    <p class="page-sub">
+      这一页不教你敲命令，而是先把「它由哪些部件组成、能力从哪来、什么时候别用它」讲清楚。
+      搞明白了这三件事，后面 15 页里那些「为什么没装插件就不能用」「为什么插件要重启」的疑问会自己消失。
+    </p>
+
+    <section class="goals">
+      <h2>学习目标</h2>
+      <ul>
+        <li>用一句话说出 Jellyfish 的定位，并说出它提供的三种形态；</li>
+        <li>说清三个仓库各自负责什么，以及依赖方向为什么是单向的；</li>
+        <li>判断「我需要装哪些插件」——并知道不装插件会具体缺什么；</li>
+        <li>在 <code>-cli</code> / <code>-tui</code> / <code>-server</code> 之间按使用场景选出合适的那个；</li>
+        <li>说出内核与集成分支的技术栈选型与版本号，并知道去哪一行核对；</li>
+        <li>认清内核的四条边界（单主体、无 GUI、无沙箱、Windows 未验证），知道哪种场景该换方案。</li>
+      </ul>
+    </section>
+
+    <h2>Jellyfish 是什么</h2>
+
+    <p>
+      <strong>一句话定位</strong>：Jellyfish 是一个用 Java 1.8 编写的轻量级 AI Agent 工具——
+      单次问答、交互式终端界面、HTTP 服务三种形态共享同一个内核，能力通过 PF4J 插件扩展。
+    </p>
+
+    <p>
+      它要解决的其实是三件不同的事，而这三件事在命令行工具里经常被硬塞进同一个入口。Jellyfish 的做法是
+      做成三种形态，但<strong>三种形态共享同一个入口与同一份装配，只靠启动参数区分</strong>；
+      一个参数都不带直接运行时等价于 <code>-tui</code>。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>你想做的事</th><th>形态</th><th>启动方式</th><th>结果落在哪</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>问一次、拿一次结果，不需要来回聊（脚本、管道、CI）</td>
+            <td><code>-cli</code> 单次调用</td>
+            <td><code>-cli -p "总结这个项目"</code></td>
+            <td>回答与命令结果走 stdout，诊断与工具进度走 stderr，进程结束即退出</td>
+          </tr>
+          <tr>
+            <td>想跟它来回聊、看工具轨迹、在现场点鼠标审批</td>
+            <td><code>-tui</code> 交互式终端界面（TamboUI）</td>
+            <td><code>-tui</code>（裸跑 <code>jellyfish</code> 等价）</td>
+            <td>终端里的消息区 + 输入框 + 状态栏</td>
+          </tr>
+          <tr>
+            <td>想让它当服务，被别的程序（你的前端、你的后端）调用</td>
+            <td><code>-server</code> HTTP 服务（Undertow）</td>
+            <td><code>-server 9096</code></td>
+            <td>REST + SSE 接口，会话按 id 寻址</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="diagram">
+      <div class="mermaid">
+flowchart TD
+  ENTRY["同一个入口：jellyfish-cli-0.1.1.jar<br/>装配出同一个 JellyfishRuntime"]
+  ENTRY --> CLI["-cli<br/>进一个输入，出一次结果后退出"]
+  ENTRY --> TUI["-tui<br/>TamboUI 终端界面"]
+  ENTRY --> SRV["-server<br/>Undertow 上的 REST + SSE"]
+  CLI --> K["同一个内核：ReAct 循环 · 提示词组装 · 权限判定 · 压缩机制 · 子代理<br/>同一批插件由 PF4J 在启动期加载"]
+  TUI --> K
+  SRV --> K
+      </div>
+    </div>
+    <p class="figure-cap">图 1-1　三种形态不是三个程序：同一份装配、同一个内核，差别只在「输入从哪来、结果往哪去」</p>
+
+    <div class="callout tip">
+      <span class="callout-title">兜底只此一处</span>
+      <p>
+        只有「<strong>一个参数都不带</strong>」才默认 <code>-tui</code>。一旦带了任何参数，模式就必须显式给：
+        <code>jellyfish --verbose</code> 一样报「请指定启动模式」并退 <code>2</code>。
+        这样「敲了没反应」和「悄悄挂在等 stdin」都不会发生。
+      </p>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:1-11（定位与六条特性）、Jellyfish/README.md:108-118（三种运行模式与默认 <code>-tui</code>）、Jellyfish/README.md:140-168（输出与退出码）、Jellyfish/AGENTS.md「项目描述」</div>
+
+    <h2>三个仓库各是什么、怎么配合</h2>
+
+    <p>
+      这套工具被拆成三个 Git 仓库，它们在同一个工作目录并列存在。分工不是「核心 / 周边」，而是
+      <strong>内核只保留机制与契约，能力全部另外交付</strong>——所以「我该不该拉插件仓库」这个问题，
+      答案几乎总是「要」。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>仓库</th><th>角色</th><th>你要不要它</th><th>坐标 / 形态</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>Jellyfish</code></td>
+            <td>内核：三种外壳（<code>-cli</code> / <code>-tui</code> / <code>-server</code>）、装配、扩展点与插件运行时、插件 SPI。工具、命令、权限模式等能力<strong>都不在内核里</strong></td>
+            <td>必然要。它产出唯一的可执行入口 <code>jellyfish-cli-0.1.1.jar</code></td>
+            <td>父 POM 与 <code>jellyfish-api</code> / <code>-infra</code> / <code>-core</code> / <code>-di</code> 发中央仓库，坐标 <code>io.github.zcd0831:jellyfish:0.1.1</code></td>
+          </tr>
+          <tr>
+            <td><code>Jellyfish-Plugins</code></td>
+            <td>官方插件集（13 个：11 个 Java 插件 + 2 个脚本桥接插件）+ 插件开发教程。每个插件是独立打包的 PF4J jar</td>
+            <td>想读文件 / 跑命令 / 存会话就必须装，否则内核近乎空转</td>
+            <td>独立 Maven reactor；插件本身<strong>不发布到中央仓库</strong>，按 <code>cpPlugins.sh</code> 装进内核的插件目录</td>
+          </tr>
+          <tr>
+            <td><code>Jellyfish-Spring-Boot-Starter</code></td>
+            <td>把内核搬进已有的 Spring Boot 容器，并补上内核没有的「用户」维度（带归属校验的多用户门面）</td>
+            <td>只有当你要在自己的 Java 服务里用 agent 才需要</td>
+            <td><code>io.github.zcd0831:jellyfish-spring-boot-starter:0.1.1</code>，依赖内核装配模块 <code>jellyfish-di:0.1.1</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="diagram">
+      <div class="mermaid">
+flowchart LR
+  P["Jellyfish-Plugins<br/>13 个插件 jar"] -.->|"provided 依赖 jellyfish-api<br/>（无编译期依赖）"| API["jellyfish-api<br/>SPI · 扩展点 · 事件模型"]
+  S["Jellyfish-Spring-Boot-Starter"] -->|"Maven 依赖 jellyfish-di"| DI["jellyfish-di<br/>装配层（composition root）"]
+  API --> INFRA["jellyfish-infra"]
+  DI --> INFRA
+  INFRA --> CORE["jellyfish-core"]
+  CORE --> SHELL["jellyfish-cli / -tui / -server<br/>三种外壳"]
+  P -->|"拷进扫描目录，启动期由 PF4J 加载"| SHELL
+  S -->|"交付编程式 API"| APP["你已有的 Spring Boot 应用"]
+      </div>
+    </div>
+    <p class="figure-cap">图 1-2　依赖方向单向：插件只认 <code>jellyfish-api</code> 且是 <code>provided</code>，Starter 只认 <code>jellyfish-di</code>，两者都不反向依赖内核实现</p>
+
+    <div class="callout design">
+      <span class="callout-title">为什么依赖是单向的（这不是洁癖，是交付方式）</span>
+      <ul>
+        <li><strong>插件对 <code>jellyfish-api</code> 是 <code>provided</code></strong>：因此插件可以在内核之外单独构建、单独发版，换内核版本不用重编插件，插件也可以来自第三方。</li>
+        <li><strong>Starter 只依赖 <code>jellyfish-di</code></strong>：它用内核的 <code>JellyfishAssembler</code> 装配，<strong>没有在 Spring 里重建内核组件</strong>——所以它「不改内核」，只换一种装配方式，也不提供任何 HTTP 接口（接口由你写）。</li>
+        <li><strong>装配知识只写一份</strong>：CLI 用 Dagger 组件，不用 Dagger 的容器用 <code>JellyfishAssembler</code>，两种装法交付同一个 <code>JellyfishRuntime</code> 契约。</li>
+      </ul>
+    </div>
+
+    <div class="callout warn">
+      <span class="callout-title">版本号都是 0.1.1，但没有兼容矩阵</span>
+      <p>
+        三个仓库当前都停在 <code>0.1.1</code>，但<strong>没有任何文档声明三者之间的版本兼容矩阵</strong>。
+        凡涉及「哪个内核版本配哪个插件 / Starter 版本」，一律按 <code>【版本对应关系需查阅各自 README】</code> 处理，
+        本套文档不做推测。
+      </p>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:13-22（姊妹仓库表）、Jellyfish/pom.xml:8-11 与 :34-42（坐标与 7 个模块）、Jellyfish/AGENTS.md「技术架构」（模块职责与依赖方向）、Jellyfish-Spring-Boot-Starter/README.md:15-23（它不是什么）、Jellyfish/README.md:1138-1162（内核构件发布范围）、Jellyfish-Plugins/CHANGELOG.md:79（官方插件不发布到中央仓库）</div>
+
+    <h2>能力从哪来：内核只有机制，能力全在插件</h2>
+
+    <p>
+      这是整套设计里最需要先接受的一条：<strong>内核提供的是「怎么把能力接进来」，不是能力本身</strong>。
+      内核交付工具调用框架（权限判定 → 路由 → 截断）、ReAct 循环、提示词组装、压缩<em>机制</em>、
+      子代理调度、命令域与三种外壳；而文件读写、跑命令、会话持久化、待办、MCP、编排、plan 模式
+      这些「能干活」的东西，全在插件仓库里。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>能力</th><th>谁提供</th><th>依据</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>工具调用框架（权限 → 路由 → 截断的唯一执行点）、ReAct 循环、提示词组装、上下文裁剪、压缩机制、子代理调度与配额、命令域、三种外壳</td>
+            <td>内核</td>
+            <td>Jellyfish/AGENTS.md「技术架构」「关键不变量」</td>
+          </tr>
+          <tr>
+            <td><strong>唯一的工具 <code>task</code></strong>（把子任务委派给子代理，只拿回结论）</td>
+            <td>内核（以 <code>owner=core</code> 注册）</td>
+            <td>Jellyfish/docs/constraints.md:842（<code>task</code> 由 <code>core/subagent/SubAgentTools</code> 注册）、<code>TaskTool.java</code> 的 <code>NAME = "task"</code></td>
+          </tr>
+          <tr>
+            <td>系统命令：<code>/help</code> <code>/new</code> <code>/session</code> <code>/resume</code> <code>/model</code> <code>/agent</code> <code>/status</code> <code>/usage</code> <code>/delete</code> <code>/compact</code> <code>/reload</code></td>
+            <td>内核（以 <code>owner=core</code> 注册）</td>
+            <td>Jellyfish/README.md:367-386、Jellyfish/docs/constraints.md:840</td>
+          </tr>
+          <tr>
+            <td>文件工具 <code>read_file</code> / <code>write_file</code> / <code>edit_file</code> / <code>list_dir</code> / <code>grep_files</code>、提问工具 <code>ask_user</code>、输入框 <code>@</code> 文件引用、路径闸门 <code>pathPolicy</code></td>
+            <td><code>jellyfish-plugin-tools</code></td>
+            <td>Jellyfish-Plugins/README.md:48-67（插件一览）</td>
+          </tr>
+          <tr>
+            <td><code>shell</code> 工具 + 命令策略 + <code>!命令</code> 输入指令</td>
+            <td><code>jellyfish-plugin-shell</code></td>
+            <td>Jellyfish-Plugins/README.md:163-190</td>
+          </tr>
+          <tr>
+            <td>会话持久化：一个会话一个 JSON 文件，并用 git 管理历史</td>
+            <td><code>jellyfish-plugin-session-file</code></td>
+            <td>Jellyfish-Plugins/README.md:254-265</td>
+          </tr>
+          <tr>
+            <td>压缩<strong>策略</strong>（摘要指令 + 保留条数 / 摘要上限）——<strong>不装它就没有压缩</strong></td>
+            <td><code>jellyfish-plugin-compact</code></td>
+            <td>Jellyfish-Plugins/README.md:48-67、Jellyfish/README.md:405-422</td>
+          </tr>
+          <tr>
+            <td>会话待办五个工具 + <code>/todo</code>；项目约定 <code>AGENTS.md</code> 探测 + <code>/init</code>；skills；MCP 客户端；<code>workflow</code> 编排；plan 模式；资源监控 <code>/resmon</code></td>
+            <td><code>jellyfish-plugin-todo</code> / <code>-project</code> / <code>-skills</code> / <code>-mcp</code> / <code>-workflow</code> / <code>-plan</code> / <code>-resmon</code></td>
+            <td>Jellyfish-Plugins/README.md:48-67</td>
+          </tr>
+          <tr>
+            <td>Python / Node 脚本插件运行时（把 <code>scripts/&lt;lang&gt;/&lt;id&gt;/</code> 下的脚本目录变成标准插件）</td>
+            <td><code>jellyfish-plugin-python</code> / <code>jellyfish-plugin-node</code>（共用库 <code>jellyfish-script</code>）</td>
+            <td>Jellyfish-Plugins/README.md:48-67、:715-742</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="feature">
+      <h3>内核自带的唯一工具：<code>task</code>（子代理委派）</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          把一段<strong>自足的子任务</strong>委派给另一个 agent 去做，只拿回它的最终结论——噪音（读了多少文件、
+          试了多少次）留在那边。这是内核<strong>唯一</strong>自带的工具，其余工具都由插件注册。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          不需要写代码：在 <code>agents.json</code> 里给目标 agent 标上 <code>delegatable: true</code>，
+          它才会出现在模型看到的可用类型清单里；然后正常提问，由模型决定要不要委派。
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>agents.&lt;agentId&gt;.delegatable</td>
+              <td>boolean</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>false</code></td>
+              <td>这个 agent 能不能被 <code>task</code> 当作委派目标；不配就不出现在模型看到的可用类型清单里</td>
+              <td><code>true</code></td>
+            </tr>
+            <tr>
+              <td>agents.&lt;agentId&gt;.model</td>
+              <td>string</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>未配即<strong>回落全局默认模型</strong>：<code>models.json</code> 的 <code>defaultProvider</code> / <code>defaultModel</code></td>
+              <td>子代理自己的偏好模型，<strong>不继承主会话的模型</strong>；写法与 <code>/model</code> 参数一致</td>
+              <td><code>openai/gpt-4o-mini</code></td>
+            </tr>
+            <tr>
+              <td>agents.&lt;agentId&gt;.permissions.allowedTools</td>
+              <td>string[]</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>未写 = 不限制</td>
+              <td>同时决定<strong>子代理能看到哪些工具</strong>（只随委派生效，主会话不受影响）</td>
+              <td><code>["read_file", "list_dir", "grep_files"]</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>完整示例</strong></p>
+      <pre><code class="language-json">{
+  "agents": {
+    "scout": {
+      "description": "只读摸清相关代码，只回传结论",
+      "delegatable": true,
+      "model": "openai/gpt-4o-mini",
+      "permissions": {
+        "allowedTools": ["read_file", "list_dir", "grep_files"]
+      }
+    }
+  }
+}</code></pre>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>为什么模型从不用它？</strong>目标 agent 没写 <code>delegatable: true</code>——它不会出现在模型看到的清单里。</li>
+        <li><strong>为什么子代理答得答非所问？</strong>子代理与主会话除了那段任务之外相互隔离（看不到对话历史、你看过哪些文件），任务描述必须自足。</li>
+        <li><strong>子代理花掉的 token 算谁的？</strong>计入父会话（<code>/usage</code> 看得到），但子代理的会话不留痕（不落盘、不进 <code>/session</code> 列表）。</li>
+      </ul>
+      <p>
+        <span class="tag hot">/reload 生效</span>——题目里说的是 <code>agents.json</code> 的内容改动；
+        插件 jar 的增删另说（见 <a href="02-install.html">02 安装</a>）。
+      </p>
+    </div>
+    <div class="src-block">Jellyfish/README.md:424-456（委派给子代理）、Jellyfish/README.md:690-745（<code>agents.json</code> 字段与工具权限）、Jellyfish/docs/constraints.md:840-843（系统命令与 <code>task</code> 的注册 owner）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/subagent/TaskTool.java:46-47（<code>NAME = "task"</code>）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/model/SessionModelResolver.java:15-20 与 :27-29（模型解析三级：会话显式选定 → agent 偏好模型 → 全局默认；agent 没配则落到全局默认）、:84-92（<code>resolveByAgentOrDefault</code>：偏好模型为空即 <code>resolveDefault()</code>）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/model/ModelManager.java:342-356（<code>resolveDefault</code> 读的就是 <code>models.json</code> 的 <code>defaultProvider</code> / <code>defaultModel</code>）</div>
+
+    <div class="callout pitfall">
+      <span class="callout-title">不装插件会缺什么：别把「设计」当成「装坏了」</span>
+      <ul>
+        <li><strong>工具几乎全无</strong>：内核只注册 <code>task</code>，而 <code>task</code> 还要求你对某个 agent 配了
+          <code>delegatable: true</code>。因此「只装内核」时，模型既读不了文件也跑不了命令——你看到的是配置现场，不是故障。</li>
+        <li><strong>会话不落盘</strong>：会话持久化在 <code>jellyfish-plugin-session-file</code>。
+          装了它，<code>--session</code> / <code>/resume</code> / <code>/session</code> 才有内容可恢复。</li>
+        <li><strong>压缩整体不可用</strong>：压缩是插件能力、内核只提供机制，<strong>没有策略插件即整体不可用，不回退内置</strong>；
+          <code>/compact</code> 会直接告诉你缺什么。</li>
+        <li><strong>命令仍然能用</strong>：11 个系统命令来自内核，不需要模型也不需要插件；
+          <code>/compact</code> 是唯一的例外（依赖压缩策略插件）。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:19-21（插件不在本仓库）、Jellyfish/README.md:458-480（插件一节：扫描目录、扩展点、能做什么）、Jellyfish/AGENTS.md「关键不变量」（压缩是插件能力）、Jellyfish/README.md:1077-1079（没配模型会怎样）</div>
+
+    <h2>三种形态分别适合谁</h2>
+
+    <p>
+      选形态看两件事：<strong>有没有人在场</strong>（决定审批和提问能不能成立）和<strong>结果要交给谁</strong>
+      （人看屏幕，还是程序拿走）。参数细节、按键、退出码在 <a href="04-modes.html">04 三种运行模式</a> 一页里，
+      这里只给选择依据。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>形态</th><th>适合谁 / 什么场景</th><th>适合的表现</th><th>不适合的后果</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>-cli</code></td>
+            <td>脚本、管道、CI、一次性问答；想把它塞进别的自动化流程</td>
+            <td>输入走 <code>-p</code> 或 stdin，结果在 stdout，退出码可判；<code>&gt;</code> 重定向安全</td>
+            <td><strong>没有审批者</strong>：<code>askTools</code> 里的工具一律按拒绝处理；<code>ask_user</code> 也不挂答复者，立刻返回一句「当前外壳没有交互界面」</td>
+          </tr>
+          <tr>
+            <td><code>-tui</code></td>
+            <td>你本人坐在终端前，要来回聊、要现场看工具轨迹、要人工审批</td>
+            <td>审批弹框（<code>↑</code>/<code>↓</code> 选、<code>Enter</code> 确认、<code>Esc</code> 拒绝并中断回合）；<code>Ctrl+T</code> 看思考、<code>Ctrl+E</code> 看工具参数</td>
+            <td>需要可交互终端；管道 / CI / 被重定向的 shell / IDE 的非真终端控制台都会退 <code>3</code></td>
+          </tr>
+          <tr>
+            <td><code>-server</code></td>
+            <td>让别的程序驱动 agent：自己的前端、内部平台、需要把会话按 id 寻址的服务端程序</td>
+            <td>REST + SSE；审批走 <code>POST /sessions/{id}/approvals/{requestId}</code>，提问走 <code>POST /sessions/{id}/asks/{requestId}</code></td>
+            <td><strong>是单主体模型</strong>：一个 API key 就是一个信任域，别拿它做多租户（见下文红线）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">选不出来时的默认答案</span>
+      <p>
+        有人在场、要动手改文件：<code>-tui</code>。无人值守、只要一个答案：<code>-cli -p</code>。
+        要给别的程序调：<code>-server</code>；但如果那个程序本身就是个 Spring Boot 应用，
+        先看 <a href="14-spring-boot.html">14 整合到 Spring Boot</a>——starter 直接给编程式 API，
+        比你自己起一个 HTTP 外壳再调它更短。
+      </p>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:108-118（模式与默认）、Jellyfish/README.md:120-138（参数表）、Jellyfish/README.md:140-168（输出与退出码）、Jellyfish/README.md:690-745（三种外壳下的审批行为）、Jellyfish/README.md:993-1074（Server 模式）、Jellyfish/README.md:1081-1092（常见问题：TUI 退 3、cli 下工具被拒、cli 下 <code>ask_user</code>）</div>
+
+    <h2>技术栈与版本</h2>
+
+    <p>
+      下表每一行都给了出处，方便你在升级前自己去那一行核对。统一的前提是：
+      <strong>运行环境 JDK 1.8，不要使用 Java 9+ 的 API 或语法</strong>。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>组件</th><th>选型 / 版本</th><th>说明</th><th>出处</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Java</td>
+            <td><code>1.8</code></td>
+            <td>源码与目标版本都是 1.8；<strong>运行只需 JRE 8+</strong></td>
+            <td>Jellyfish/pom.xml:56-59（<code>java.version</code> / compiler source / target）、Jellyfish/README.md:23-27</td>
+          </tr>
+          <tr>
+            <td>Maven</td>
+            <td><code>3.2.5</code> 以上</td>
+            <td>构建用；打包插件的版本线以此为准</td>
+            <td>Jellyfish/README.md:23-27、Jellyfish-Plugins/README.md:14-21</td>
+          </tr>
+          <tr>
+            <td>构建结构</td>
+            <td>Maven 多模块（根 <code>packaging=pom</code>，7 个子模块）</td>
+            <td><code>api / infra / core / tui / server / di / cli</code>；依赖方向单向，禁止反向或循环</td>
+            <td>Jellyfish/pom.xml:34-42、Jellyfish/AGENTS.md「技术架构」</td>
+          </tr>
+          <tr>
+            <td>插件运行时</td>
+            <td>PF4J <code>3.14.1</code></td>
+            <td>一个 jar 一个 <code>plugin.properties</code>；启动期扫描加载</td>
+            <td>Jellyfish/pom.xml:77、:172-175、Jellyfish-Plugins/AGENTS.md「项目描述」</td>
+          </tr>
+          <tr>
+            <td>TUI</td>
+            <td><code>dev.tamboui:tamboui-bom:0.5.0-SNAPSHOT</code></td>
+            <td>TamboUI 界面；<code>jellyfish-tui</code> 依赖的 SNAPSHOT 是它<strong>不发布到中央仓库</strong>的原因</td>
+            <td>Jellyfish/pom.xml:140-145、Jellyfish/README.md:1138-1145</td>
+          </tr>
+          <tr>
+            <td>HTTP 外壳</td>
+            <td><code>io.undertow:undertow-core:2.2.40.Final</code></td>
+            <td>只用 <code>undertow-core</code> 自带的 <code>HttpHandler</code>，不引 <code>undertow-servlet</code></td>
+            <td>Jellyfish/pom.xml:66-75、:151-154</td>
+          </tr>
+          <tr>
+            <td>装配</td>
+            <td>Dagger <code>2.16</code> + 手工装配工厂 <code>JellyfishAssembler</code></td>
+            <td>两种装法交付同一个 <code>JellyfishRuntime</code> 契约；新增绑定两处都要改</td>
+            <td>Jellyfish/pom.xml:61、Jellyfish/AGENTS.md「技术架构」</td>
+          </tr>
+          <tr>
+            <td>HTTP 客户端</td>
+            <td>OkHttp <code>4.12.0</code></td>
+            <td><code>jellyfish-di</code> 的依赖之一</td>
+            <td>Jellyfish/pom.xml:76、:158-161、Jellyfish/AGENTS.md「技术架构」（<code>jellyfish-di</code> 依赖行）</td>
+          </tr>
+          <tr>
+            <td>集成环境（仅 Starter）</td>
+            <td>Spring Boot <code>2.7</code>（已在 <code>2.7.18</code> 上验过）</td>
+            <td>starter <strong>不依赖</strong> <code>spring-boot-starter-web</code>，不会替你决定 Web 技术选型</td>
+            <td>Jellyfish-Spring-Boot-Starter/README.md:15-23、:38-45</td>
+          </tr>
+          <tr>
+            <td>三个仓库的版本号</td>
+            <td>都是 <code>0.1.1</code></td>
+            <td>产物名里的版本号也带它，例如 <code>jellyfish-cli-0.1.1.jar</code></td>
+            <td>Jellyfish/pom.xml:8-11、Jellyfish-Spring-Boot-Starter/README.md:44-46、cpPlugins.sh 各行 jar 文件名</td>
+          </tr>
+          <tr>
+            <td>三者之间的兼容矩阵</td>
+            <td><code>【版本对应关系需查阅各自 README】</code></td>
+            <td>没有任何文档声明「哪个内核版本配哪个插件 / Starter 版本」</td>
+            <td>本套文档的写作规范：<code>Jellyfish-Docs/guide/_authoring-spec.md</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="src-block">Jellyfish/pom.xml 各 <code>*version</code> 属性与 <code>dependencyManagement</code> 段、Jellyfish/README.md:23-27 与 :1138-1145、Jellyfish/AGENTS.md「技术架构」、Jellyfish-Plugins/AGENTS.md「项目描述」、Jellyfish-Spring-Boot-Starter/README.md:15-45</div>
+
+    <h2>先认几个词</h2>
+
+    <p>
+      后面每一页都会用到这七个词。这里每个给一句话，够你读懂本页与下一批页面；
+      完整术语表（含 <code>run</code> / <code>spill</code> / 扩展点分类等）在
+      <a href="16-faq.html">16 FAQ 与术语表</a>。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>词</th><th>一句话</th><th>出处</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>agent</code></td>
+            <td>一套「系统提示词 + 工具权限 + 可选偏好模型」的命名配置：写在 <code>agents.json</code> 里，系统提示词来自同目录的 <code>{agentId}.md</code>。</td>
+            <td>Jellyfish/README.md:690-745</td>
+          </tr>
+          <tr>
+            <td><code>session</code>（会话）</td>
+            <td>一次对话的载体：<code>/new</code> 新建、<code>/resume</code> 切换、<code>/delete</code> 删除；<strong>不装持久化插件就不落盘</strong>。</td>
+            <td>Jellyfish/README.md:367-386、Jellyfish-Plugins/README.md:254-265</td>
+          </tr>
+          <tr>
+            <td><code>turn</code>（回合）</td>
+            <td>一次 <code>chat</code> 调用 = 一个回合，<strong>回合边界由外壳决定</strong>；一个回合内可以有多轮模型调用与工具调用（受 <code>react.maxRounds</code> 约束，缺省 16）。</td>
+            <td>Jellyfish/docs/constraints.md:214、Jellyfish/README.md:839</td>
+          </tr>
+          <tr>
+            <td><code>tool</code>（工具）</td>
+            <td>模型可以调用的能力，<strong>全部由插件注册</strong>（内核只注册 <code>task</code>），每次调用都过权限判定。</td>
+            <td>Jellyfish/README.md:1-11、:458-480、Jellyfish/docs/constraints.md:842</td>
+          </tr>
+          <tr>
+            <td>插件（<code>plugin</code>）</td>
+            <td>独立打包的 PF4J jar，与内核<strong>没有编译期依赖</strong>，只经 <code>jellyfish-api</code> 的 SPI 交互，由内核在启动期扫描加载。</td>
+            <td>Jellyfish/README.md:458-461、Jellyfish-Plugins/README.md:1-11</td>
+          </tr>
+          <tr>
+            <td>扩展点（extension point）</td>
+            <td>插件接入内核的同步契约：工具、命令、提示词贡献、权限拦截、会话持久化 / 恢复、压缩策略、UI 贡献、输入指令走同步扩展点；轮次与会话等通知走异步事件通道。</td>
+            <td>Jellyfish/README.md:458-481（插件一节）</td>
+          </tr>
+          <tr>
+            <td><code>owner</code></td>
+            <td>注册表里的归属标识：内核自带的注册用 <code>core</code>，插件用 <code>pluginId</code>，也可以是 <code>pluginId::子标识</code> 这样的命名空间——插件停止时按 owner 前缀一次回收干净。</td>
+            <td>Jellyfish/docs/constraints.md:265-290（覆盖是一条链、owner 与命名空间）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:690-745（<code>agents.json</code>）、Jellyfish/README.md:367-386（常用命令）、Jellyfish/README.md:458-481（插件与扩展点）、Jellyfish/docs/constraints.md:214（回合边界）、:265-290（owner 与命名空间）、:842（<code>task</code> 的 owner）、Jellyfish-Plugins/README.md:1-11 与 :254-265（插件定义与会话持久化）</div>
+
+    <h2>什么场景不该用它</h2>
+
+    <p>
+      下面这些不是「配置一下就能解决」的问题，而是内核的边界。踩上去会拿到错误的安全感，
+      所以放在入门页就说明白。
+    </p>
+
+    <div class="callout danger">
+      <span class="callout-title">红线一：不要拿 <code>-server</code> 当多租户服务</span>
+      <p>
+        <strong>服务端是单主体模型：一个 API key 就是一个信任域，内核不认识「哪个调用方」。</strong>
+        更具体地说，内核<strong>没有「用户」概念</strong>——<code>Session</code> 无 owner 字段、
+        <code>SessionManager.all()</code> 返回全进程会话、插件也不做用户隔离。
+        按调用方区分的会话归属与审批归属只存在于 Spring starter 的 <code>user</code> 包里
+        （<code>SessionOwnerStore</code> / <code>ApprovalGateway</code>，那里有 <code>userId</code> 概念）。
+      </p>
+      <p>
+        而且命令域与对话域<strong>同权</strong>：<code>POST /sessions/{id}/commands</code> 能执行 <code>/reload</code> 等系统命令，
+        因此<strong>密钥泄露等于整机权限泄露</strong>。要做按用户隔离，请改用
+        <a href="14-spring-boot.html">14 整合到 Spring Boot</a> 的护栏，不要在本服务前面自己加一层代理。
+      </p>
+    </div>
+
+    <div class="callout danger">
+      <span class="callout-title">红线二：涉密或多用户环境里不要随手装 <code>shell</code> / <code>mcp</code> / 脚本桥接</span>
+      <p>
+        <code>shell</code> 插件<strong>没有沙箱</strong>：命令以本进程的权限运行，能读写你这个用户的任意文件；
+        它<strong>不做目录围栏</strong>（围栏可被 <code>cd /</code>、绝对路径、<code>sh -c</code> 嵌套绕过，
+        真正的边界是审批加白名单），而且<strong>Windows 未验证</strong>（非 POSIX 平台映射成 <code>cmd.exe /c</code>，
+        但没有在真机上跑过）。<code>shell</code>、<code>mcp</code>、<code>python</code> / <code>node</code> 桥接
+        <strong>都不做用户隔离</strong>，装进多租户进程等于把所有用户放进同一个权限面。
+      </p>
+    </div>
+
+    <div class="callout warn">
+      <span class="callout-title">边界三：它是终端工具，不是 GUI，也不是文件系统沙箱</span>
+      <ul>
+        <li><strong>没有桌面 / 图形界面</strong>：内核仓库的 7 个模块里只有终端与 HTTP 两种呈现方式
+          （<code>jellyfish-tui</code> / <code>jellyfish-server</code> / <code>jellyfish-cli</code>），
+          最接近「客户端」的 <code>-tui</code> <strong>需要可交互终端</strong>——stdin 或 stdout 被重定向也算没有，
+          此时退 <code>3</code>（这是有意的：否则 TamboUI 会永久挂住）。要图形界面得自己接 <code>-server</code> 或 starter。</li>
+        <li><strong>文件工具的路径闸门不是沙箱</strong>：<code>pathPolicy</code> 管的是本插件那几个文件工具的
+          <code>path</code> 参数，<strong>管不了 <code>shell</code> 命令里出现的路径，也管不了 MCP 工具</strong>。</li>
+        <li><strong>权限按 <code>agentId</code> 全局共享</strong>：同一个 agent 对不同用户只能有同一套权限；
+          要区分角色就为每个角色定义一个 <code>agentId</code>，建会话时按角色选。</li>
+      </ul>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">那什么时候该用它</span>
+      <p>
+        反过来看就清楚了：<strong>单主体、你已经信任这台机器和你自己的密钥</strong>的场景——
+        本机开发助手、代码库探索、把一段重复的问答流程写进脚本、给内部工具加一个「能读文件能跑命令」的 agent。
+        这些正是它设计时瞄的目标。
+      </p>
+    </div>
+
+    <div class="src-block">Jellyfish/docs/constraints.md:1125-1133（服务端单主体模型与命令域同权）、Jellyfish/README.md:1063-1067（服务端是单主体模型）、Jellyfish-Spring-Boot-Starter/README.md:341-350 与 :420-431（多用户护栏与使用限制：<code>Session</code> 无 owner 字段、涉密能力不要装进多租户进程）、Jellyfish-Plugins/README.md:159-162 与 :163-166、:238-245（路径闸门不是沙箱、shell 无沙箱、不做目录围栏、Windows 未验证）、Jellyfish/README.md:23-27 与 :1081-1092（终端要求与 TUI 退 3）、Jellyfish/pom.xml:34-42（模块列表）</div>
+
+    <div class="conclusion">
+      <h2>关键结论</h2>
+      <ol>
+        <li>Jellyfish 的定位是「<strong>Java 1.8 的轻量级 AI Agent 工具</strong>」：三种形态（<code>-cli</code> / <code>-tui</code> / <code>-server</code>）共享同一个入口、同一份装配、同一个内核，只靠启动参数区分；只有「一个参数都不带」才默认 <code>-tui</code>。</li>
+        <li>三个仓库是单向依赖：插件对 <code>jellyfish-api</code> 是 <code>provided</code>（可独立构建发版），Starter 只依赖 <code>jellyfish-di</code>（复用内核装配，不在 Spring 里重建组件）。</li>
+        <li><strong>内核只有机制，能力全在插件</strong>：内核自带的工具只有 <code>task</code>（还需 <code>delegatable: true</code> 的 agent 才用得上），文件工具、<code>shell</code>、会话持久化、压缩策略全在 <code>Jellyfish-Plugins</code>；不装插件不是故障，是设计。</li>
+        <li>选形态看「有没有人在场」：<code>-cli</code> 无审批者（<code>askTools</code> 一律按拒绝处理），<code>-tui</code> 需要真终端，<code>-server</code> 给自己写客户端用。</li>
+        <li>技术栈的硬前提是 <strong>JDK 1.8</strong>（不要用 Java 9+ 的 API 或语法），插件运行时 PF4J 3.14.1，TUI 是 TamboUI SNAPSHOT，HTTP 外壳是 undertow-core 2.2.40.Final，三个仓库版本号都是 0.1.1——但<strong>没有兼容矩阵</strong>，涉版本问题一律 <code>【版本对应关系需查阅各自 README】</code>。</li>
+        <li>四条边界要记住：<strong>单主体</strong>（一个 key 一个信任域、<code>Session</code> 无 owner 字段，别做多租户）、<strong>shell 无沙箱</strong>、<strong>Windows 未验证</strong>、<strong>无 GUI</strong>（只有终端与 HTTP 两种呈现）。</li>
+        <li>本页所有命令、字段、类名都标了 <code>文件:行号</code> 出处；查不到的会写成 <code>【待确认】</code>，读到时请先去仓库核对再动手。</li>
+      </ol>
+    </div>
+
+    <div class="next-steps">
+      <h2>下一步阅读</h2>
+      <ul>
+        <li><a href="02-install.html">02 安装与环境准备</a>——现在去把它装起来：JDK 8 / Maven、源码构建出 fat jar、装插件，并用一条不需要模型的命令验证。</li>
+        <li><a href="04-modes.html">04 三种运行模式</a>——如果你想直接知道参数、按键与退出码的完整清单，可以直接跳这里。</li>
+        <li><a href="16-faq.html">16 FAQ 与术语表</a>——本页只给了一句话术语，遇到 <code>run</code> / <code>spill</code> / 扩展点分类这类词时回来查。</li>
+      </ul>
+    </div>
+
+    <nav class="pager" aria-label="翻页">
+      <a class="prev" href="index.html"><span class="pager-dir">上一页</span>首页 · 总览与导航</a>
+      <a class="next" href="02-install.html"><span class="pager-dir">下一页</span>02 安装与环境准备</a>
+    </nav>
+
+  </main>
+</div>
+
+<footer class="footer">
+  <div class="doc-meta">
+    Jellyfish 使用指南 · 本页依据：<code>Jellyfish/README.md</code>、<code>Jellyfish/AGENTS.md</code>、
+    <code>Jellyfish/pom.xml</code>、<code>Jellyfish/docs/constraints.md</code>、<code>Jellyfish-Plugins/README.md</code>、
+    <code>Jellyfish-Plugins/AGENTS.md</code>、<code>Jellyfish-Plugins/CHANGELOG.md</code>、
+    <code>Jellyfish-Spring-Boot-Starter/README.md</code>、<code>Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/subagent/TaskTool.java</code> 等。
+    示例中的密钥、token 一律以占位符表示；<code>【待确认】</code>表示该结论在仓库中未找到出处，请以实际代码为准。
+  </div>
+</footer>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

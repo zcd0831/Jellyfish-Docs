@@ -1,0 +1,1309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>08 内置工具速查 · Jellyfish 使用指南</title>
+<meta name="description" content="Jellyfish 全部内置工具速查：内核自带的 task，tools 插件的 read_file / write_file / edit_file / list_dir / grep_files / ask_user，shell、todo、skills、workflow、MCP 各插件提供的工具，每个工具的参数字段表、完整调用示例与限制，以及 tools 插件 pathPolicy 路径闸门的字段表与口径。">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="nav-toggle" id="navToggle" aria-label="切换导航" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">🐙 Jellyfish 使用指南</a>
+  <div class="topbar-tools">
+    <input id="navSearch" type="search" placeholder="搜索页面…" aria-label="搜索页面">
+  </div>
+</header>
+
+<div class="layout">
+
+  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <div class="sidebar-title">文档目录</div>
+    <ul class="nav-list">
+      <li><a href="index.html">首页 · 总览与导航</a></li>
+    </ul>
+    <div class="nav-group">一、入门</div>
+    <ul class="nav-list">
+      <li><a href="01-overview.html">01 Jellyfish 是什么</a></li>
+      <li><a href="02-install.html">02 安装与环境准备</a></li>
+      <li><a href="03-quickstart.html">03 五分钟快速上手</a></li>
+      <li><a href="04-modes.html">04 三种运行模式</a></li>
+    </ul>
+    <div class="nav-group">二、配置</div>
+    <ul class="nav-list">
+      <li><a href="05-config-overview.html">05 配置体系总览</a></li>
+      <li><a href="06-models.html">06 models.json 详解</a></li>
+      <li><a href="07-agents.html">07 agents.json 与工具权限</a></li>
+    </ul>
+    <div class="nav-group">三、日常使用</div>
+    <ul class="nav-list">
+      <li><a href="08-tools.html" aria-current="page">08 内置工具速查</a></li>
+      <li><a href="09-session.html">09 会话与上下文</a></li>
+      <li><a href="10-permissions.html">10 权限与审批</a></li>
+    </ul>
+    <div class="nav-group">四、插件</div>
+    <ul class="nav-list">
+      <li><a href="11-plugin-usage.html">11 安装与使用官方插件</a></li>
+      <li><a href="12-plugin-dev.html">12 从零开发一个插件</a></li>
+      <li><a href="13-plugin-advanced.html">13 插件进阶与发布</a></li>
+    </ul>
+    <div class="nav-group">五、集成与排错</div>
+    <ul class="nav-list">
+      <li><a href="14-spring-boot.html">14 整合到 Spring Boot</a></li>
+      <li><a href="15-troubleshooting.html">15 故障排查</a></li>
+      <li><a href="16-faq.html">16 FAQ 与术语表</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <nav class="breadcrumb" aria-label="面包屑">
+      <span>Jellyfish 使用指南</span><span class="sep">/</span><span>08 内置工具速查</span>
+    </nav>
+
+    <h1>08 内置工具速查</h1>
+    <p class="page-sub">
+      工具是模型唯一能「动手」的地方。这一页按「工具从哪来」分组，把每个工具的名字、参数、限制与调用示例列全。
+      最重要的一个认识是：<strong>绝大多数工具不在内核里，而在插件里</strong>——不装插件，内核只给你一个 <code>task</code>。
+      本页的每个工具名与参数名都逐字来自仓库 README 与源码，可以直接拿去写 <a href="07-agents.html">07 页</a>的权限名单。
+    </p>
+
+    <section class="goals">
+      <h2>学习目标</h2>
+      <ul>
+        <li>说清一个工具来自哪里（内核 / 哪个插件 / MCP），并知道「只读」不是工具自己声明的；</li>
+        <li>查到一个工具的参数名、类型、必填与默认值，并写出一次正确的调用；</li>
+        <li>知道每个工具各自的硬性限制（单行超限、匹配多处、耗时上限、UTF-8 限制……），避免撞上报错才去找原因；</li>
+        <li>理解 <code>shell</code> 的四个反直觉行为：全新 shell、stdin 关闭、合并输出、非零退出码不算错误；</li>
+        <li>会用 <code>todo_*</code> 五个工具与它们的状态取值；</li>
+        <li>会配 <code>pathPolicy</code> 路径闸门，知道它「是什么、不是什么」；</li>
+        <li>知道怎么让某个工具不出现、怎么让某个工具必须审批。</li>
+      </ul>
+    </section>
+
+    <h2>工具从哪来</h2>
+
+    <div class="diagram">
+      <div class="mermaid">
+flowchart LR
+  K["内核（jellyfish-core）<br/>只有 task 一个"] --> L["模型看到并调用的工具清单"]
+  P["官方插件<br/>tools / shell / todo / skills / workflow"] --> L
+  M["MCP server<br/>工具名带 mcp__ 前缀"] --> L
+  L --> C["能不能调、要不要审批<br/>由 agents.json 的三段名单决定"]
+      </div>
+    </div>
+    <p class="figure-cap">图 8-1　工具的三个来源；来源决定「要装什么」，权限决定「能不能调」</p>
+
+    <p>完整清单如下（只读一列的口径见表格下方说明）：</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>工具名</th><th>归属</th><th>一句话作用</th><th>是否只读</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>task</code></td>
+            <td>内核自带</td>
+            <td>把一段自足的子任务委派给子代理，只拿回它的最终结论</td>
+            <td>不声明。能否在 plan 模式下放行由你写的 <code>readOnlyTools</code> 决定</td>
+          </tr>
+          <tr>
+            <td><code>read_file</code></td>
+            <td>tools 插件</td>
+            <td>按行分片读取文本文件</td>
+            <td>README 把它归读类；实际放行仍由你写的名单决定</td>
+          </tr>
+          <tr>
+            <td><code>write_file</code></td>
+            <td>tools 插件</td>
+            <td>整文件覆盖写（UTF-8），父目录自动创建</td>
+            <td>归写类</td>
+          </tr>
+          <tr>
+            <td><code>edit_file</code></td>
+            <td>tools 插件</td>
+            <td>字面量精确替换一段原文；匹配多处时要求显式声明 <code>replace_all</code></td>
+            <td>归写类</td>
+          </tr>
+          <tr>
+            <td><code>list_dir</code></td>
+            <td>tools 插件</td>
+            <td>列举一个目录的直接子项（不递归），可分页</td>
+            <td>README 把它归读类；实际放行仍由你写的名单决定</td>
+          </tr>
+          <tr>
+            <td><code>grep_files</code></td>
+            <td>tools 插件</td>
+            <td>在文件或目录树中按正则逐行搜索，返回「文件:行号:该行内容」</td>
+            <td>README 把它归读类；实际放行仍由你写的名单决定</td>
+          </tr>
+          <tr>
+            <td><code>ask_user</code></td>
+            <td>tools 插件</td>
+            <td>把一个问题连同 2~6 个候选项摆到用户面前，等他选一个或自己填</td>
+            <td>不碰路径因此不受 <code>pathPolicy</code> 管；也不是审批</td>
+          </tr>
+          <tr>
+            <td><code>shell</code></td>
+            <td>shell 插件</td>
+            <td>在本机执行一条 shell 命令并返回输出。<strong>没有沙箱</strong></td>
+            <td>不声明（它自己的分类器另有一套命令级只读表）</td>
+          </tr>
+          <tr>
+            <td><code>todo_write</code></td>
+            <td>todo 插件</td>
+            <td>创建或更新本会话的待办清单（整表覆盖）</td>
+            <td>不声明；plan 模式下并不自动可用</td>
+          </tr>
+          <tr>
+            <td><code>todo_claim</code></td>
+            <td>todo 插件</td>
+            <td>子代理认领一条还没人做的待办</td>
+            <td>不声明；plan 模式下并不自动可用</td>
+          </tr>
+          <tr>
+            <td><code>todo_done</code></td>
+            <td>todo 插件</td>
+            <td>把一条待办标成完成</td>
+            <td>不声明；plan 模式下并不自动可用</td>
+          </tr>
+          <tr>
+            <td><code>todo_release</code></td>
+            <td>todo 插件</td>
+            <td>把一条待办放回去（清认领、回未开始）</td>
+            <td>不声明；plan 模式下并不自动可用</td>
+          </tr>
+          <tr>
+            <td><code>todo_block</code></td>
+            <td>todo 插件</td>
+            <td>把一条待办记成「卡住」，并写下原因</td>
+            <td>不声明；plan 模式下并不自动可用</td>
+          </tr>
+          <tr>
+            <td><code>skill</code></td>
+            <td>skills 插件</td>
+            <td>按需加载一份 <code>SKILL.md</code> 的正文</td>
+            <td><strong>只读</strong>（README 明写：读一份说明不该需要写权限）</td>
+          </tr>
+          <tr>
+            <td><code>workflow</code></td>
+            <td>workflow 插件</td>
+            <td>按一份声明式 spec 编排多个子代理并聚合结果</td>
+            <td>不声明。它只派生 run，不改文件本身</td>
+          </tr>
+          <tr>
+            <td><code>mcp__&lt;server&gt;__&lt;tool&gt;</code></td>
+            <td>MCP 插件</td>
+            <td>把外部 MCP server 的工具当本机工具用</td>
+            <td>只认你在 MCP 配置里写的 <code>readOnlyTools</code>；<strong>缺省一律按可写</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout design">
+      <span class="callout-title">「只读」不是工具自己声明的</span>
+      <p>
+        <code>ToolDescriptor</code>（工具描述符）里<strong>没有「是否只读」这个字段</strong>，它曾经有、现已移除。
+        原因是那个设计让「只读」变成了<strong>由被判定的一方自己申报</strong>：提供方可以把自己的工具塞进任何基于它构建的名单里，
+        用户没有任何手段拿出来（MCP 那一侧更极端，「提供方」是不受信的外部进程）。
+      </p>
+      <p>
+        现在的口径是：<strong>只读与否完全由用户配置决定</strong>（例如 plan 模式插件的
+        <code>plugins.configurations.jellyfish-plugin-plan.readOnlyTools</code>，以及 MCP 插件配置里那个同名的
+        <code>readOnlyTools</code>）。描述符只回答「这个工具叫什么、怎么用、要什么参数」。
+        因此上表「是否只读」一列只写 README 的归类，真正的判定永远看<strong>你写的名单</strong>。
+      </p>
+    </div>
+
+    <div class="callout warn">
+      <span class="callout-title">不装插件，就只有 <code>task</code></span>
+      <p>
+        内核只保留插件机制与 SPI，全部文件、命令、待办、技能、编排工具都在 <code>Jellyfish-Plugins</code> 仓库里。
+        拿到 <code>jellyfish-cli-0.1.1.jar</code> 直接跑，会看到一个近乎空转的 agent。
+        装哪些、怎么装见 <a href="11-plugin-usage.html">11 安装与使用官方插件</a>；插件 jar 的增删<strong>只在启动期确定</strong>，必须重启进程。
+      </p>
+    </div>
+
+    <div class="src-block">Jellyfish-Plugins/README.md:48-66（插件一览：每个插件提供什么工具）、Jellyfish-Plugins/README.md:69-123（tools 插件六个工具）、Jellyfish-Plugins/README.md:163-204（shell）、Jellyfish-Plugins/README.md:266-314（todo）、Jellyfish-Plugins/README.md:507-546（skills）、Jellyfish-Plugins/README.md:547-592（workflow）、Jellyfish-Plugins/README.md:593-676（MCP）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/ToolDescriptor.java（「这里没有『是否只读』字段」）、Jellyfish/README.md:458-481（插件装载：新增 / 删除只在启动期确定）</div>
+
+    <h2>内核自带：<code>task</code></h2>
+
+    <div class="feature">
+      <h3><code>task</code>：把一段子任务委派给子代理</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          把一段自足的子任务交给一个 <code>delegatable: true</code> 的 agent 去做，只拿回它的最终结论。
+          它是<strong>内核自带</strong>的能力：把模型给的参数翻成一次委派、把子代理的进度转给外壳、把结果渲染成回灌文本。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          通常由模型自己决定何时调用。手动验证：
+          <pre><code class="language-json">{
+  "subagent_type": "scout",
+  "description": "摸清鉴权链路",
+  "prompt": "读 src/main/java 下所有与鉴权相关的文件，回答三个问题：1) 入口类叫什么；2) token 在哪校验；3) 有哪些失败分支。结论里给「文件:行号」依据。"
+}</code></pre>
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong></p>
+
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>subagent_type</td>
+              <td>string</td>
+              <td><span class="tag required">必填</span></td>
+              <td>—</td>
+              <td>子代理类型，可取系统提示中列出的可委派类型之一</td>
+              <td><code>"scout"</code></td>
+            </tr>
+            <tr>
+              <td>description</td>
+              <td>string</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>null</code>（不写即缺省；此时开场行只写「开始」）</td>
+              <td>一句话说明这次委派要做什么，供人阅读与日志排查</td>
+              <td><code>"摸清鉴权链路"</code></td>
+            </tr>
+            <tr>
+              <td>prompt</td>
+              <td>string</td>
+              <td><span class="tag required">必填</span></td>
+              <td>—</td>
+              <td>给子代理的完整任务说明。它看不到本次对话，因此必须自足</td>
+              <td><code>"读 src/auth 下所有文件，列出……"</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        <code>subagent_type</code> 缺失时工具<strong>一次都不跑</strong>，回一条
+        「[子代理未开始] 缺少参数 subagent_type……」，并带上终态标记（界面显示警示，而不是「正常跑完」）。
+        参数类型写错时由内核的委派器给出可用清单。
+      </p>
+
+      <p>
+        它与 <a href="07-agents.html">07 页</a>讲的 <code>subAgent</code> 配置段是一套东西：
+        <code>maxDepth</code> / <code>maxSpawnsPerTurn</code> / <code>maxConcurrentRuns</code> 都作用在它上面，
+        <code>subAgent.enabled: false</code> 会让这个工具<strong>直接不再注册</strong>，模型根本看不到它。
+      </p>
+
+      <p><strong>生效方式</strong>：<span class="tag hot">/reload 生效</span>（<code>subAgent.enabled</code> 关掉后 <code>task</code> 不再注册；<code>maxDepth</code> 等三个键需重启，见 07 页）。</p>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>模型看不到这个工具？</strong>先查 <code>subAgent.enabled</code> 是不是 <code>false</code>，或没有任何 agent 标 <code>delegatable: true</code>。</li>
+        <li><strong>子代理改动了我的文件？</strong>给它配只读的 <code>allowedTools</code>。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:424-457（委派给子代理）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/subagent/TaskTool.java:53、293-300（参数 `subagent_type` / `description` / `prompt`）、:334-335（必填只有 `subagent_type` 与 `prompt`，`description` 可缺）、:267（`description` 为空白时开场行只写「开始」）、Jellyfish/README.md:913-941（`subAgent` 段）</div>
+
+    <h2>tools 插件：六个文件与提问工具</h2>
+
+    <p>
+      插件 id 与配置段名都是 <code>jellyfish-plugin-tools</code>。它提供五个文件工具、一个提问工具、
+      输入框的 <code>@</code> 文件引用，以及按路径收口的闸门 <code>pathPolicy</code>。
+    </p>
+
+    <div class="feature">
+      <h3><code>read_file</code>：按行分片读取文本文件</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>读取一个文本文件的内容；大文件可用 <code>offset</code> 与 <code>limit</code> 分片读取，避免一次读入过多内容。</dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-json">{ "path": "src/main/java/App.java", "offset": 1, "limit": 120 }</code></pre>
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>path</td><td>string</td><td><span class="tag required">必填</span></td><td>—</td><td>文件路径，相对路径按进程工作目录解析</td><td><code>"src/main/java/App.java"</code></td></tr>
+            <tr><td>offset</td><td>integer</td><td><span class="tag optional">选填</span></td><td>从第一行开始</td><td>起始行号，从 1 开始</td><td><code>200</code></td></tr>
+            <tr><td>limit</td><td>integer</td><td><span class="tag optional">选填</span></td><td>读到文件末尾</td><td>最多读取多少行</td><td><code>120</code></td></tr>
+            <tr><td>max_bytes</td><td>integer</td><td><span class="tag optional">选填</span></td><td><code>65536</code>（64 KiB）</td><td>最多读取多少字节；命中 <code>limit</code> 或 <code>max_bytes</code> 会提示续读</td><td><code>131072</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout pitfall">
+        <span class="callout-title">单行就超过 <code>max_bytes</code> 时它会报错，不切短</span>
+        <p>
+          切短会输出一行「看起来完整、实际残缺」的内容，模型无从判断自己拿到的是不是全文。
+          错误文案给出三条出路：<strong>缩小 <code>limit</code>、调大 <code>max_bytes</code>、或改用 <code>grep_files</code> 定位</strong>。
+        </p>
+        <p>
+          多行累加超预算仍照旧分页（内容还在文件里，可按 <code>offset</code> 续读）。
+          另外 <code>read_file</code> 反过来<strong>必须能读任意文件</strong>：非法字节处停下并明确说「这不是合法 UTF-8」，
+          而不是把每个字节都换成问号。
+        </p>
+      </div>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>报「单行超过 max_bytes」？</strong>按上面三条出路改参数。</li>
+        <li><strong>读到一半停了？</strong>可能是被 <code>Esc</code> 取消。三个读工具取消时都会说清是哪一种停——它不会把「已取消」说成「没有匹配」。</li>
+      </ul>
+    </div>
+
+    <div class="feature">
+      <h3><code>write_file</code>：整文件覆盖写</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>把内容整体写入文件（UTF-8，<strong>会覆盖原内容</strong>）。父目录不存在时自动创建；输出区分「新建」与「覆盖」。</dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-json">{ "path": "notes/plan.md", "content": "# 计划\n\n1. 先跑起来\n" }</code></pre>
+          只改一处请用 <code>edit_file</code>，不要整份重写。
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>path</td><td>string</td><td><span class="tag required">必填</span></td><td>—</td><td>文件路径，相对路径按进程工作目录解析</td><td><code>"notes/plan.md"</code></td></tr>
+            <tr><td>content</td><td>string</td><td><span class="tag required">必填</span></td><td>—</td><td>要写入的完整文件内容</td><td><code>"# 计划\n"</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>把原文件冲掉了？</strong>它本来就是整文件覆盖。想保留原文只改一处，用 <code>edit_file</code>。</li>
+        <li><strong>写到工作目录外面去了？</strong>那是 <code>pathPolicy</code> 的 <code>write</code> 方向管的事，见本页最后的路径闸门一节。</li>
+      </ul>
+    </div>
+
+    <div class="feature">
+      <h3><code>edit_file</code>：字面量精确替换</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>在文件中精确替换一段原文（字面量匹配，按 UTF-8 读写）。<strong>匹配到多处且未声明 <code>replace_all</code> 时会报错而不改文件。</strong></dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-json">{
+  "path": "src/main/java/App.java",
+  "old_text": "return null;",
+  "new_text": "return Optional.empty();"
+}</code></pre>
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>path</td><td>string</td><td><span class="tag required">必填</span></td><td>—</td><td>文件路径，相对路径按进程工作目录解析</td><td><code>"src/main/java/App.java"</code></td></tr>
+            <tr><td>old_text</td><td>string</td><td><span class="tag required">必填</span></td><td>—</td><td>要被替换的原文，必须与文件中完全一致（含缩进）</td><td><code>"return null;"</code></td></tr>
+            <tr><td>new_text</td><td>string</td><td><span class="tag required">必填</span></td><td>—</td><td>替换后的新文本，可以是空串（等于删除）</td><td><code>"return Optional.empty();"</code></td></tr>
+            <tr><td>replace_all</td><td>boolean</td><td><span class="tag optional">选填</span></td><td><code>false</code></td><td>原文匹配到多处时是否全部替换</td><td><code>true</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout pitfall">
+        <span class="callout-title">它只改 UTF-8 文本</span>
+        <p>
+          文件里出现<strong>非法 UTF-8 字节时直接拒绝</strong>：它整份读出、整份写回，一次替换会把 GBK 文件整体变成乱码，
+          那是不可逆的损毁。写入走同目录临时文件 + 原子替换，并且<strong>读之后、写之前</strong>会再看一眼文件有没有被别人改过。
+        </p>
+      </div>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>报「匹配到多处」？</strong>把 <code>old_text</code> 写到唯一（带上上下文缩进），或显式声明 <code>replace_all: true</code>。</li>
+        <li><strong>报「不是合法 UTF-8」？</strong>目标文件不是 UTF-8 编码。它不会替你转码，请先用别的工具转成 UTF-8。</li>
+      </ul>
+    </div>
+
+    <div class="feature">
+      <h3><code>list_dir</code>：列举一层目录</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>列举一个目录的直接子项（<strong>不递归</strong>）。目录名以 <code>/</code> 结尾，文件带字节数；<strong>不过滤</strong> <code>target</code> 之类；大目录可分页。</dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-json">{ "path": "src/main/java", "offset": 1, "limit": 100 }</code></pre>
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>path</td><td>string</td><td><span class="tag optional">选填</span></td><td>当前工作目录</td><td>目录路径，相对路径按进程工作目录解析</td><td><code>"src/main/java"</code></td></tr>
+            <tr><td>offset</td><td>integer</td><td><span class="tag optional">选填</span></td><td>从第一项开始</td><td>起始条目序号，从 1 开始</td><td><code>201</code></td></tr>
+            <tr><td>limit</td><td>integer</td><td><span class="tag optional">选填</span></td><td><code>200</code></td><td>每页最多返回多少项</td><td><code>100</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        <strong>一条只管耗时的上限</strong>：枚举本身最多 <strong>50000</strong> 项，撞上会说明「总数不是全量」。
+        这个上限不改变结果语义、只在真撞上时兜底（正常项目的源码树远小于它）。
+      </p>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>看到一堆 <code>target/</code> 之类的目录？</strong>它不过滤，自己往下钻或改用 <code>grep_files</code>（那个会跳过 <code>.git</code>/<code>target</code>/<code>node_modules</code>）。</li>
+        <li><strong>提示「列举被中止，以上不是完整内容」？</strong>被 <code>Esc</code> 取消了。它不会把这个说成「空目录」。</li>
+      </ul>
+    </div>
+
+    <div class="feature">
+      <h3><code>grep_files</code>：逐行正则搜索</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>在文件或目录树中按正则表达式逐行搜索，返回「文件:行号:该行内容」。会跳过 <code>.git</code>/<code>target</code>/<code>node_modules</code> 等目录与二进制文件。</dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-json">{ "pattern": "class .*Manager", "path": "src/main/java", "max_results": 30 }</code></pre>
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>pattern</td><td>string</td><td><span class="tag required">必填</span></td><td>—</td><td>Java 正则表达式，对每一行做查找（不是整文件匹配）</td><td><code>"class .*Manager"</code></td></tr>
+            <tr><td>path</td><td>string</td><td><span class="tag optional">选填</span></td><td>当前工作目录</td><td>搜索起点，可以是文件或目录，相对路径按进程工作目录解析</td><td><code>"src/main/java"</code></td></tr>
+            <tr><td>max_results</td><td>integer</td><td><span class="tag optional">选填</span></td><td><code>100</code></td><td>最多返回多少处匹配</td><td><code>30</code></td></tr>
+            <tr><td>max_line_chars</td><td>integer</td><td><span class="tag optional">选填</span></td><td><code>500</code></td><td>单行最多显示多少字符，超出部分截尾</td><td><code>200</code></td></tr>
+            <tr><td>max_bytes</td><td>integer</td><td><span class="tag optional">选填</span></td><td><code>65536</code>（64 KiB）</td><td>结果总字节上限</td><td><code>131072</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        <strong>另一条只管耗时的上限</strong>：最多访问 <strong>20000</strong> 个文件。为什么需要它：
+        上面那三个结果上限都要「先有匹配」才生效，而搜一个不存在的词时一处匹配都不会有、遍历却要走完整棵树——
+        在网络挂载上就是几分钟。
+      </p>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>它说「未扫完整棵树」？</strong>撞上 20000 个文件的兜底上限，或搜索被中止。两种情况它都会明说，不会含糊成「没有匹配」。</li>
+        <li><strong>搜不到却走得很久？</strong>正是上面那条上限要解决的情况。</li>
+      </ul>
+    </div>
+
+    <div class="feature">
+      <h3><code>ask_user</code>：向用户提问</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          把一个问题连同 2~6 个候选项摆到用户面前，等他选一个或自己填，答案以工具结果回灌给模型。
+          它是这个插件里<strong>唯一持有外部依赖</strong>的工具（经内核的提问端口拿到），其余工具都是无状态的纯函数。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-json">{
+  "question": "这次改动要保留向后兼容吗？",
+  "options": [
+    { "id": "keep", "label": "要兼容", "description": "老接口继续可用，代价是多一层适配" },
+    { "id": "break", "label": "可以破坏", "description": "直接改，版本号升一位" }
+  ]
+}</code></pre>
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>question</td><td>string</td><td><span class="tag required">必填</span></td><td>—</td><td>你要问的问题，一句话说清在纠结什么</td><td><code>"要保留向后兼容吗？"</code></td></tr>
+            <tr><td>options</td><td>array&lt;object&gt;</td><td><span class="tag required">必填</span></td><td>—</td><td>候选答案，<strong>2~6 个</strong></td><td><code>[{ "label": "要兼容" }, { "label": "可以破坏" }]</code></td></tr>
+            <tr><td>options[].id</td><td>string</td><td><span class="tag optional">选填</span></td><td>按序号 <code>1</code>、<code>2</code>、<code>3</code>…</td><td>选项标识，回传时用它</td><td><code>"keep"</code></td></tr>
+            <tr><td>options[].label</td><td>string</td><td><span class="tag required">必填</span></td><td>—</td><td>给用户看的选项文案</td><td><code>"要兼容"</code></td></tr>
+            <tr><td>options[].description</td><td>string</td><td><span class="tag optional">选填</span></td><td><code>null</code>（不写就没有说明；界面只显示 <code>label</code>）</td><td>补充说明，帮用户分辨这个选项</td><td><code>"老接口继续可用"</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>四条必须知道的口径</strong></p>
+      <ul>
+        <li><strong>它不是审批</strong>：用户选任何一项都不会放行任何工具，只是把答案告诉模型。权限仍然只由内核的 <code>PermissionManager</code> 收口。</li>
+        <li><strong>拿不到答复不算失败</strong>：没有交互界面的外壳（<code>-cli</code>）、子代理回合、等待超时，三种都返回<strong>成功的</strong>工具结果，内容说明原因并让模型自行判断。做成失败会让模型以为环境出错、反复重试同一个提问。</li>
+        <li><strong>子代理回合里当场拒绝</strong>：外层界面按当前会话取待答项，而子代理有独立的会话，它的提问不会出现在任何界面上。</li>
+        <li><strong>超时来自 <code>jellyfish.json</code> 的 <code>ask.timeoutSeconds</code></strong>（缺省 120 秒），不是本插件的配置段。</li>
+      </ul>
+
+      <p><strong>生效方式</strong>：提问超时键 <code>ask.timeoutSeconds</code> 属配置内容，<span class="tag hot">/reload 生效</span>。</p>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong><code>-cli</code> 里提问没人答？</strong>正常，它会回一条「用户没有回答」让模型继续。</li>
+        <li><strong>选项数量报错？</strong>只能 2~6 个（超出一个模态框能读完的量，用户会开始随便选）。</li>
+      </ul>
+    </div>
+
+    <div class="feature">
+      <h3>输入框的 <code>@</code> 文件引用（不是工具）</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          输入框敲 <code>@</code> 弹补全面板（目录在前、可逐层往下钻），接受后路径写进输入框。
+          它<strong>不内联文件内容</strong>——读取由模型调用 <code>read_file</code> 完成。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-text">@src/main/java/App.java 帮我看看这个类的空指针风险</code></pre>
+          路径里的空白用 <code>\ </code> 转义：含空格的文件名会补全成 <code>@my\ file.txt</code>
+          （插入时转义、匹配前还原、外壳切片段时认转义，三处共用同一条规则）。
+        </dd>
+      </dl>
+
+      <p>
+        <strong>为什么这么设计</strong>：不内联意味着大文件不会撑爆上下文，权限与 <code>max_bytes</code> 照旧生效。
+      </p>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>模型把 <code>\ </code> 也当成文件名的一部分？</strong>约定里已明说「<code>\ </code> 是空格」；如果你在自己写的提示词里解释 <code>@</code> 引用，记得也写这一句。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish-Plugins/README.md:69-123（五个文件工具与 `ask_user` 的参数表、单行超限、三个读工具的取消语义、两个耗时上限、`@` 路径引用、`edit_file` 的 UTF-8 限制）、Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/（各工具的 `ToolDescriptor` 参数与必填项、`DEFAULT_LIMIT` / `MAX_ENTRIES` / `DEFAULT_MAX_RESULTS` / `DEFAULT_MAX_LINE_CHARS` / `DEFAULT_MAX_BYTES` 常量；`AskUserTool.java:63、133`——`options[].description` 声明为选填、缺省即 `null`）、Jellyfish/README.md:900-912（`ask.timeoutSeconds`）</div>
+
+    <h2>shell 插件：<code>shell</code></h2>
+
+    <div class="feature">
+      <h3><code>shell</code>：在本机执行命令</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          让模型在本机执行一条 shell 命令并返回输出。命令原文交给 <code>/bin/sh -c</code> 执行，因此管道、重定向、
+          通配符都按 shell 语义工作。<strong>它没有沙箱</strong>：命令以本进程的权限运行，能读写你这个用户的任意文件。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-json">{ "command": "mvn -q -DskipTests package", "cwd": "/path/to/repo", "timeout_seconds": 600 }</code></pre>
+          也可以直接手敲一条，不进模型：
+          <pre><code class="language-bash">!git status</code></pre>
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong>（工具自身的参数）</p>
+
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>command</td><td>string</td><td><span class="tag required">必填</span></td><td>—</td><td>命令行原文，交给 <code>/bin/sh -c</code> 执行——管道、重定向、通配符都按 shell 语义工作</td><td><code>"git status"</code></td></tr>
+            <tr><td>cwd</td><td>string</td><td><span class="tag optional">选填</span></td><td>进程工作目录</td><td>工作目录，相对路径按进程工作目录解析</td><td><code>"/path/to/repo"</code></td></tr>
+            <tr><td>timeout_seconds</td><td>integer</td><td><span class="tag optional">选填</span></td><td><code>120</code>（跟随插件配置 <code>timeoutSeconds</code>）</td><td>本次调用的超时秒数，被 <code>maxTimeoutSeconds</code>（<code>1800</code>）钳制</td><td><code>600</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>五个反直觉但必须记住的行为</strong></p>
+      <ul>
+        <li><strong>每次调用都是一个全新的 shell</strong>，<code>cd</code> 不跨调用保留：需要换目录就用 <code>cd 目录 &amp;&amp; 命令</code> 或传 <code>cwd</code>。</li>
+        <li><strong><code>stdin</code> 在启动后立即关闭</strong>：<code>vi</code> / <code>ssh</code> / <code>sudo</code> 这类交互式命令会立刻失败（TUI 处于 raw 模式，子进程直接写终端会把界面画烂）。</li>
+        <li><strong>stdout 与 stderr 合并</strong>成一条流（到达顺序，像终端）。</li>
+        <li><strong>非零退出码是结果而不是错误</strong>：<code>grep</code> 没匹配到返回 1，这在输出里如实报告；工具调用本身不算失败。</li>
+        <li><strong>输出边产生边捕获</strong>：内存占用与输出体积无关，超限部分落盘，回灌给模型的是头尾预览加路径。每个落盘文件名都带一段唯一片段（调用 id + 工具名 + 纳秒时间戳），因此同一次调用独占一个路径。</li>
+      </ul>
+
+      <p>
+        <strong>被终止时会说清是哪一种</strong>：墙钟超时、静默判定、取消，还是<strong>插件被停掉</strong>（热部署 / 内核关闭），
+        并附上已捕获的部分输出。<strong>静默超时报的是「真的静默了多久」，不是总耗时</strong>——一条先跑了十分钟、再卡住的命令，
+        说成「连续 600 秒无输出」会把有输出的那十分钟也算进去。
+      </p>
+
+      <p><strong>执行期输出实时可见</strong>：<code>-cli</code> 写到 stderr，<code>-tui</code> 在消息区显示「运行中的工具轨迹」块。</p>
+
+      <p><strong><code>!命令</code> 输入指令</strong>：手动执行一条命令，<strong>不进模型</strong>；执行完把「命令回显 + 输出」作为一条用户消息落进会话，
+      因此下一次提问时模型看得到结果。它复用与模型调用完全相同的执行链路，<strong>照旧过权限与审批</strong>；<code>Esc</code> 可以中断正在跑的命令。</p>
+
+      <p><strong>插件配置</strong>（<code>plugins.configurations.jellyfish-plugin-shell</code>）</p>
+
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>timeoutSeconds</td><td>int</td><td><span class="tag optional">选填</span></td><td><code>120</code></td><td>命令最多允许跑多久；单次调用可用 <code>timeout_seconds</code> 参数覆盖。不支持「不超时」</td><td><code>300</code></td></tr>
+            <tr><td>maxTimeoutSeconds</td><td>int</td><td><span class="tag optional">选填</span></td><td><code>1800</code></td><td>单次调用能声明的超时上限</td><td><code>3600</code></td></tr>
+            <tr><td>idleTimeoutSeconds</td><td>int</td><td><span class="tag optional">选填</span></td><td><code>0</code>（关闭）</td><td>连续多久没有任何输出就判定卡住。<strong>模型不能设置它</strong>，它是用户的环境策略</td><td><code>600</code></td></tr>
+            <tr><td>environment</td><td>object</td><td><span class="tag optional">选填</span></td><td><code>{}</code></td><td>额外注入或覆盖的环境变量；另有一组防挂死默认值可被这里盖掉</td><td><code>{ "MAVEN_OPTS": "-Xmx1g" }</code></td></tr>
+            <tr><td>allowedCommands</td><td>array&lt;string&gt;</td><td><span class="tag optional">选填</span></td><td><code>[]</code></td><td><strong>非空即默认拒绝</strong>的准入白名单，支持 <code>git status</code> 这种两 token 形式。<strong>它只管准入，不管审批</strong></td><td><code>["git status", "mvn test"]</code></td></tr>
+            <tr><td>commandPolicy.enabled</td><td>boolean</td><td><span class="tag optional">选填</span></td><td><code>true</code></td><td>只关<strong>分类器</strong>这个便利机制。关掉后只读表、重定向 / 命令替换检查与「其余命令问人」都不再表态</td><td><code>false</code></td></tr>
+            <tr><td>commandPolicy.trustedCommands</td><td>array&lt;string&gt;</td><td><span class="tag optional">选填</span></td><td><code>[]</code></td><td>可信命令表，<strong>命中即免审批</strong>。粒度与白名单一致</td><td><code>["mvn test"]</code></td></tr>
+            <tr><td>commandPolicy.readOnlyCommands</td><td>array&lt;string&gt;</td><td><span class="tag optional">选填</span></td><td><code>[]</code></td><td><strong>追加</strong>在内置只读表之后。内置表不可替换，只能追加</td><td><code>["gh pr view"]</code></td></tr>
+            <tr><td>commandPolicy.deniedPatterns</td><td>array&lt;string&gt;</td><td><span class="tag optional">选填</span></td><td><code>[]</code></td><td><strong>追加</strong>在内置拒绝形状（<code>rm -rf /</code>、<code>mkfs</code>、<code>of=/dev/</code>、<code>:(){</code>）之后，同样不可撤销</td><td><code>["curl .* \\| sh"]</code></td></tr>
+            <tr><td>environment.sensitivePatterns</td><td>array&lt;string&gt;</td><td><span class="tag optional">选填</span></td><td>内置一组（<code>*KEY*</code> / <code>*TOKEN*</code> / <code>*SECRET*</code> / <code>*PASSWORD*</code> / <code>*CREDENTIAL*</code> / <code>*_PAT*</code> / <code>*AUTH*</code> / <code>*NETRC*</code> / <code>*PROXY*</code> / <code>*PASSPHRASE*</code> / <code>*_PWD</code>）</td><td>用于<strong>追加</strong>剔除模式：名字匹配的变量不会传给子进程（工具输出会送到远端 LLM）</td><td><code>["*MY_SECRET*"]</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>权限判定的六道</strong>（每次调用依次过，先拒绝后免打扰、最后才问人）：</p>
+
+      <ol>
+        <li>按未引用状态下的 <code>;</code>、<code>|</code>、<code>&amp;</code>、换行<strong>切成子命令</strong>，每一段各自过一遍下面的表（取最严的结果）；</li>
+        <li><code>allowedCommands</code> 非空且任一段没命中 → <strong>直接拒绝</strong>（默认拒绝的硬门）；</li>
+        <li>命令原文命中拒绝形状（<code>rm -rf /</code>、<code>mkfs</code>、<code>dd of=/dev/</code>）→ <strong>直接拒绝</strong>；</li>
+        <li><strong>所有段</strong>都命中 <code>commandPolicy.trustedCommands</code> → <strong>免审批</strong>，直接执行；</li>
+        <li>含命令替换（<code>$(...)</code>、反引号）或重定向（<code>&gt;</code>、<code>&lt;</code>）→ <strong>升级为人工审批</strong>；</li>
+        <li>所有段都命中只读表（<code>ls</code>、<code>git status</code>、<code>cat</code>……）→ <strong>免审批</strong>；否则 → <strong>升级为人工审批</strong>。</li>
+      </ol>
+
+      <div class="callout warn">
+        <span class="callout-title"><code>allowedCommands</code> 是免审批表之外的独立机制，白名单不解除审批</span>
+        <p>
+          <code>allowedCommands</code> 里的 <code>mvn test</code> 每次<strong>仍然弹批准框</strong>，因为白名单只回答「能不能跑」。
+          要它静默执行，就把同一条前缀也写进 <code>commandPolicy.trustedCommands</code>。
+          「允许跑但每次都要我批准」这种姿态仍然写得出来——只配白名单、不配可信表即可。
+        </p>
+        <p>
+          同理，<code>commandPolicy.enabled=false</code> 会连第 5 步一起关掉；白名单、可信表、拒绝形状照旧生效。
+        </p>
+      </div>
+
+      <div class="callout danger">
+        <span class="callout-title">分类器不是安全边界</span>
+        <p>
+          <code>FOO=bar cmd</code>、别名、<code>sh -c</code> 嵌套照旧能绕过前缀判定。它也不做目录围栏（可绕过：
+          <code>cd /</code>、绝对路径、<code>sh -c</code> 嵌套），与文件工具没有围栏也不自洽。
+          <strong>真正的边界是审批加白名单。</strong>
+        </p>
+        <p>
+          另外两点边界：<code>-cli</code> / <code>-server</code> 下没有人在场，<code>askTools</code> 等于禁用，
+          免审批的放行口只剩「被分类器判为只读的命令」与「<code>trustedCommands</code> 里的命令」（白名单非空时还得先过白名单）；
+          进程树只能尽力杀（<code>sh -c</code> 的直接子进程是 shell，杀掉它不一定带走孙进程），<strong>杀不干净是已知边界</strong>。
+        </p>
+      </div>
+
+      <p><strong>生效方式</strong>：插件配置段改动 <span class="tag hot">/reload 生效</span>（<code>/reload</code> 会只重启配置段变了的插件）。</p>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>想在无人值守下跑 <code>mvn test</code>？</strong>必须把它写进 <code>trustedCommands</code>（<code>-cli</code>/<code>-server</code> 里 <code>ASK</code> 等于拒绝）。</li>
+        <li><strong>每次 <code>git status</code> 也要批准？</strong>你把 <code>shell</code> 整个写进了 <code>askTools</code>：核心策略的 <code>ASK</code> 无法被插件的「无异议」降级，插件的裁定只能收紧、不能放宽。</li>
+        <li><strong>命令卡住了？</strong>用 <code>idleTimeoutSeconds</code>（「多久没动静就当死了」），它是用户的环境策略，模型改不了。</li>
+        <li><strong>Windows 能用吗？</strong>非 POSIX 平台映射成 <code>cmd.exe /c</code>，但 README 明说<strong>没有在真机上跑过</strong>。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish-Plugins/README.md:163-204（`shell` 工具参数表与行为口径）、Jellyfish-Plugins/README.md:191-204（插件配置字段表）、Jellyfish-Plugins/README.md:205-253（权限与分类器六道判定及边界）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellTool.java:41（`TOOL_NAME = "shell"`）与参数 `command` / `cwd` / `timeout_seconds`、Jellyfish/README.md:254-270（输入指令 `!`）</div>
+
+    <h2>todo 插件：五个待办工具</h2>
+
+    <div class="feature">
+      <p>
+      待办是模型的计划草稿，由插件自己持有（内核没有会话待办字段、也没有 <code>/todo</code> 系统命令）。
+      五个工具的分工是「<strong>父回合写计划、子代理认领并推进</strong>」。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>工具</th><th>参数（必填加粗）</th><th>语义</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>todo_write</code></td>
+            <td><strong><code>todos</code></strong>（数组，元素含 <strong><code>content</code></strong>、<strong><code>status</code></strong>、选填 <code>reason</code>）</td>
+            <td>模型写待办的唯一入口。<strong>整表覆盖</strong>：传完整的新列表，上次列过而这次没列出的项视为删除，空数组表示清空</td>
+          </tr>
+          <tr>
+            <td><code>todo_claim</code></td>
+            <td>无参数（认领「下一条」）</td>
+            <td><strong>子代理</strong>认领一条还没人做的待办：原子地标成 <code>in_progress</code> 并记下自己的 run 标识。一个 run 只认领一条。顶层回合不在任何 run 上，会被拒绝</td>
+          </tr>
+          <tr>
+            <td><code>todo_done</code></td>
+            <td><strong><code>content</code></strong></td>
+            <td>把一条待办标成完成（<code>content</code> 传原文）。别人正认领着的条目只有认领者能完成；无主的条目谁都可以完成</td>
+          </tr>
+          <tr>
+            <td><code>todo_release</code></td>
+            <td><strong><code>content</code></strong></td>
+            <td>把一条待办<strong>放回去</strong>（清认领、回未开始，谁都能接）：用于「我没做它」</td>
+          </tr>
+          <tr>
+            <td><code>todo_block</code></td>
+            <td><strong><code>content</code></strong>、<strong><code>reason</code></strong></td>
+            <td>把一条待办记成<strong>卡住</strong>：用于「它做不了」。卡住之后不会再被任何子代理认领，直到有人放回或父回合重写清单</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p><strong>配置</strong>——状态取值与插件配置段：</p>
+
+    <div class="table-scroll field-table">
+      <table>
+        <thead>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>todos[].content</td>
+            <td>string</td>
+            <td><span class="tag required">必填</span></td>
+            <td>—</td>
+            <td>待办内容。要简短、可执行</td>
+            <td><code>"补齐 UserService 单测"</code></td>
+          </tr>
+          <tr>
+            <td>todos[].status</td>
+            <td>string（枚举）</td>
+            <td><span class="tag required">必填</span></td>
+            <td>参数 Schema 里<strong>必填</strong>（<code>required</code> 含 <code>content</code> 与 <code>status</code>）；解析层则对缺失兜底：取不到时按 <code>pending</code> 处理</td>
+            <td>取 <code>pending</code> / <code>in_progress</code> / <code>completed</code> / <code>blocked</code>。读的时候忽略大小写与连字符（<code>In-Progress</code> 也认），写出去的一律是小写下划线</td>
+            <td><code>"in_progress"</code></td>
+          </tr>
+          <tr>
+            <td>todos[].reason</td>
+            <td>string</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>无</td>
+            <td><code>blocked</code> 才带 <code>reason</code>，写在别的状态上会被丢掉</td>
+            <td><code>"缺权限，连不上测试库"</code></td>
+          </tr>
+          <tr>
+            <td>todoDir</td>
+            <td>string（路径）</td>
+            <td><span class="tag optional">选填</span></td>
+            <td><code>~/.jellyfish/todos</code></td>
+            <td>待办文件目录，一个会话一个 JSON 文件，空表会删掉文件</td>
+            <td><code>"~/.jellyfish/todos"</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p><strong>四态与标记的对应</strong>：<code>pending</code> = <code>[ ]</code>、<code>in_progress</code> = <code>[~]</code>、
+    <code>completed</code> = <code>[x]</code>、<code>blocked</code> = <code>[!]</code>。</p>
+
+    <p><strong>完整示例</strong></p>
+    <pre><code class="language-json">{
+  "todos": [
+    { "content": "读一遍鉴权入口", "status": "completed" },
+    { "content": "补齐 UserService 单测", "status": "in_progress" },
+    { "content": "跑通集成测试", "status": "pending" },
+    { "content": "接上真实支付网关", "status": "blocked", "reason": "缺沙箱环境凭据" }
+  ]
+}</code></pre>
+
+    <p><strong>三条协作口径</strong></p>
+    <ul>
+      <li><strong>父子共享同一份清单</strong>，而「父」是内核沿父链算出来的归属会话（嵌套委派下孙代理读写的仍是用户那一份；分支会话归自己）。</li>
+      <li><strong>谁可以动哪一条</strong>：认领者可以完成、放回、卡住自己那条；父回合可以放回或卡住任何一条，但<strong>不能替别人说「做完了」</strong>；已完成的条目不接受退回。</li>
+      <li><strong>参数非法当场报错</strong>（<code>todos</code> 不是数组、<code>content</code> 为空、<code>status</code> 不在取值内），并带上实际收到的值，作为工具结果回灌给模型让它自己改。</li>
+    </ul>
+
+    <p>
+      <strong>为什么「做不了」必须是一个状态</strong>：没有它，一条做不了的活只能一直停在 <code>pending</code>，
+      于是一批一批的子代理反复把它领走、反复失败——抢单式协作最容易烧钱的地方就是这个。
+    </p>
+
+    <p><strong>生效方式</strong>：<span class="tag hot">/reload 生效</span>。</p>
+
+    <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>顶层回合调 <code>todo_claim</code> 被拒？</strong>正常：只有子代理能认领，父回合负责写计划。</li>
+        <li><strong>面板上某条显示「认领者已结束」？</strong>那是「子代理没把活标完成就走了」的信号；卡住的条目要显式 <code>todo_block</code> 或放回。</li>
+        <li><strong>待办会进 system prompt 吗？</strong>不会。每轮把待办块拼在本轮用户消息<strong>前面</strong>送达——system prompt 是缓存前缀的第 0 个 token，待办每勾掉一项都会作废整个请求。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish-Plugins/README.md:266-314（五个工具语义、`/todo`、状态取值、`todoDir`）、Jellyfish-Plugins/jellyfish-plugin-todo/src/main/java/zcd/jellyfish/plugin/todo/TodoWriteTool.java:74-87（`status` 的枚举与 `required`：`content` + `status`）、:141-164（解析层对缺失的 `status` 兜底为 `pending`，非法取值才抛错）、Jellyfish-Plugins/jellyfish-plugin-todo/src/main/java/zcd/jellyfish/plugin/todo/TodoItem.java:24、84（旧字段 `done` 的兼容与 `null` 按未开始处理）</div>
+
+    <h2>skills 插件：<code>skill</code></h2>
+
+    <div class="feature">
+      <h3><code>skill</code>：按需加载一份技能说明</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          把目录里的说明文件变成模型可以按需取用的「技能」：名称加描述常驻 system prompt，模型判断相关时再调
+          <code>skill</code> 工具把正文取回来。这是「三层渐进披露」的第二层。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-json">{ "name": "pdf-processing" }</code></pre>
+          目录约定很简单：<strong>一个子目录一个 skill，正文写在 <code>SKILL.md</code> 里</strong>。
+          <pre><code class="language-markdown">---
+name: pdf-processing
+description: 处理 PDF 时使用：拆分、合并、提取文本
+---
+
+# 用法
+
+1. 用 `scripts/merge.py` 合并……
+2. 细节见 `references/api.md`</code></pre>
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong></p>
+
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>name（工具参数）</td><td>string</td><td><span class="tag required">必填</span></td><td>—</td><td>skill 名称，可取 system prompt 里 skills 清单中的名字</td><td><code>"pdf-processing"</code></td></tr>
+            <tr><td>roots</td><td>array&lt;string&gt;</td><td><span class="tag optional">选填</span></td><td><code>["~/.jellyfish/skills", "./.jellyfish/skills"]</code></td><td>skill 根目录，<strong>有序</strong>，同名 skill 先到者胜。由项目级配置给出时每一项必须是项目目录内的相对路径</td><td><code>["~/.jellyfish/skills"]</code></td></tr>
+            <tr><td>maxSkills</td><td>int</td><td><span class="tag optional">选填</span></td><td><code>50</code></td><td>最多加载多少个 skill</td><td><code>100</code></td></tr>
+            <tr><td>maxDescriptionChars</td><td>int</td><td><span class="tag optional">选填</span></td><td><code>200</code></td><td>单条描述的长度上限</td><td><code>120</code></td></tr>
+            <tr><td>maxBodyBytes</td><td>int</td><td><span class="tag optional">选填</span></td><td><code>65536</code></td><td>单份 <code>SKILL.md</code> 正文的字节上限</td><td><code>131072</code></td></tr>
+            <tr><td>SKILL.md 头部的 <code>description</code></td><td>string</td><td><span class="tag required">必填</span></td><td>—</td><td>模型判断「该不该用这个 skill」的唯一依据，缺了整条会被跳过并在 <code>/skills</code> 里说明原因</td><td><code>"处理 PDF 时使用：拆分、合并、提取文本"</code></td>
+            </tr>
+            <tr><td>SKILL.md 头部的 <code>name</code></td><td>string</td><td><span class="tag optional">选填</span></td><td>目录名</td><td>skill 名称。头部只认 <code>---</code> 围栏里的扁平 <code>key: value</code>（支持 <code>&gt;</code> / <code>|</code> 折行与引号），<strong>不是完整 YAML</strong></td><td><code>pdf-processing</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong><code>skill</code> 工具是只读的</strong>：读一份说明不该需要写权限，因此值得把它写进 plan 模式的白名单。
+      README 给出的 plan 白名单示例里就含它。</p>
+
+      <p><strong>改了 <code>SKILL.md</code> 立即生效</strong>：目录缓存按文件系统签名失效，不需要重启，也不需要 <code>/reload</code>——
+      包括「给一个还缺东西的目录补上 <code>SKILL.md</code>」。</p>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>什么都看不见？</strong>敲 <code>/skills</code>（列出根目录、已加载清单与扫描期问题：目录写错、缺 description、名称被前面的根目录占掉）。<code>enabled=false</code> 时它仍可用——那是「为什么什么都看不见」的唯一答案。</li>
+        <li><strong>正文里的附带文件怎么读？</strong>用 <code>read_file</code> / <code>shell</code> 按需读取（<code>references/</code>、<code>scripts/</code>）。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish-Plugins/README.md:507-546（skills：目录约定、`SKILL.md` 头部字段、`root` / `maxSkills` / `maxDescriptionChars` / `maxBodyBytes`、`skill` 只读、`/skills`）、Jellyfish-Plugins/README.md:677-714（plan 白名单示例含 `skill`）</div>
+
+    <h2>workflow 插件：<code>workflow</code></h2>
+
+    <div class="feature">
+      <h3><code>workflow</code>：按 spec 编排多个子代理</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          让模型一次说清「几件事、什么顺序、怎么合起来」，由插件把它们变成一批并行跑的子代理。
+          没有 <code>needs</code> 的步骤立刻开始，因此它们并行执行。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          只派一个子代理做一件事时用内置的 <code>task</code>；「几件事可以同时做、再把结果合起来」才用 <code>workflow</code>。
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong>——工具只接受一个参数 <code>spec</code>：</p>
+
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>spec</td><td>object</td><td><span class="tag required">必填</span></td><td>—</td><td>编排定义</td><td><code>{ "spec": { "steps": [ … ] } }</code></td></tr>
+            <tr><td>spec.name</td><td>string</td><td><span class="tag optional">选填</span></td><td>面板退回显示 <code>id</code></td><td>人类可读名字，<strong>只用于编排面板展示</strong>，不进任何机器可读的位置</td><td><code>"调研并写方案"</code></td></tr>
+            <tr><td>spec.steps</td><td>array&lt;object&gt;</td><td><span class="tag required">必填</span></td><td>—</td><td>步骤列表，<strong>最多 12 步</strong></td><td><code>[ { "id": "probe-a", … } ]</code></td></tr>
+            <tr><td>spec.steps[].id</td><td>string</td><td><span class="tag required">必填</span></td><td>—</td><td>被 <code>needs</code> 引用的键</td><td><code>"probe-a"</code></td></tr>
+            <tr><td>spec.steps[].name</td><td>string</td><td><span class="tag optional">选填</span></td><td>面板退回显示 <code>id</code></td><td>人类可读名字，只用于面板展示；超过 20 字会被截短</td><td><code>"调研 A 方向"</code></td></tr>
+            <tr><td>spec.steps[].agent</td><td>string</td><td><span class="tag required">必填</span></td><td>—</td><td>这一步派给哪个 agent（必须是可委派的）</td><td><code>"scout"</code></td></tr>
+            <tr><td>spec.steps[].prompt</td><td>string</td><td><span class="tag required">必填</span></td><td>—</td><td>这一步的任务说明</td><td><code>"调研 A 方向……"</code></td></tr>
+            <tr><td>spec.steps[].needs</td><td>array&lt;string&gt;</td><td><span class="tag optional">选填</span></td><td>无（立刻开始，因此并行）</td><td>依赖的步骤 <code>id</code>；等这几步结束，并把它们的结论拼进本步任务</td><td><code>["probe-a", "probe-b"]</code></td></tr>
+            <tr><td>spec.steps[].when</td><td>string（枚举）</td><td><span class="tag optional">选填</span></td><td><code>always</code></td><td>只有三个取值：<code>always</code> / <code>on_success</code> / <code>on_failure</code>（后者必须声明 <code>needs</code>）</td><td><code>"on_failure"</code></td></tr>
+            <tr><td>spec.aggregate.mode</td><td>string（枚举）</td><td><span class="tag optional">选填</span></td><td><code>collect</code>（不写就按顺序拼接各步正文）</td><td><code>collect</code> 按顺序拼接各步结论；<code>summarize</code> 再派一个子代理把它们汇成一段结论。取值只能是这两个</td><td><code>"summarize"</code></td></tr>
+            <tr><td>spec.aggregate.agent</td><td>string</td><td><span class="tag optional">选填</span></td><td><code>null</code>（不写即缺省）；<strong>但 <code>mode: "summarize"</code> 时必须给</strong>，否则整份 spec 被拒</td><td>汇总那一步派给哪个 agent；<code>collect</code> 下它没有意义</td><td><code>"planner"</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>完整示例</strong>（README 原文）：</p>
+
+      <pre><code class="language-json">{"spec": {
+  "name": "调研并写方案",
+  "steps": [
+    {"id": "probe-a", "name": "调研 A 方向", "agent": "scout", "prompt": "调研 A 方向……"},
+    {"id": "probe-b", "name": "调研 B 方向", "agent": "scout", "prompt": "调研 B 方向……"},
+    {"id": "plan", "name": "写方案", "agent": "planner", "prompt": "结合 A 与 B 的结论给出方案",
+     "needs": ["probe-a", "probe-b"]}
+  ],
+  "aggregate": {"mode": "summarize", "agent": "planner"}
+}}</code></pre>
+
+      <p><strong>五条必须知道的边界</strong></p>
+      <ul>
+        <li><strong>结论是有损转交的</strong>：每个依赖各有字符额度（合计上限 20000 字符，对齐 <code>react.maxToolOutputChars</code>），超出部分<strong>只给头部</strong>，并在材料块首标注被截了多少字、完整记录在哪个归档文件里。</li>
+        <li><strong>没有循环、变量、表达式，也没有重试</strong>——要改主意就重新提交一份 spec。</li>
+        <li><strong>校验全部发生在派生任何子代理之前</strong>：写错的 spec 不会先烧掉几个子代理再报错；装不下时<strong>整份拒绝</strong>。</li>
+        <li><strong>受本回合的派生额度限制</strong>（<code>subAgent.maxSpawnsPerTurn</code>，缺省 12），与 <code>task</code> 等别的调用方共享。一次编排最多能派的子代理数 = 步骤数 +（声明 <code>summarize</code> 时那一次汇总）。</li>
+        <li><strong>一次 <code>workflow</code> 会占住一条工具执行线程</strong>直到整批跑完（与 <code>task</code> 同口径）；按 <code>Esc</code> 取消回合会掐断全部在途 run。</li>
+      </ul>
+
+      <p>
+        子代理来自内核的<strong>委派端口</strong>，与内置的 <code>task</code> 工具走同一条代码路径：并发上限、深度、墙钟与 token 预算、
+        取消、用量归集与归档的行为完全一致。插件不自己起线程池。<strong>不装它也能用</strong>：只需要「派一个子代理做一件事」时用内置的 <code>task</code>。
+      </p>
+
+      <p>
+        <strong>跑的时候看得见</strong>：消息区上方有一块「编排」面板，逐行显示每一步的状态
+        （<code>[ ]</code> 待执行 / <code>[~]</code> 进行中 / <code>[x]</code> 完成 / <code>[!]</code> 失败 / <code>[-]</code> 跳过）与「已完成 X/Y 步」。
+        本插件<strong>没有配置项</strong>。
+      </p>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>spec 被整份拒绝？</strong>通常是本回合的派生额度装不下（步骤太多，或前面已经派了不少）。拆成几次，或调大 <code>maxSpawnsPerTurn</code>（记得一起调大 <code>treeTokenBudget</code>）。若写了 <code>aggregate.mode: "summarize"</code> 却没给 <code>aggregate.agent</code>，也会整份拒绝。</li>
+        <li><strong>下游子代理说材料不全？</strong>上游结论被有损截断了；材料块首写明了被截多少字、完整记录在哪个归档文件，可用 <code>read_file</code> 读。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish-Plugins/README.md:547-592（workflow：spec 结构、`needs` / `when` / `aggregate`、有损转交、额度、面板）、Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowTool.java:97-109（参数 `spec` 与 `steps` 必填、`aggregate.mode` 的枚举）、WorkflowSpecParser.java:65-75（不写 `aggregate` 时 `mode` 落到 `collect`、`agent` 为 `null`；`summarize` 缺 `agent` 当场抛错）、AggregateMode.java:17、51-56（`COLLECT` 是缺省、取值只认 `collect` / `summarize`）</div>
+
+    <h2>MCP 插件：<code>mcp__&lt;server&gt;__&lt;tool&gt;</code></h2>
+
+    <div class="feature">
+      <h3>把外部 MCP server 的工具接进来</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>用 stdio 连上外部的 MCP server，把它的工具当作本机工具使用。</dd>
+        <dt>怎么用</dt>
+        <dd>
+          <strong>工具名带前缀</strong>：<code>mcp__&lt;server&gt;__&lt;tool&gt;</code>。server 给的工具名可能与内置工具或
+          另一个 server 重名，前缀让「谁占谁的位置」不成为事实；字符会被清洗成厂商允许的集合，超长时保留前缀并追加哈希。
+          <pre><code class="language-text">mcp__filesystem__read_file
+mcp__filesystem__list_directory</code></pre>
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong>（<code>plugins.configurations.jellyfish-plugin-mcp</code>）</p>
+
+      <pre><code class="language-json">{
+  "plugins": {
+    "configurations": {
+      "jellyfish-plugin-mcp": {
+        "servers": [
+          {
+            "id": "filesystem",
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+            "env": { "SOME_TOKEN": "${SOME_TOKEN}" },
+            "callTimeoutSeconds": 60,
+            "readOnlyTools": ["read_file", "list_directory"]
+          }
+        ],
+        "askWriteTools": true,
+        "startupWaitSeconds": 5
+      }
+    }
+  }
+}</code></pre>
+
+    <div class="table-scroll field-table">
+      <table>
+        <thead>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>servers[].id</td><td>string</td><td><span class="tag required">必填</span></td><td>—</td><td>server 标识，工具名前缀用它</td><td><code>"filesystem"</code></td></tr>
+          <tr><td>servers[].command</td><td>string</td><td><span class="tag required">必填</span></td><td>—</td><td>起 server 子进程的可执行文件</td><td><code>"npx"</code></td></tr>
+          <tr><td>servers[].args</td><td>array&lt;string&gt;</td><td><span class="tag optional">选填</span></td><td><code>[]</code>（空数组，不是 <code>null</code>）</td><td>启动参数</td><td><code>["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]</code></td></tr>
+          <tr><td>servers[].env</td><td>object</td><td><span class="tag optional">选填</span></td><td><code>{}</code>（空对象，不是 <code>null</code>）</td><td><strong><code>env</code> 是拿到环境变量的唯一通道</strong>：子进程只继承 <code>PATH</code> / <code>HOME</code> / <code>LANG</code> / <code>LC_*</code> / <code>TMPDIR</code> / <code>TEMP</code> / <code>TMP</code> / <code>USER</code> / <code>LOGNAME</code> / <code>SHELL</code>（Windows 另加 <code>SystemRoot</code> / <code>PATHEXT</code> / <code>ComSpec</code> / <code>windir</code>）</td><td><code>{ "SOME_TOKEN": "${SOME_TOKEN}" }</code></td></tr>
+          <tr><td>servers[].callTimeoutSeconds</td><td>int</td><td><span class="tag optional">选填</span></td><td><code>60</code></td><td>单次工具调用的超时；<strong><code>0</code> 表示不超时</strong>（上限 3600 秒）</td><td><code>120</code></td></tr>
+          <tr><td>servers[].readOnlyTools</td><td>array&lt;string&gt;</td><td><span class="tag optional">选填</span></td><td><code>[]</code></td><td><strong>本插件审批策略</strong>用的只读名单（与 plan 插件的同名键无关）</td><td><code>["read_file", "list_directory"]</code></td></tr>
+          <tr><td>askWriteTools</td><td>boolean</td><td><span class="tag optional">选填</span></td><td><code>true</code></td><td>写类工具是否要人工审批</td><td><code>false</code></td></tr>
+          <tr><td>startupWaitSeconds</td><td>int</td><td><span class="tag optional">选填</span></td><td><code>5</code></td><td>启动期等多久让第一轮就能看到工具；超时就转异步</td><td><code>10</code></td></tr>
+          <tr><td>重连退避</td><td>—</td><td>—</td><td><code>1s → 60s</code></td><td><strong>不可配</strong>：初始 1 秒、每次翻倍、封顶 60 秒，共 6 次（合计约一分钟）</td><td><code>【不可配】</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+      <p><strong>六条口径</strong></p>
+      <ul>
+        <li><strong>连接发生在启动之后</strong>：某个 server 装错了<strong>不会让内核起不来</strong>。</li>
+        <li><strong>断开会按退避自动重连，用尽就停</strong>；<strong>重连期间该 server 的工具先被摘掉</strong>（留着它们，模型会继续调用一批每次都以「未连接」收场的工具）。约一分钟后仍连不上，就停在「失败」并写明 <code>/reload</code> 可重试。</li>
+        <li><strong>只读只认你写的 <code>readOnlyTools</code></strong>（server 自填的 <code>readOnlyHint</code> 不再采纳）；<strong>缺省一律按可写</strong>。</li>
+        <li><strong>清单拿不到时保留旧清单</strong>：「确实没有工具」（<code>"tools":[]</code>）与「它没给我们清单」是两件事。</li>
+        <li><strong>协议能力</strong>：声明 <code>roots</code>（把进程工作目录告诉 server）；<strong>不声明也不支持 <code>sampling</code> / <code>elicitation</code></strong>，被请求时回一条明确的错误而不是挂在那里等。</li>
+        <li><strong>二进制内容落盘</strong>：server 返回的图片 / 音频写到系统临时目录下的 <code>jellyfish-plugin-mcp/&lt;pid&gt;/</code>，回灌给模型的只是一个路径；插件停止时整个目录会被删掉。</li>
+      </ul>
+
+      <div class="callout danger">
+        <span class="callout-title">子进程的环境是白名单，反过来也要小心</span>
+        <p>
+          宿主 JVM 里有各 provider 的 API key，而对面是个不受信的第三方进程——「继承」意味着它们会一起过去。
+          要传别的东西（含密钥）就写在 <code>env</code> 段里：<strong>显式即允许</strong>。
+          另外，启动日志里的参数值会按旗标名遮蔽（<code>--token sk-xxx</code>、<code>--api-key=...</code> 打成 <code>***</code>），
+          但<strong>识别只按旗标名、不按值的样子猜</strong>——把密钥塞进 <code>--header "Authorization: Bearer x"</code>
+          这种普通旗标的值里，这里认不出来。
+        </p>
+        <p>
+          <code>-cli</code> / <code>-server</code> 下没有审批者：<code>ASK</code> 等于拒绝，因此这两个模式里写类 MCP 工具实际不可用（与 <code>shell</code> 同理）。
+        </p>
+      </div>
+
+      <p><strong>生效方式</strong>：<span class="tag hot">/reload 生效</span>（配置段变了才重启这个插件；<code>/mcp</code> 看连接状态）。</p>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>工具名和内置的撞了？</strong>注册不成的名字不会被当成我们的工具，因此不会连累被撞的那个工具多一道审批；两个 server 提供同名工具时按最严算。</li>
+        <li><strong>server 挂了怎么办？</strong>看 <code>/mcp</code>——每个 server 的连接状态、工具数与失败原因，连不上时的唯一线索。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish-Plugins/README.md:593-676（MCP：工具名前缀、配置字段表、重连退避、只读与审批、协议能力、二进制落盘、子进程环境白名单）、Jellyfish-Plugins/jellyfish-plugin-mcp/src/main/java/zcd/jellyfish/plugin/mcp/McpServerConfig.java:97-110（配置解析）、:228-232（`args` 缺省返回空列表）、:253-257（`env` 缺省返回空映射）、Jellyfish-Plugins/README.md:677-714（plan 插件同名键与 MCP 无关的说明）</div>
+
+    <h2>tools 插件的路径闸门：<code>pathPolicy</code></h2>
+
+    <p>
+      文件工具在<strong>允许的路径之外</strong>时会升级为人工审批或直接拒绝。粒度是「工具名 + 路径」，
+      而不只是工具名——否则「允许 <code>write_file</code>」就等于「允许往任何地方写」。
+      配置位置：<code>plugins.configurations.jellyfish-plugin-tools.pathPolicy</code>。
+    </p>
+
+    <pre><code class="language-json">{
+  "plugins": {
+    "configurations": {
+      "jellyfish-plugin-tools": {
+        "pathPolicy": {
+          "write": { "allow": ["."], "outside": "ask" },
+          "read":  { "allow": [".", "~/.jellyfish"], "outside": "deny" }
+        }
+      }
+    }
+  }
+}</code></pre>
+
+    <p><strong>配置</strong></p>
+
+    <div class="table-scroll field-table">
+      <table>
+        <thead>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>write</td>
+            <td>object</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>按缺省（只允许工作目录、范围外要审批）</td>
+            <td>写方向的规则。<strong>不配就按缺省</strong></td>
+            <td><code>{ "allow": ["."], "outside": "ask" }</code></td>
+          </tr>
+          <tr>
+            <td>read</td>
+            <td>object</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>不配就<strong>不设限</strong></td>
+            <td>读方向的规则</td>
+            <td><code>{ "allow": [".", "~/.jellyfish"], "outside": "deny" }</code></td>
+          </tr>
+          <tr>
+            <td>….allow</td>
+            <td>array&lt;string&gt;（路径数组）</td>
+            <td><span class="tag optional">选填</span></td>
+            <td><code>["."]</code></td>
+            <td>允许的目录。相对路径按<strong>进程工作目录</strong>解析、行首 <code>~</code> 按<strong>用户主目录</strong>；因此 <code>"."</code> 就是工作目录</td>
+            <td><code>[".", "~/.jellyfish"]</code></td>
+          </tr>
+          <tr>
+            <td>….outside</td>
+            <td>string（枚举）</td>
+            <td><span class="tag optional">选填</span></td>
+            <td><code>ask</code></td>
+            <td>范围之外的裁定，取 <code>allow</code> / <code>ask</code> / <code>deny</code>。<code>allow</code> 等于<strong>把该方向的门关掉</strong>（恒无异议）</td>
+            <td><code>"deny"</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p><strong>五条口径</strong></p>
+
+    <ul>
+      <li><strong>哪些工具受管由工具自己声明</strong>：<code>read_file</code> / <code>list_dir</code> / <code>grep_files</code> 归读，
+        <code>write_file</code> / <code>edit_file</code> 归写，<code>ask_user</code> 不碰路径因此不受管。
+        闸门<strong>不认识别家的工具</strong>——<code>shell</code>、MCP 工具送到它面前时一律「无异议」。</li>
+      <li><strong>判据看的是真实位置</strong>：符号链接会先解开再比。工作目录里放一个指向 <code>/etc</code> 的链接不会成为后门。
+        对「准备新建的文件」这类还不存在的路径，解开它最近一个已存在的祖先、尾段原样保留。</li>
+      <li><strong><code>ask</code> 在没有审批界面的外壳里等于拒绝</strong>：<code>-cli</code> 不挂审批通道，因此工作目录外的写在那里会直接失败。
+        要放开就把该方向配成 <code>outside: "allow"</code>，或把目录加进 <code>allow</code>。</li>
+      <li><strong>它不是文件系统沙箱</strong>：管不了 <code>shell</code> 命令里出现的路径（那是命令策略的事），也管不了 MCP 工具。
+        它管的是本插件这几个文件工具的 <code>path</code> 参数。</li>
+      <li><strong>配置写错只回退并告警</strong>，不会让插件起不来：告警走 <code>ConfigWarningEvent</code>（TUI 上看得见）。</li>
+    </ul>
+
+    <p><strong>生效方式</strong>：<span class="tag hot">/reload 生效</span>。</p>
+
+    <p><strong>常见问题</strong></p>
+    <ul>
+      <li><strong><code>-cli</code> 里往工作目录外写直接失败？</strong>因为 <code>write.outside</code> 缺省是 <code>ask</code>，而 <code>-cli</code> 没有审批者，<code>ask</code> 就等于拒绝。</li>
+      <li><strong>读也被拦了？</strong>说明你配了 <code>read</code> 方向（不配就不设限）。</li>
+    </ul>
+
+    <div class="src-block">Jellyfish-Plugins/README.md:124-162（`pathPolicy`：完整 JSON、字段表与五条口径）</div>
+
+    <h2>怎么让某个工具不出现 / 必须审批</h2>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>想要的效果</th><th>写哪里</th><th>实际行为</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>某个工具<strong>调用被拒</strong></td>
+            <td><code>agents.json</code> 的 <code>deniedTools</code></td>
+            <td>模型仍看得到工具，但每次调用都被拒（页面见 <a href="07-agents.html">07</a>）</td>
+          </tr>
+          <tr>
+            <td>某个 agent <strong>只放行少数工具</strong></td>
+            <td><code>agents.json</code> 的 <code>allowedTools</code></td>
+            <td>白名单之外的调用被拒；同时<strong>决定子代理能看到哪些工具</strong>（只随委派生效）</td>
+          </tr>
+          <tr>
+            <td>某个工具<strong>每次都要我批准</strong></td>
+            <td><code>agents.json</code> 的 <code>askTools</code></td>
+            <td><code>-tui</code> 弹框、<code>-server</code> 走 SSE、<code>-cli</code> 一律拒绝</td>
+          </tr>
+          <tr>
+            <td>整类工具<strong>彻底消失</strong></td>
+            <td><code>jellyfish.json</code> 的 <code>plugins.enabled</code> / <code>plugins.disabled</code>，或把插件 jar 拿掉</td>
+            <td>插件不加载，它注册的工具一个都不存在。<strong>增删 jar 必须重启进程</strong></td>
+          </tr>
+          <tr>
+            <td>只让 <code>task</code> 不再注册</td>
+            <td><code>jellyfish.json</code> 的 <code>subAgent.enabled: false</code></td>
+            <td><code>task</code> 工具直接不再注册，模型看不到它；<span class="tag hot">/reload 生效</span></td>
+          </tr>
+          <tr>
+            <td>会话级「先看别改」</td>
+            <td>plan 插件的 <code>readOnlyTools</code> 白名单 + <code>/plan on</code></td>
+            <td><strong>不换工具清单，只拦执行</strong>：模型看到的清单不变，写操作在执行时被拒</td>
+          </tr>
+          <tr>
+            <td>文件工具只在特定目录里能用</td>
+            <td>tools 插件的 <code>pathPolicy</code></td>
+            <td>按「工具名 + 路径」裁定：<code>allow</code> 内放行，<code>outside</code> 决定越界时是 <code>allow</code> / <code>ask</code> / <code>deny</code></td>
+          </tr>
+          <tr>
+            <td>MCP 写类工具要批准</td>
+            <td>MCP 插件的 <code>askWriteTools</code> 与 <code>servers[].readOnlyTools</code></td>
+            <td>只读只认你写的名单；缺省一律按可写</td>
+          </tr>
+          <tr>
+            <td>shell 里「允许跑但每次批准」</td>
+            <td>shell 的 <code>allowedCommands</code>（只配白名单、不配可信表）</td>
+            <td>白名单只回答「能不能跑」，不解除审批；要静默执行须写进 <code>trustedCommands</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">记住这条主线</span>
+      <p>
+        <strong>「谁能调」由 <code>agents.json</code> 三段名单收口</strong>（<a href="07-agents.html">07 页</a>），
+        <strong>「谁弹框、谁拒绝」由外壳与审批机制决定</strong>（<a href="10-permissions.html">10 页</a>），
+        <strong>插件自己的配置段只能再收紧、不能放宽</strong>——例如 shell 的「无异议」无法把核心策略的 <code>ASK</code> 降级。
+      </p>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:723-739（三段名单与三外壳行为）、Jellyfish/README.md:811-834（`plugins.enabled` / `plugins.disabled`、plan 白名单）、Jellyfish/README.md:913-941（`subAgent.enabled`）、Jellyfish-Plugins/README.md:205-253（shell 分类器：插件裁定只能收紧）、Jellyfish-Plugins/README.md:677-714（plan：不换清单只拦执行）</div>
+
+    <h2>常见问题</h2>
+
+    <dl>
+      <dt>工具清单里没有 <code>read_file</code> / <code>shell</code>？</dt>
+      <dd>大概率是插件没装或没加载。先确认 <code>jellyfish-plugin-tools</code> / <code>jellyfish-plugin-shell</code> 的 jar 在扫描目录（缺省 <code>~/.jellyfish/plugins/</code>）里，然后<strong>重启进程</strong>——插件 jar 的新增 / 删除只在启动期确定。再看一眼 <code>plugins.enabled</code> / <code>plugins.disabled</code> 有没有把它排除掉。</dd>
+
+      <dt><code>read_file</code> 报「单行就超过 <code>max_bytes</code>」？</dt>
+      <dd>三条出路：缩小 <code>limit</code>、调大 <code>max_bytes</code>、或改用 <code>grep_files</code> 定位。它刻意不切短——切短会输出一行「看起来完整、实际残缺」的内容。</dd>
+
+      <dt><code>edit_file</code> 报「匹配到多处」？</dt>
+      <dd>把 <code>old_text</code> 写到唯一（带上下文缩进），或显式声明 <code>replace_all: true</code>。这是刻意的：默认不猜你想改哪一处。</dd>
+
+      <dt>在 <code>-cli</code> 里写工作目录外的文件直接失败？</dt>
+      <dd><code>pathPolicy.write.outside</code> 缺省是 <code>ask</code>，而 <code>-cli</code> 没有审批界面，<code>ask</code> 就等于拒绝。放开就把该方向配成 <code>outside: "allow"</code>，或把目录加进 <code>allow</code>。</dd>
+
+      <dt><code>ask_user</code> 没弹框，模型却继续干了？</dt>
+      <dd>「拿不到答复不算失败」是刻意的：<code>-cli</code>、子代理回合、等待超时三种情况都返回<strong>成功的</strong>工具结果，让模型按自己的判断继续。超时值在 <code>jellyfish.json</code> 的 <code>ask.timeoutSeconds</code>（缺省 120 秒）。</dd>
+
+      <dt><code>shell</code> 返回了非零退出码，是出错了吗？</dt>
+      <dd>不是。非零退出码是<strong>结果而不是错误</strong>（<code>grep</code> 没匹配到就是 1），它在输出里如实报告，工具调用本身不算失败。</dd>
+
+      <dt>想知道某个工具「算不算只读」？</dt>
+      <dd>没有这个概念。工具无法自称只读（描述符里已无该字段），只看你把它写进了哪份名单：plan 的 <code>readOnlyTools</code>、MCP 的 <code>servers[].readOnlyTools</code>。</dd>
+    </dl>
+
+    <div class="src-block">Jellyfish-Plugins/README.md:48-66（插件与工具归属）、Jellyfish-Plugins/README.md:69-123（读 / 写工具限制与 `ask_user` 口径）、Jellyfish-Plugins/README.md:163-253（shell 退出码与分类器）、Jellyfish/README.md:458-481（插件装载只在启动期确定）、Jellyfish/README.md:900-912（`ask.timeoutSeconds`）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/ToolDescriptor.java（无只读字段）</div>
+
+    <div class="conclusion">
+      <h2>关键结论</h2>
+      <ol>
+        <li>工具来自三处：<strong>内核只有 <code>task</code></strong>，其余全在插件里（tools / shell / todo / skills / workflow / MCP），因此「不装插件几乎什么都干不了」是设计而不是缺陷。</li>
+        <li><strong>「只读」不是工具自己声明的</strong>：<code>ToolDescriptor</code> 里没有该字段，只读与否完全由你写的名单决定（plan 的 <code>readOnlyTools</code>、MCP 的 <code>servers[].readOnlyTools</code>）。</li>
+        <li>三个读工具（<code>read_file</code> / <code>list_dir</code> / <code>grep_files</code>）<strong>都响应 <code>Esc</code>，并且都会说清「停下来时是哪一种停」</strong>——绝不把「已取消」说成「没有匹配」「空目录」。</li>
+        <li><code>read_file</code> 单行超限<strong>报错不切短</strong>；<code>edit_file</code> 匹配多处<strong>报错不改文件</strong>、且<strong>只改 UTF-8</strong>；<code>list_dir</code> / <code>grep_files</code> 各有一条只管耗时的兜底上限（50000 项 / 20000 文件）。</li>
+        <li><code>shell</code> 的四个反直觉点：<strong>每次调用全新 shell</strong>、<strong>stdin 启动即关闭</strong>、<strong>stdout 与 stderr 合并</strong>、<strong>非零退出码是结果不是错误</strong>；它没有沙箱，真正的边界是审批加白名单。</li>
+        <li><code>pathPolicy</code> 管的是 tools 插件这几个文件工具的 <code>path</code> 参数，判据看真实位置（会解符号链接），<strong>它不是文件系统沙箱</strong>——管不了 <code>shell</code> 命令里的路径，也管不了 MCP 工具；<code>ask</code> 在没有审批界面的外壳里等于拒绝。</li>
+        <li>「让工具不出现」有两条不同的路：改 <code>agents.json</code> 的名单（工具还在，调用被拦）与关掉提供它的插件（工具彻底不存在，需重启）；想让某个工具每次批准就写进 <code>askTools</code>。</li>
+      </ol>
+    </div>
+
+    <div class="next-steps">
+      <h2>下一步阅读</h2>
+      <ul>
+        <li>工具名要写进权限名单，先回看 <a href="07-agents.html">07 agents.json 与工具权限</a>把三段名单与优先级弄准。</li>
+        <li>工具读到的内容怎么进上下文、会话怎么持久化、工具结果超长时落到哪，看 <a href="09-session.html">09 会话与上下文</a>。</li>
+        <li>审批在三种外壳下各长什么样、超时怎么配、<code>!命令</code> 的边界，看 <a href="10-permissions.html">10 权限与审批</a>。</li>
+      </ul>
+    </div>
+
+    <nav class="pager" aria-label="翻页">
+      <a class="prev" href="07-agents.html"><span class="pager-dir">上一页</span>07 agents.json 与工具权限</a>
+      <a class="next" href="09-session.html"><span class="pager-dir">下一页</span>09 会话与上下文</a>
+    </nav>
+
+  </main>
+</div>
+
+<footer class="footer">
+  <div class="doc-meta">
+    Jellyfish 使用指南 · 本页依据：<code>Jellyfish-Plugins/README.md</code>（插件一览 / tools / shell / todo / skills / workflow / MCP / plan 各节）、<code>Jellyfish/README.md</code>（委派给子代理 / 配置 / 插件装载）、<code>Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/ToolDescriptor.java</code>、<code>Jellyfish/jellyfish-core/.../subagent/TaskTool.java</code> 及各插件的 <code>ToolDescriptor</code> 源码。
+    示例中的密钥、token 一律以占位符表示；<code>【待确认】</code>表示该结论在仓库中未找到出处，请以实际代码为准。
+  </div>
+</footer>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

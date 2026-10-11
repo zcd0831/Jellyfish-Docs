@@ -1,0 +1,1171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>09 会话与上下文 · Jellyfish 使用指南</title>
+<meta name="description" content="Jellyfish 会话与上下文完全指南：会话命令总表、session-file 插件的 sessionDir / gitEnabled 与会话文件结构、--session 从哪来、/compact 与自动压缩（compact 插件、三种状态、两个字段）、历史一条不删的口径、工具输出落盘的五个字段与回灌信封、工具结果老化 agingPercent、@ 文件引用、500 条消息投影上限与 /usage 记账。">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="nav-toggle" id="navToggle" aria-label="切换导航" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">🐙 Jellyfish 使用指南</a>
+  <div class="topbar-tools">
+    <input id="navSearch" type="search" placeholder="搜索页面…" aria-label="搜索页面">
+  </div>
+</header>
+
+<div class="layout">
+
+  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <div class="sidebar-title">文档目录</div>
+    <ul class="nav-list">
+      <li><a href="index.html">首页 · 总览与导航</a></li>
+    </ul>
+    <div class="nav-group">一、入门</div>
+    <ul class="nav-list">
+      <li><a href="01-overview.html">01 Jellyfish 是什么</a></li>
+      <li><a href="02-install.html">02 安装与环境准备</a></li>
+      <li><a href="03-quickstart.html">03 五分钟快速上手</a></li>
+      <li><a href="04-modes.html">04 三种运行模式</a></li>
+    </ul>
+    <div class="nav-group">二、配置</div>
+    <ul class="nav-list">
+      <li><a href="05-config-overview.html">05 配置体系总览</a></li>
+      <li><a href="06-models.html">06 models.json 详解</a></li>
+      <li><a href="07-agents.html">07 agents.json 与工具权限</a></li>
+    </ul>
+    <div class="nav-group">三、日常使用</div>
+    <ul class="nav-list">
+      <li><a href="08-tools.html">08 内置工具速查</a></li>
+      <li><a href="09-session.html" aria-current="page">09 会话与上下文</a></li>
+      <li><a href="10-permissions.html">10 权限与审批</a></li>
+    </ul>
+    <div class="nav-group">四、插件</div>
+    <ul class="nav-list">
+      <li><a href="11-plugin-usage.html">11 安装与使用官方插件</a></li>
+      <li><a href="12-plugin-dev.html">12 从零开发一个插件</a></li>
+      <li><a href="13-plugin-advanced.html">13 插件进阶与发布</a></li>
+    </ul>
+    <div class="nav-group">五、集成与排错</div>
+    <ul class="nav-list">
+      <li><a href="14-spring-boot.html">14 整合到 Spring Boot</a></li>
+      <li><a href="15-troubleshooting.html">15 故障排查</a></li>
+      <li><a href="16-faq.html">16 FAQ 与术语表</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <nav class="breadcrumb" aria-label="面包屑">
+      <span>Jellyfish 使用指南</span><span class="sep">/</span><span>09 会话与上下文</span>
+    </nav>
+
+    <h1>09 会话与上下文</h1>
+    <p class="page-sub">
+      会话是「这一串对话」的身份证，上下文是「这一轮真正发给模型的那段历史」。两者不是一回事——
+      这一页把命令、落盘位置、压缩与老化机制、<code>@</code> 引用、用量记账一次讲清。读完之后，
+      你应该能回答「我的会话去哪了」「为什么模型好像忘了前面说过的话」「那条几十轮前的输出路径为什么打不开」。
+    </p>
+
+    <section class="goals">
+      <h2>学习目标</h2>
+      <ul>
+        <li>列出会话相关命令，说出每个命令的别名与一句作用；</li>
+        <li>说清会话文件存在哪、里面有什么、是怎么被 git 管起来的，以及没有 session-file 插件时会发生什么；</li>
+        <li>会用 <code>--session</code> 恢复一次会话，并知道 <code>--agent</code> / <code>--model</code> 只归 <code>-cli</code>；</li>
+        <li>会用 <code>/compact</code> 与 <code>/compact preview</code>，并一眼分辨「不可用 / 未压缩 / 已压缩 N 条」三种状态；</li>
+        <li>能解释「历史一条不删」为什么成立，以及压缩后模型看不到的是哪一段；</li>
+        <li>会配 <code>react.toolOutput</code> 的五个字段，能读懂回灌信封 <code>_truncated</code> / <code>_path</code> / <code>_partial</code> 的含义；</li>
+        <li>会用 <code>@</code> 引用文件，并说明它为什么不把文件内容内联进消息。</li>
+      </ul>
+    </section>
+
+    <h2>会话是什么</h2>
+
+    <p>
+      一个会话（session）就是一段对话的容器：它持有 <strong>agentId、模型、消息列表、累计 token 用量、压缩摘要、
+      扩展条目</strong>。<strong>会话状态一律归会话对象自己</strong>——进程里不另存一份全局副本，内核也没有
+      <code>session</code> 配置段。唯一的进程级「会话状态」是新建会话用的<b>待生效默认值</b>
+      （<code>SessionDefaults</code>），它只在<strong>创建那一刻</strong>被消费。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>会话种类（<code>SessionKind</code>）</th><th>是什么</th><th>进 <code>/session</code> 列表吗</th><th>落盘吗</th><th>能 <code>/resume</code> 吗</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>NORMAL</code></td>
+            <td>你自己建的普通会话</td>
+            <td>是</td>
+            <td>是</td>
+            <td>是</td>
+          </tr>
+          <tr>
+            <td><code>EPHEMERAL</code></td>
+            <td>子代理的临时会话</td>
+            <td>否</td>
+            <td>否</td>
+            <td>否</td>
+          </tr>
+          <tr>
+            <td><code>FORKED</code></td>
+            <td>从某个会话切出来的分支会话</td>
+            <td>是</td>
+            <td>是</td>
+            <td>是</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <ul>
+      <li><strong>判定「是不是子代理会话」只能看 <code>kind</code></strong>，<code>parentSessionId</code> 只是追溯信息。</li>
+      <li>「这份数据归哪个会话」由内核统一回答（<code>ownerSessionId</code>）：<strong>沿父链只穿 <code>EPHEMERAL</code>，
+        遇到用户会话就停</strong>。因此嵌套委派时孙代理的活算在<strong>你所在的会话</strong>上，而分支会话归它自己。</li>
+    </ul>
+
+    <div class="src-block">Jellyfish/docs/constraints.md:299-309（会话状态）、Jellyfish/docs/constraints.md:338-360（会话种类与扩展条目）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/SessionKind.java</div>
+
+    <h2>会话命令总表</h2>
+
+    <p>
+      输入以 <code>/</code> 开头即走命令域，<strong>三条外壳（<code>-cli</code> / <code>-tui</code> / <code>-server</code>）命令一致</strong>。
+      下表是内核自带的会话相关命令；插件会带来更多命令（待办插件的 <code>/todo</code>、skills 的 <code>/skills</code>、
+      shell 的 <code>/shell</code> 等），装了就出现在 <code>/help</code> 里。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>命令</th><th>别名</th><th>作用</th><th>示例</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>/new</code></td>
+            <td>—（无别名）</td>
+            <td>新建会话并切换为当前</td>
+            <td><code>/new</code></td>
+          </tr>
+          <tr>
+            <td><code>/session</code></td>
+            <td><code>/sessions</code></td>
+            <td>列出全部会话</td>
+            <td><code>/session</code></td>
+          </tr>
+          <tr>
+            <td><code>/resume &lt;sessionId&gt;</code></td>
+            <td>—（无别名）</td>
+            <td>切换到已有会话</td>
+            <td><code>/resume a1b2c3d4</code></td>
+          </tr>
+          <tr>
+            <td><code>/status</code></td>
+            <td>—（无别名）</td>
+            <td>显示当前会话概要</td>
+            <td><code>/status</code></td>
+          </tr>
+          <tr>
+            <td><code>/usage</code></td>
+            <td><code>/cost</code></td>
+            <td>显示当前会话 token 用量与缓存命中率</td>
+            <td><code>/usage</code></td>
+          </tr>
+          <tr>
+            <td><code>/delete &lt;sessionId&gt;</code></td>
+            <td><code>/rm</code></td>
+            <td>删除会话（含持久化文件）</td>
+            <td><code>/delete a1b2c3d4</code></td>
+          </tr>
+          <tr>
+            <td><code>/model [provider/model]</code></td>
+            <td>—（无别名）</td>
+            <td>查看或切换模型</td>
+            <td><code>/model openai/gpt-4o-mini</code></td>
+          </tr>
+          <tr>
+            <td><code>/agent [agentId]</code></td>
+            <td><code>/a</code></td>
+            <td>查看或切换 agent</td>
+            <td><code>/agent coder</code></td>
+          </tr>
+          <tr>
+            <td><code>/compact [preview]</code></td>
+            <td>—（无别名）</td>
+            <td>把更早的对话压成摘要（需压缩策略插件）</td>
+            <td><code>/compact preview</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">这些命令不需要模型配置</span>
+      <p>
+        <code>/help</code>、<code>/session</code>、<code>/status</code>、<code>/model</code>、<code>/compact preview</code>
+        <strong>离线可用</strong>——拿来验证安装是否正常最合适（见 <a href="02-install.html">02 安装与环境准备</a>）。
+      </p>
+    </div>
+
+    <p><strong>命令的两条行为口径</strong></p>
+    <ul>
+      <li>
+        <strong>命令可以不把话说完（命令「接力」）</strong>：有一类命令想做的事是「让模型接着干」，
+        它返回 <code>CommandResult.handoff(text)</code>，内核<strong>不呈现命令输出</strong>，而是把 <code>text</code>
+        当成你这一次敲下的输入接着走——那句文本会成为会话里的一条用户消息（因此也会落盘、也会被压缩），
+        模型据此发起的读写工具调用<strong>照旧过权限与审批</strong>，命令没有借此取得任何新权限。
+        <code>/init</code> 就是这么实现的。Server 只走半程：<code>POST /sessions/{id}/commands</code> 是纯 JSON，
+        客户端需要拿 <code>handoff</code> 文本再 <code>POST /chat</code> 一次。
+      </li>
+      <li>
+        <strong><code>-tui</code> 另有五个由外壳处理的命令</strong>，不在 <code>/help</code> 列表里：
+        <code>/exit</code>、<code>/ui</code>、<code>/thinking</code>、<code>/toolargs</code>、<code>/mouse</code>。
+      </li>
+    </ul>
+
+    <div class="callout tip">
+      <span class="callout-title"><code>/status</code> 逐行输出：一行会话标识 + 六个字段</span>
+      <p>
+        README 只写它是「显示当前会话概要」。内核命令实现里实际逐行输出的是下面这些
+        （<strong>字段名与顺序都写死</strong>，六个字段各自缩进两格）：
+      </p>
+      <ul>
+        <li><code>会话：&lt;sessionId&gt;</code></li>
+        <li><code>model：&lt;provider&gt;/&lt;model&gt;</code>——会话没绑模型（provider 或 model 为空）时显示 <code>默认</code></li>
+        <li><code>agent：&lt;agentId&gt;</code>——没绑 agent 时显示 <code>-</code></li>
+        <li><code>消息数：&lt;当前消息条数&gt;</code></li>
+        <li><code>压缩：</code>四态之一——<code>不可用（没有插件提供压缩策略）</code>、<code>未压缩</code>、
+          <code>压缩记录已失效（边界消息不在会话里，本次按未压缩发送）</code>、
+          <code>已压缩 N 条更早消息（摘要 X 字，其中 M 条未收录）</code></li>
+        <li><code>token：&lt;累计总量&gt;（输入 &lt;prompt token 数&gt; / 输出 &lt;completion token 数&gt;）</code></li>
+        <li><code>缓存：命中 &lt;命中数&gt; / 输入 &lt;输入数&gt;（&lt;百分比，保留一位小数&gt;%）</code></li>
+      </ul>
+      <p>
+        TUI 的状态栏另有一份口径：<code>agent · provider/模型 · token 用量</code>，
+        <strong>会话被压缩过时追加 <code>已压缩 N 条（丢弃 M 条）</code></strong>。
+        当前没有会话时 <code>/status</code> 只回一行 <code>当前没有会话，可用 /new 新建。</code>
+      </p>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:367-387（常用命令表与别名）、Jellyfish/README.md:388-402（命令接力、Server 半程、离线可用）、Jellyfish/README.md:190-193（TUI 状态栏：<code>已压缩 N 条（丢弃 M 条）</code>）、Jellyfish/README.md:196（命令输出面板）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/command/SystemCommands.java:634-648（<code>/status</code> 的输出行与字段顺序）、SystemCommands.java:920-925（模型标签：跟随默认时显示 <code>默认</code>）、SystemCommands.java:945-947（<code>null</code> 显示为 <code>-</code>）、SystemCommands.java:754-770（压缩一行的四种文案）、SystemCommands.java:681-684（缓存一行的写法）</div>
+
+    <h2>会话存在哪：session-file 插件</h2>
+
+    <div class="feature">
+      <h3>会话持久化（<code>jellyfish-plugin-session-file</code>）</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          把会话落到本地磁盘：<strong>一个会话一个 JSON 文件，并用 git 管理历史</strong>。
+          装了它，<code>--session</code> / <code>/resume</code> / <code>/session</code>
+          <strong>才有内容可恢复</strong>——启动时内核向所有注册了恢复处理器的插件要回会话，
+          因此上次退出前的会话在下次启动时立即可见。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          装 jar 到扫描目录（缺省 <code>~/.jellyfish/plugins/</code>）后<strong>重启进程</strong>，
+          然后什么都不用做：首轮对话结束就会落盘。
+          <pre><code class="language-bash">mkdir -p ~/.jellyfish/plugins
+# 把 jellyfish-plugin-session-file-0.1.1.jar 放进去，然后重新启动 jellyfish</code></pre>
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>sessionDir</td>
+              <td>路径字符串</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>~/.jellyfish/sessions</code></td>
+              <td>会话文件目录。会话是跨项目的运行态数据，因此默认放全局级目录</td>
+              <td><code>"~/my-jellyfish/sessions"</code></td>
+            </tr>
+            <tr>
+              <td>gitEnabled</td>
+              <td>boolean</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>true</code></td>
+              <td>首次落盘时在 <code>sessionDir</code> 里 <code>git init</code>，此后每次内容变化的落盘留一次提交（内容没变则不写文件、也不提交）。机器上没有 git 时只告警，文件照常落盘</td>
+              <td><code>false</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>完整示例</strong></p>
+      <pre><code class="language-json">{
+  "plugins": {
+    "enabled": ["jellyfish-plugin-tools", "jellyfish-plugin-shell", "jellyfish-plugin-session-file"],
+    "configurations": {
+      "jellyfish-plugin-session-file": {
+        "sessionDir": "~/.jellyfish/sessions",
+        "gitEnabled": true
+      }
+    }
+  }
+}</code></pre>
+      <p>
+        插件配置段写在 <code>jellyfish.json</code>，改完敲 <code>/reload</code> 即可生效
+        （<strong>新增 / 删除插件 jar 才需要重启</strong>）。
+      </p>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>会话文件里是什么？</strong>一份会话快照 <code>SessionSnapshot</code>，字段见下一节。</li>
+        <li><strong>git 提交会拖慢对话吗？</strong>不会。提交在专属线程上做、按文件合并待提交记录；插件停止时会把在途的那一次做完或强杀（强杀可能留下 <code>.git/index.lock</code>，那时提交告警并跳过，会话文件本身不受影响）。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish-Plugins/README.md:254-265（session-file：一个会话一个 JSON、<code>sessionDir</code> / <code>gitEnabled</code> 表与三条口径）、Jellyfish/README.md:471（插件配置段由 <code>/reload</code> 生效）、Jellyfish/README.md:458-461（插件 jar 的新增 / 删除只在启动期确定）</div>
+
+    <h3>会话文件的结构</h3>
+
+    <p>
+      文件名是 <code>&lt;sessionId&gt;.json</code>，写在 <code>sessionDir</code> 下；写入走
+      <strong>临时文件 <code>&lt;id&gt;.json.tmp</code> + 原子改名</strong>，因此读路径永远不会读到半份文件。
+      新建的会话文件权限是 <code>600</code>、新建的目录层级是 <code>700</code>（已存在的层级不动——那是用户的盘）。
+      文件里装的是一份 <strong>API 侧契约类型</strong> <code>SessionSnapshot</code>——它是会话的<b>投影</b>而不是第二份真相：
+      内核在变更会话时生成快照交给插件，插件原样存下；恢复时内核把快照还原成会话。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>快照字段</th><th>含义</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>sessionId</code></td><td>会话标识，不可为空白</td></tr>
+          <tr><td><code>createdAt</code> / <code>updatedAt</code></td><td>创建时间戳与最后一次变更时间戳（epoch millis）</td></tr>
+          <tr><td><code>title</code></td><td>会话标题，可为 <code>null</code></td></tr>
+          <tr><td><code>agentId</code></td><td>会话绑定的 agentId，可为 <code>null</code>（未绑定）</td></tr>
+          <tr><td><code>provider</code> / <code>model</code></td><td>会话当前的 provider 名与模型名，<code>null</code> 表示跟随默认</td></tr>
+          <tr><td><code>messages</code></td><td>消息列表（每条是 <code>SessionMessageSnapshot</code>），可为 <code>null</code>（等价空列表）</td></tr>
+          <tr><td><code>usage</code></td><td>累计 token 用量（<code>SessionUsageSnapshot</code>），可为 <code>null</code>（按零用量处理）</td></tr>
+          <tr><td><code>compaction</code></td><td>压缩摘要（<code>SessionCompactionSnapshot</code>），<strong>从未压缩过时为 <code>null</code></strong></td></tr>
+          <tr><td><code>kind</code></td><td>会话种类 <code>SessionKind</code>——它就是「是不是子代理会话」的判定来源</td></tr>
+          <tr><td><code>parentSessionId</code></td><td>派生该会话的父会话标识，根会话为 <code>null</code>（只是追溯信息）</td></tr>
+          <tr><td><code>forkPointMessageId</code></td><td>分支点消息标识（含），非分支会话为 <code>null</code></td></tr>
+          <tr><td><code>extensionEntries</code></td><td>插件挂在会话上的扩展条目，无条目时为空列表</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout design">
+      <span class="callout-title">为什么快照类型只有一个构造器</span>
+      <p>
+        快照靠 Jackson 的「隐式属性构造器」反序列化，而 Jackson 只在<strong>恰好一个可见构造器</strong>时才认它。
+        多出一个重载会让整个快照类型直接反序列化失败——代价是<strong>整段会话读不回来</strong>。
+        因此新增字段走静态工厂，不加兼容构造器。这也解释了「往返测试」（capture → restore → capture 必须相等）
+        为什么是这套机制唯一的护栏。
+      </p>
+    </div>
+
+    <h3>什么时候落盘</h3>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>场景</th><th>语义</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>创建会话</td><td><strong>不落盘</strong>（空会话无文件、无提交）；失败从「创建时暴露」变为「第一次变更时暴露」</td></tr>
+          <tr><td>回合内消息追加</td><td>只标脏，由回合的 <code>finally</code> 统一 flush 落一次——<strong>回合收敛 = 已落盘</strong></td></tr>
+          <tr><td>命令 / <code>recordUsage</code> / <code>applyCompaction</code> / 关闭会话</td><td><strong>仍即时落盘</strong>（挂起的只有消息追加）</td></tr>
+          <tr><td>延迟落盘 <code>flush</code> 失败</td><td>只记 WARN 并<strong>保留脏标记</strong>等下次重试，不得升级为回合失败</td></tr>
+          <tr><td>变更时的落盘失败</td><td><strong>异常原样上抛</strong>：那一刻起「状态已变」与「状态已落盘」必须同生共死</td></tr>
+          <tr><td>恢复</td><td>单个插件读不出只告警跳过；恢复<strong>必须排在插件启动（<code>bootstrap</code>）之后</strong></td></tr>
+          <tr><td>关闭前钩子</td><td>调用点<strong>在最后一次落盘之前</strong>；<code>USER_REQUEST</code> 的否决被采纳（fail-loud），<code>SHUTDOWN</code> / <code>RELOAD</code> / <code>INTERNAL</code> 的否决被忽略</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-session-file/src/main/java/zcd/jellyfish/plugin/sessionfile/SessionStore.java（文件名 <code>&lt;sessionId&gt;.json</code>、<code>.json.tmp</code> 临时文件、原子改名）、Jellyfish-Plugins/CHANGELOG.md:196-202（会话文件 600 / 新目录 700 的安全修复）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/SessionSnapshot.java（快照 14 个字段与「唯一构造器」约束）、Jellyfish/docs/constraints.md:310-336（落盘时机与恢复顺序）</div>
+
+    <h3>没有装持久化插件时会怎样</h3>
+
+    <div class="callout pitfall">
+      <span class="callout-title">会话只活在内存里，退出即丢</span>
+      <ul>
+        <li><strong>会话不会落盘</strong>，进程退出后没有任何文件留下，下次启动也没有会话可恢复。</li>
+        <li><code>/session</code> 列表里只有当前进程里活着的会话（<code>EPHEMERAL</code> 子代理会话连列表都不进）。</li>
+        <li><code>--session &lt;会话&gt;</code> 要「切换到已有会话」，而没有持久化插件时没有可恢复的会话，
+          因此会按用法错误<strong>退出 <code>2</code></strong>（<code>--session</code> 指向不存在的东西就是 <code>2</code>）。</li>
+        <li><code>/resume &lt;sessionId&gt;</code> 切不到上次的会话，当场回一行错误
+          <code>会话不存在：&lt;sessionId&gt;</code>（不带参数时弹会话选择页；参数多于一个时回报
+          <code>用法：/resume &lt;sessionId&gt;</code>）。</li>
+      </ul>
+      <p>
+        <strong>「没有持久化插件就一定退 <code>2</code>」在源码里能逐字对上</strong>：启动期由
+        <code>SessionBootstrap</code> 把「切不到」抛成异常，消息形如
+        <code>会话不存在：&lt;sessionId&gt;（本次进程里没有这个会话；历史会话由会话持久化插件在启动时恢复，未装它则每次进程都是全新的）</code>；
+        <code>Launcher</code> 把这一步的失败归为「参数不可满足」，stderr 打印 <code>错误：…</code>，
+        并返回 <code>ExitCodes.USAGE_ERROR</code>（<code>2</code>）。
+      </p>
+    </div>
+
+    <div class="src-block">Jellyfish-Plugins/README.md:254-256（「装了它，<code>--session</code> / <code>/resume</code> / <code>/session</code> 才有内容可恢复」）、Jellyfish/README.md:126（<code>--session</code> 需装持久化插件、不存在时退 2）、Jellyfish/README.md:149-153（退出码表）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/command/SystemCommands.java:419-433（<code>/resume</code> 的三种形态与错误文案）、Jellyfish/jellyfish-cli/src/main/java/zcd/jellyfish/cli/SessionBootstrap.java:114-125（切不到时的异常与「本次进程里没有」的解释）、Jellyfish/jellyfish-cli/src/main/java/zcd/jellyfish/cli/Launcher.java:111-120（会话准备失败归为参数不可满足）、Jellyfish/jellyfish-cli/src/main/java/zcd/jellyfish/cli/ExitCodes.java:20（<code>USAGE_ERROR = 2</code>）</div>
+
+    <h2>会话从哪来：启动参数</h2>
+
+    <div class="table-scroll field-table">
+      <table>
+        <thead>
+          <tr><th>参数</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>--session</td>
+            <td>字符串（会话标识）</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>无（新会话）</td>
+            <td>切换到已有会话。<strong>需安装 <code>jellyfish-plugin-session-file</code> 等持久化插件</strong>；会话不存在时按用法错误退出 <code>2</code></td>
+            <td><code>--session a1b2c3d4</code></td>
+          </tr>
+          <tr>
+            <td>--agent</td>
+            <td>字符串（agentId）</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>内置默认 agent（<code>jellyfish</code>）</td>
+            <td><strong>新建会话时</strong>绑定 agent；指向不存在的 agent 时按用法错误退出 <code>2</code>。<strong>只归 <code>-cli</code></strong></td>
+            <td><code>-cli --agent coder -p "…"</code></td>
+          </tr>
+          <tr>
+            <td>--model</td>
+            <td>字符串（<code>provider/模型</code>）</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>全局默认模型</td>
+            <td><strong>新建会话时</strong>指定模型，<strong>必须含 <code>/</code></strong>；指向不存在的模型退 <code>2</code>。<strong>只归 <code>-cli</code></strong></td>
+            <td><code>-cli --model openai/gpt-4o-mini -p "…"</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <ul>
+      <li>
+        <strong><code>--agent</code> / <code>--model</code> 是在<strong>新建</strong>会话时生效的</strong>；
+        已经存在的会话要换 agent / 模型，用 <code>/agent</code> / <code>/model</code>（详见
+        <a href="07-agents.html">07 agents.json 与工具权限</a>）。
+      </li>
+      <li>
+        <strong>带上它们却用了别的模式会判用法错误退 <code>2</code></strong>：<code>--agent</code> / <code>--model</code> /
+        <code>-p</code> / <code>--show-thinking</code> / <code>--show-tool-args</code> 只归 <code>-cli</code>，
+        <code>-tui</code> / <code>-server</code> 带上它们<strong>一律判用法错误退 <code>2</code></strong>（拒绝而不是静默忽略）。
+      </li>
+      <li>
+        <strong>模型解析是三级回落</strong>：<code>会话显式 → agent.model → 全局默认</code>。
+        <strong>子代理不继承主会话的模型</strong>，它用自己的 <code>model</code>（没配则落到全局默认）。
+      </li>
+      <li>
+        <strong>命令行下会话不存在与「没有输入」是同一类错</strong>：都退 <code>2</code>。
+      </li>
+    </ul>
+
+    <div class="src-block">Jellyfish/README.md:120-138（参数表：<code>--session</code> / <code>--agent</code> / <code>--model</code> 与「只归 <code>-cli</code>」）、Jellyfish/README.md:149-153（退出码表：<code>2</code> 含三者指向不存在的东西）、Jellyfish/docs/constraints.md:432-434（模型三级回落、子代理不继承父会话模型）</div>
+
+    <h2>上下文与压缩（本页重点）</h2>
+
+    <h3>为什么需要压缩</h3>
+
+    <p>
+      长会话的<strong>每一轮都要把整段历史重新发给模型</strong>，token 花得越来越多，最后撞上上下文窗口。
+      压缩的思路是：<strong>多花一次调用</strong>把更早的对话压成一份摘要，之后每次请求只带
+      <strong>摘要 + 最近若干条原文</strong>。
+    </p>
+
+    <div class="mermaid">
+flowchart LR
+  A["会话里的完整历史<br/>（一条不删）"] --> B["老化：保留窗口之外的工具结果<br/>换成带路径的 stub"]
+  B --> C["压缩边界：边界之前换成摘要"]
+  C --> D["最近 N 条原文<br/>（compactKeepRecentMessages）"]
+  D --> E["这一轮真正发给模型的链路"]
+    </div>
+    <p class="figure-cap">图 9-1　「历史」与「发给模型的链路」不是一回事：老化与压缩都只改后者</p>
+
+    <h3>压缩后的请求链路</h3>
+
+    <p>
+      压缩是<strong>非破坏式、滚动摘要</strong>：消息一条不删，只记下
+      <code>Session.compaction = {boundaryMessageId, summary, droppedMessageCount}</code>，
+      <strong>失败无副作用</strong>。每次只压「上次边界之后、再留 <code>keepRecent</code> 条」的那一段，
+      并把上一份摘要一起喂回模型，<strong>边界只向后移</strong>。
+    </p>
+
+    <ul>
+      <li><strong>摘要是一条每次现算的出站合成消息，不落盘</strong>：排在压缩边界之后、被保留历史之前；角色用 <code>user</code>。</li>
+      <li><strong>边界必须落在工具调用组的边界上</strong>：起点若落在 <code>tool</code> 消息上，就<strong>向前退到组开头</strong>
+        ——所以 <code>keepRecent</code> 是「<strong>至少</strong>保留最近多少条」。</li>
+      <li><strong>单次压缩、装不下就丢最旧</strong>：待压范围超预算时从最旧侧丢弃，被丢弃条数如实上报并落盘；<strong>至少进摘要 1 条</strong>。</li>
+      <li><strong>摘要调用复用当前上下文（cache-safe fork）</strong>：发出去的是「父请求的真前缀 + 一条追加指令」——切的是父请求自己的字节、工具原样带上、用 <code>tool_choice: none</code> 关掉工具调用。</li>
+    </ul>
+
+    <div class="callout danger">
+      <span class="callout-title">「历史一条不删」——这句话要用在正确的地方</span>
+      <p>
+        <strong>屏幕上的会话、恢复出来的会话、落盘的文件，都还是完整历史</strong>。变的<strong>只是「发给模型的那条链路从哪里开始」</strong>。
+        因此：
+      </p>
+      <ul>
+        <li>压缩之后你往回翻，早先的消息<strong>一条都没少</strong>；<code>/session</code>、会话 JSON 文件也是完整的。</li>
+        <li>但模型<strong>看不到</strong>被压掉的那一段原文——它只拿到摘要。所以「压完之后模型好像忘了细节」不是 bug。</li>
+        <li>更严重的一种情况是<b>被丢弃</b>：单次压缩装不下时，最旧的那段既<strong>不在摘要里</strong>、也<strong>不会再发给模型</strong>，
+          完成提示会写明条数（状态栏的 <code>已压缩 N 条（丢弃 M 条）</code>）。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:405-422（会话与压缩：用法、自动触发、三条口径、依赖插件）、Jellyfish/docs/constraints.md:629-644（压缩：非破坏式、边界对齐、单次压缩、cache-safe fork、两条触发、<code>/compact</code> 只起头不等结果）</div>
+
+    <h3><code>/compact</code> 与 <code>/compact preview</code></h3>
+
+    <div class="feature">
+      <h3>`/compact` 会话压缩</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>把更早的对话压成一份摘要，之后每次请求只带摘要 + 最近若干条原文，从而把 token 花销压下来。</dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-text">/compact                 按默认档位压一次（保留条数取 react.compactKeepRecentMessages，缺省 20）
+/compact preview         只回报「将压缩 X 条、保留 Y 条、丢弃 Z 条、摘要输入约 T token」，不发起压缩</code></pre>
+          <code>/compact</code> <strong>只起头不等结果</strong>：它跑在自持的 <code>compact</code> 线程池上，
+          外壳每帧轮询状态；完成时的提示形如 <code>压缩完成：已压缩 3 条更早的消息</code>。
+          <strong>不做用户可见档位</strong>——「没什么可压」时报 ERROR，而 <code>preview</code> 在同一种情况下返回正常
+          且<strong>连模型都不解析</strong>。
+        </dd>
+      </dl>
+
+      <p><strong>看什么</strong></p>
+      <ul>
+        <li><strong>可压条数不足时不要浪费钱</strong>：先用 <code>/compact preview</code> 看「将压缩 X 条、保留 Y 条、丢弃 Z 条、摘要输入约 T token」，
+          再决定压不压。</li>
+      </ul>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>压完之后能再压吗？</strong>能，<strong>可以反复压</strong>：每次只压上次边界之后新增的那段，边界只向后移。</li>
+        <li><strong>压缩会变慢对话吗？</strong>自动压缩跑在当前那一轮模型调用的旁边，<strong>不拖慢对话</strong>，结果在<strong>下一轮</strong>生效。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:408-422（<code>/compact</code> / <code>/compact preview</code> 的两种用法与三条口径）、Jellyfish/docs/constraints.md:641-644（只起头不等结果、只有两种形态、无档位、ERROR 与 OK 的差别）</div>
+
+    <h3>自动压缩的触发条件</h3>
+
+    <ul>
+      <li>
+        <strong>上下文用到 80% 时自动压一次</strong>：由 <code>react.autoCompactPercent</code> 控制，<strong>写 <code>0</code> 关闭</strong>。
+      </li>
+      <li>
+        <strong>另一种触发</strong>：只要某一次请求已经触发了<strong>机械裁剪</strong>（历史正在被静默丢弃），也会立刻压一次。
+      </li>
+      <li>
+        <strong>「无范围时零成本」</strong>：没有可压范围时不花钱。
+      </li>
+      <li>
+        <strong>想彻底改用人工</strong>：<code>react.autoCompactPercent: 0</code>，之后用 <code>/compact preview</code> 先看会压多少再手动压。
+      </li>
+    </ul>
+
+    <div class="src-block">Jellyfish/README.md:415-417（80% 自动压、机械裁剪也是触发点、不拖慢对话）、Jellyfish/README.md:989（「关掉自动压缩」这条常见配置任务）、Jellyfish/docs/constraints.md:639-640（两条触发：MANUAL / AUTO）</div>
+
+    <h3>压缩需要插件：不装就没有</h3>
+
+    <div class="callout pitfall">
+      <span class="callout-title">压缩是插件能力，内核只提供机制</span>
+      <p>
+        内核手里只有机制——读消息、选范围、发模型调用、校验摘要、推进边界、记用量、落盘；
+        <strong>「这次该压成什么样」由插件回答</strong>：一份摘要指令（插件 jar 里的 <code>summary-prompt.md</code>）
+        + 两个可选数量参数。没有插件提供摘要指令，就没有可以发给模型的摘要请求。
+      </p>
+      <ul>
+        <li><strong>自动压缩不生效</strong>（上下文满了只会走机械裁剪，历史在<strong>请求里</strong>变少）；</li>
+        <li><code>/compact</code> 与 <code>/compact preview</code> 直接回答<strong>「压缩不可用：没有插件提供压缩策略」</strong>；</li>
+        <li><code>/status</code> 的压缩一行显示<strong>「不可用（没有插件提供压缩策略）」</strong>。</li>
+      </ul>
+      <p><strong>不回退内置</strong>是刻意的：可用性只查注册表（<code>isAvailable()</code>）。</p>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>状态</th><th>屏幕上长什么样</th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>不可用</td>
+            <td>「压缩不可用：没有插件提供压缩策略」/ <code>/status</code> 显示「不可用」</td>
+            <td>没装 <code>jellyfish-plugin-compact</code>（或同类插件）</td>
+          </tr>
+          <tr>
+            <td>未压缩</td>
+            <td>状态栏与 <code>/status</code> 都不显示压缩标记</td>
+            <td>插件可用，但这个会话还没压过（<code>compaction</code> 为 <code>null</code>）</td>
+          </tr>
+          <tr>
+            <td>已压缩 N 条</td>
+            <td><code>已压缩 N 条</code>；有丢弃时追加 <code>（丢弃 M 条）</code></td>
+            <td>条数按压缩边界在消息列表里的位置<strong>现算</strong>，不另存一份可能撒谎的数字；边界失效时按「未压缩」显示</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout warn">
+      <span class="callout-title">「在插件目录里」不等于「装了」</span>
+      <p>
+        插件 jar 在 <code>~/.jellyfish/plugins/</code> 里、但没列进 <code>jellyfish.json</code> 的
+        <code>plugins.enabled</code> 时，算<strong>没装</strong>。启动日志里会有一条：
+      </p>
+      <pre><code class="language-text">插件被禁用或版本不满足，未启动: pluginId=jellyfish-plugin-compact</code></pre>
+      <p>看到这一行就去检查 <code>plugins.enabled</code> / <code>plugins.disabled</code>。</p>
+    </div>
+
+    <div class="src-block">Jellyfish-Plugins/README.md:475-506（压缩是插件能力、不启用的三个后果、三种状态、两个字段表、摘要措辞改不了）、Jellyfish/docs/constraints.md:645-660（<code>CompactionStrategyRequest</code> / <code>CompactionPreRequest</code>、内核钳制区间、插件拿不到消息正文）、Jellyfish/docs/constraints.md:1221（不启用压缩插件时整体不可用且不回退内置）</div>
+
+    <h3>compact 插件的两个字段</h3>
+
+    <div class="feature">
+      <h3>压缩保留条数与摘要上限（<code>jellyfish-plugin-compact</code>）</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          本插件对内核两个数量参数的<strong>覆盖值</strong>：压完之后保留多少条原文、摘要最长多少字。
+          它们是「不表态 / 表态」两种状态，<strong>省略 ≠ 写 0</strong>。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          在 <code>jellyfish.json</code> 的 <code>plugins.configurations.jellyfish-plugin-compact</code> 段里写，
+          然后 <code>/reload</code>。
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>keepRecentMessages</td>
+              <td>int</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>省略（<strong>省略时用内核 <code>react.compactKeepRecentMessages</code>，即 <code>20</code></strong>）</td>
+              <td>本插件对压缩保留条数的覆盖值。<strong>省略是「不表态」，不是「用 0」；写 <code>0</code> 是合法取值，含义是「一条原文都不留」</strong>。数值必须是能精确表示的整数：小数（<code>3.7</code>、<code>3.0</code>）与超出 <code>int</code> 范围的值按「不表态」处理并记一条 WARN</td>
+              <td><code>30</code></td>
+            </tr>
+            <tr>
+              <td>maxSummaryChars</td>
+              <td>int</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>省略（<strong>省略时用内核 <code>react.compactMaxSummaryChars</code>，即 <code>4000</code></strong>）</td>
+              <td>摘要长度上限的覆盖值。内核还会把它们钳制到合法区间</td>
+              <td><code>2000</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <span class="tag hot">/reload 生效</span> 逐插件配置段写在 <code>jellyfish.json</code>，改完敲 <code>/reload</code>；
+        <span class="tag restart">需重启</span> 只有插件 jar 的新增 / 删除。
+      </p>
+
+      <p><strong>完整示例</strong></p>
+      <pre><code class="language-json">{
+  "plugins": {
+    "configurations": {
+      "jellyfish-plugin-compact": {
+        "keepRecentMessages": 30,
+        "maxSummaryChars": 2000
+      }
+    }
+  }
+}</code></pre>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>写了 <code>keepRecentMessages: 3.0</code> 为什么没生效？</strong>不是能精确表示的整数，按「不表态」处理并记一条 WARN——此前它是静默截断的（<code>3.7</code> 变 3），脚本作者看不出发生过什么。</li>
+        <li><strong>摘要措辞能改吗？</strong>改不了，它在插件 jar 里（<code>summary-prompt.md</code>）。想改就改源文件后<strong>重新打包</strong>。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish-Plugins/README.md:493-505（compact 两个字段表、省略与 0 的区别、数值精确性、摘要措辞在 jar 里）、Jellyfish-Plugins/jellyfish-plugin-compact/src/main/java/zcd/jellyfish/plugin/compact/PluginConfig.java、Jellyfish-Plugins/jellyfish-plugin-compact/src/main/resources/plugin.properties（<code>plugin.id=jellyfish-plugin-compact</code>）</div>
+
+    <h3>内核侧的两个默认值，与插件字段的关系</h3>
+
+    <div class="table-scroll field-table">
+      <table>
+        <thead>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>react.compactKeepRecentMessages</td>
+            <td>int</td>
+            <td><span class="tag optional">选填</span></td>
+            <td><code>20</code></td>
+            <td>压缩默认保留的最近消息条数（写 <code>0</code> 即「不保留原文」）。<strong>插件的同名键省略时用这个值</strong></td>
+            <td><code>20</code></td>
+          </tr>
+          <tr>
+            <td>react.compactMaxSummaryChars</td>
+            <td>int</td>
+            <td><span class="tag optional">选填</span></td>
+            <td><code>4000</code></td>
+            <td>摘要长度上限（提示模型别写太长，真超了按码点本地截断并留标记）。<strong>插件的同名键省略时用这个值</strong></td>
+            <td><code>4000</code></td>
+          </tr>
+          <tr>
+            <td>react.autoCompactPercent</td>
+            <td>int</td>
+            <td><span class="tag optional">选填</span></td>
+            <td><code>80</code></td>
+            <td>上下文用到多少百分比就自动压缩（写 <code>0</code> 关闭自动压缩，只留手动 <code>/compact</code>）</td>
+            <td><code>0</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <ul>
+      <li><strong>层级关系</strong>：<code>react.*</code> 是内核级默认值，<code>plugins.configurations.jellyfish-plugin-compact.*</code> 是插件级覆盖值。</li>
+      <li><strong>运行时还有一次钳制</strong>：内核把保留条数钳到 <code>[0, 消息总数]</code>、摘要上限钳到 <code>[200, 20000]</code>。</li>
+      <li><strong>非法值（非正数）回退到缺省值</strong>。</li>
+      <li><strong>摘要指令里的占位符</strong>：<code>summary-prompt.md</code> 用 <code>{maxSummaryChars}</code> 表示长度上限，内核替换成<strong>当次生效</strong>的值；占位符缺失不算错误（内核仍按上限本地截断），但模型会少一条自我约束，因此记一条告警。</li>
+    </ul>
+
+    <div class="src-block">Jellyfish/README.md:835-846（<code>react</code> 段字段表：<code>compactKeepRecentMessages</code> / <code>compactMaxSummaryChars</code> / <code>autoCompactPercent</code>）、Jellyfish/README.md:773-777（<code>jellyfish.json</code> 里这三个键的写法）、Jellyfish/docs/constraints.md:658（内核钳制区间与占位符替换）</div>
+
+    <h2>工具输出落盘（<code>react.toolOutput</code>）</h2>
+
+    <div class="feature">
+      <h3>工具结果太长时自动落盘，回灌一份「信封」</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          一个工具输出过长时，<strong>完整内容写到磁盘</strong>，回灌给模型的是一份<strong>结构化报文</strong>
+          ——里面写明「被截断了、原来多大、完整内容在哪、怎么回查」，正文只留头尾预览。
+          这样既不让一条日志把上下文撑爆，也不让模型拿到半截 JSON 或半截文本。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          无需操作：超限自动发生。<strong>短输出不产生任何文件</strong>。你要做的是按需调这几个字段，
+          并在模型要回查时用 <code>read_file</code> / <code>grep_files</code> 打开信封里的路径。
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>react.toolOutput.dir</td>
+              <td>路径字符串</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>~/.jellyfish/tool-outputs</code></td>
+              <td>完整内容的落盘根目录（<strong>运行产物写在这里而不是项目目录</strong>）</td>
+              <td><code>/path/to/tool-outputs</code></td>
+            </tr>
+            <tr>
+              <td>react.toolOutput.keepFiles</td>
+              <td>int</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>200</code></td>
+              <td>每个会话在该目录下的<strong>文件数</strong>上限，超了从最旧开始删（写 <code>0</code> 关闭清理）</td>
+              <td><code>500</code></td>
+            </tr>
+            <tr>
+              <td>react.toolOutput.maxBytes</td>
+              <td>long（字节）</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>52428800</code>（50 MiB）</td>
+              <td>每个会话在该目录下的<strong>字节数</strong>上限，超了从最旧开始删（写 <code>0</code> 关闭清理）</td>
+              <td><code>104857600</code></td>
+            </tr>
+            <tr>
+              <td>react.toolOutput.keepRecentMessages</td>
+              <td>int</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>20</code></td>
+              <td>组装请求时最近多少条消息里的工具结果保留完整内容（<strong>写 <code>0</code> 同时关掉裁剪与老化</strong>）</td>
+              <td><code>40</code></td>
+            </tr>
+            <tr>
+              <td>react.toolOutput.spillMaxBytes</td>
+              <td>long（字节）</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>33554432</code>（32 MiB）</td>
+              <td>单个工具结果的落盘上限，运行期<strong>钳制为不超过 <code>maxBytes</code></strong>；触及上限时后续内容不再保存、信封会带 <code>_partial</code> 说明它不完整</td>
+              <td><code>16777216</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p><span class="tag hot">/reload 生效</span> <code>react</code> 段属于「项目级写了这一段才覆盖，没写就整段回退全局级」的那类配置，改完敲 <code>/reload</code> 即可。</p>
+
+      <p><strong>完整示例</strong></p>
+      <pre><code class="language-json">{
+  "react": {
+    "maxToolOutputChars": 20000,
+    "toolOutput": {
+      "dir": "~/.jellyfish/tool-outputs",
+      "keepFiles": 200,
+      "maxBytes": 52428800,
+      "keepRecentMessages": 20,
+      "spillMaxBytes": 33554432
+    }
+  }
+}</code></pre>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>落盘目录结构是什么样？</strong><code>&lt;dir&gt;/&lt;sessionId&gt;/</code> 下，文件名是
+          <code>&lt;清洗后的调用 id&gt;-&lt;清洗后的工具名&gt;-&lt;纳秒时间戳&gt;.txt</code>（结构化结果是 <code>.json</code>）。
+          新建的目录层级权限收到只有本人可进出，文件是 <code>600</code>。</li>
+        <li><strong>落盘失败会怎样？</strong>不是回合失败：只记 WARN，信封里 <code>_path</code> 为 <code>null</code> 并说明内容不可恢复。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:864-872（<code>react.toolOutput</code> 五字段表）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/tooloutput/ToolOutputStore.java:602-606（文件名拼法）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/tooloutput/ToolOutputStore.java:344-411（<code>&lt;dir&gt;/&lt;sessionId&gt;</code> 目录与只本人权限）、Jellyfish/docs/constraints.md:732-748（<code>spillMaxBytes</code> 的写入截断、落盘失败语义、清理只报告不阻断）</div>
+
+    <h3>回灌信封长什么样</h3>
+
+    <p>
+      信封是<strong>唯一格式</strong>，字段名由 <code>ToolOutputEnvelope</code> 一处定义，渲染与解析共用——
+      <strong>禁止两处各写一遍键名</strong>。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>字段</th><th>类型</th><th>含义</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>_truncated</code></td><td>boolean</td><td><strong>恒为 <code>true</code></strong>，用于识别「这是一份截断信封」</td></tr>
+          <tr><td><code>_tool</code></td><td>string</td><td>工具名</td></tr>
+          <tr><td><code>_total_chars</code></td><td>int</td><td>原始输出的字符数</td></tr>
+          <tr><td><code>_total_lines</code></td><td>int</td><td>原始输出的行数；<strong>结构化结果记为 <code>0</code></strong></td></tr>
+          <tr><td><code>_path</code></td><td>string \| null</td><td>完整内容的落盘路径；<strong>落盘失败时为 <code>null</code></strong>。主目录内的路径记成 <code>~</code> 形式</td></tr>
+          <tr><td><code>_hint</code></td><td>string</td><td>给模型的恢复指引（正常 / 不完整 / 落盘失败三种措辞）</td></tr>
+          <tr><td><code>_partial</code></td><td>boolean</td><td>落盘内容是否<strong>不完整</strong>：只在「捕获期溢出且触及落盘上限」时为 <code>true</code>——此时路径下只有前一段内容</td></tr>
+          <tr><td><code>preview</code></td><td>字符串 \| 子树</td><td>预览：纯文本结果是字符串节点，结构化结果是<strong>结构截断后的子树</strong>（这样「信封就是一段合法 JSON」对两类输出都成立）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p><strong>一份纯文本结果的信封（示意，值为示例）</strong></p>
+    <pre><code class="language-json">{
+  "_truncated": true,
+  "_tool": "shell",
+  "_total_chars": 128430,
+  "_total_lines": 2410,
+  "_path": "~/.jellyfish/tool-outputs/a1b2c3d4/call_1-shell-1837465123456789.txt",
+  "_hint": "本轮只保留预览（开头与结尾）。完整内容已落盘：~/.jellyfish/tool-outputs/a1b2c3d4/call_1-shell-1837465123456789.txt；用 read_file（支持 offset/limit）或 grep_files 回查。",
+  "_partial": false,
+  "preview": "…（开头约 30%）…\n…（中略，详见落盘文件）…\n…（结尾约 70%，结论通常在这里）…"
+}</code></pre>
+
+    <ul>
+      <li><strong>预览是头 30% + 尾 70%</strong>（比例与省略标记都是常量、<strong>不开放配置</strong>）——因为结论往往在末尾。</li>
+      <li><strong>绝不按字符切</strong>：字符串按行截断，<code>Map</code> / <code>List</code> 先序列化再按 JSON 子树截断，<strong>不对可能是 JSON 的输出做 <code>substring</code></strong>。</li>
+      <li><strong>回灌给模型、写入会话、通知外壳用的是同一份文本</strong>，只有一个硬截断点。</li>
+      <li><strong>主目录内的落盘路径记成 <code>~</code> 形式</strong>（不把真实用户名与主目录结构带进上下文，因为它会随会话落盘、被导出、发给上游模型）；文件工具认 <code>~</code>，所以信封里那条路径<strong>可以直接交给 <code>read_file</code> / <code>grep_files</code> / <code>list_dir</code></strong>。</li>
+    </ul>
+
+    <h3>「几十轮之前的路径会失效」</h3>
+
+    <div class="callout pitfall">
+      <span class="callout-title">清理会从最旧开始删，<code>_path</code> 只在保留窗口内有效</span>
+      <p>
+        落盘目录有清理上限（缺省<strong>每会话 200 个文件 / 50 MiB</strong>），从最旧开始删。
+        因此<strong><code>_path</code> 只在保留窗口内有效</strong>——这是「不做引用计数式保留」的直接代价，是刻意接受的。
+        另外还有两种更难发现的失效：
+      </p>
+      <ul>
+        <li><strong>被后来者覆盖</strong>：文件名里带一段唯一片段（调用 id + 工具名 + 纳秒时间戳），
+          因为调用 id 由外部给、清洗又会把不同的 id 折叠成同一个名字，所以是「同一次调用独占一个路径」；
+          旧文件被覆盖时，先那条信封里的 <code>_path</code> 还在、内容却已经不是它的。</li>
+        <li><strong>内容不完整</strong>：<code>_partial: true</code> 时路径只有前一段内容，超出部分未捕获、不可恢复。</li>
+      </ul>
+      <p><strong>应对</strong>：要长期留用的内容请在它还在时<strong>另存一份</strong>；需要更长保留窗口就把
+        <code>keepFiles</code> / <code>maxBytes</code> 调大；要立即可查就用信封里的路径交给
+        <code>read_file</code> / <code>grep_files</code>。</p>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:1103-1114（信封 <code>metadata</code>、清理上限与「<code>_path</code> 只在保留窗口内有效」、<code>~</code> 缩写）、Jellyfish/docs/constraints.md:737-748（信封字段清单、落盘失败、清理规则与唯一路径段）</div>
+
+    <h2>工具结果老化（<code>react.cache.agingPercent</code>）</h2>
+
+    <div class="feature">
+      <h3>把窗口之外的旧工具结果换成 stub</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          组装请求时，把「保留窗口之外」的旧工具结果信封换成<strong>短短一行 stub</strong>（带路径与预览首行），
+          <strong>只改本次请求，会话一条不动</strong>。它直接决定提示词缓存的命中率——厂商的缓存是<strong>前缀匹配</strong>，
+          改掉历史上的一个字节，后面整段就从约 <code>0.1×</code> 的命中价变回 <code>1×</code> 全价。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>无需操作。要调节就改下面这一个字段；要<strong>彻底关掉</strong>老化就把 <code>react.toolOutput.keepRecentMessages</code> 写 <code>0</code>。</dd>
+      </dl>
+
+      <p><strong>配置</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>react.cache.agingPercent</td>
+              <td>int</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>70</code></td>
+              <td><code>0</code> = 按「距尾部多少条消息」老化，边界每轮重算（复原升级前行为的逃生门）；<code>&gt; 0</code> = 只在上下文用量达到该百分比时老化，且<strong>一个压缩周期内只推进一次</strong></td>
+              <td><code>0</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p><span class="tag hot">/reload 生效</span></p>
+
+      <p><strong>完整示例</strong></p>
+      <pre><code class="language-json">{
+  "react": {
+    "autoCompactPercent": 80,
+    "toolOutput": { "keepRecentMessages": 20 },
+    "cache": { "agingPercent": 70 }
+  }
+}</code></pre>
+
+      <p><strong>为什么默认是 70，与压缩什么关系</strong></p>
+      <ul>
+        <li>缺省落在 <code>70</code> 是因为它必须<strong>略低于 <code>autoCompactPercent</code>（80）</strong>，相差约 10 个点、<strong>低了才会真正泄压</strong>——高于它就变成压缩先发生、老化永远轮不到。</li>
+        <li><strong>改了 <code>autoCompactPercent</code> 就应一并重看这一项。</strong></li>
+        <li>水位口径必须把边界<strong>冻住</strong>（一个压缩周期内只推进一次）：否则每轮追加 2～3 条消息就让边界前移，移过「最近、最贵、刚被缓存」的那一段。</li>
+        <li><strong>老化排在机械裁剪之前</strong>；stub 必须保留<strong>预览首行</strong>（工具把退出码 / 终止原因 / cwd 放在正文首行），首行长度上限 <strong>400 字符</strong>，结构化预览不取首行。</li>
+      </ul>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>想彻底关掉老化？</strong>把 <code>react.toolOutput.keepRecentMessages</code> 写 <code>0</code>（<code>0</code> 同时关掉裁剪与老化）。</li>
+        <li><strong>改了 <code>agingPercent</code> 但命中率没改善？</strong>先确认它不是被压缩抢先——两者相差只有约 10 个点。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:874-886（<code>react.cache.agingPercent</code> 表、为什么要低于 80、想彻底关掉的做法）、Jellyfish/docs/constraints.md:754-760（老化排在裁剪之前、两种触发口径、stub 保留首行 400 字符）</div>
+
+    <h2><code>@</code> 文件引用</h2>
+
+    <div class="feature">
+      <h3>输入框的 <code>@</code> 路径引用</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          输入框里敲 <code>@</code> 引用当前工作目录下的文件：弹<strong>补全面板</strong>（目录在前、可逐层往下钻），
+          接受后路径写进输入框。<strong>它不是工具</strong>，也不会把文件内容贴进来。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-text">@src/main/java/App.java 帮我看看这个类的空指针风险</code></pre>
+          <strong>路径里的空白用 <code>\ </code> 转义</strong>：含空格的文件名会补全成 <code>@my\ file.txt</code>。
+          这层转义<strong>会随消息一起发给模型</strong>，所以如果你在自己的提示词里解释 <code>@</code> 引用，
+          记得也写明「<code>\ </code> 是空格」。规则只有一处（<code>InputReferenceEscapes</code>）：插件插入时转义、
+          比较时还原、外壳切片段时认转义——判据是「前面紧邻的反斜杠个数为奇数」，因此 <code>\\ </code> 是
+          「一个反斜杠 + 一个真边界」。
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>—（无配置项）</td>
+              <td>—</td>
+              <td>—</td>
+              <td>—</td>
+              <td>语法由插件提供（<code>jellyfish-plugin-tools</code>），没有可调字段；<strong>没有装该插件时，<code>@</code> 只是一段普通文本</strong></td>
+              <td>—</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>关键口径</strong></p>
+      <div class="callout design">
+        <span class="callout-title">引用不内联文件内容</span>
+        <ul>
+          <li><strong><code>@</code> 不内联、不展开</strong>：引用只是把路径写进消息，真正的读取由模型调用 <code>read_file</code> 完成
+            ——因此<strong>大文件不会撑爆上下文</strong>，权限与 <code>max_bytes</code> 照旧生效。</li>
+          <li><strong>输入框的特殊语法归插件、不归外壳</strong>：外壳不维护「哪些标记需要哪个插件」的名单。</li>
+          <li><strong>插件只能声明映射，执行权始终在内核</strong>：插件拿不到权限管理器，任何在 handler 里直接执行命令的实现都是错的。</li>
+          <li><strong>补全查询与执行是两个请求类型</strong>：补全（<code>InputReferenceRequest</code>）是渲染线程上每帧可能问一次的<strong>纯只读</strong>路径，与提交时解析的指令（<code>InputDirectiveRequest</code>）分开。</li>
+        </ul>
+      </div>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>敲 <code>@</code> 没反应？</strong>先确认 <code>jellyfish-plugin-tools</code> 已启用——没有它，<code>@</code> 就是一段普通文本。</li>
+        <li><strong>模型把 <code>\ </code> 也当成文件名的一部分？</strong>约定里已明说「<code>\ </code> 是空格」；自己写提示词时补上这句。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:254-262（<code>!命令</code> 与 <code>@路径</code> 两行表与「两条口径」）、Jellyfish/docs/constraints.md:804-818（输入框语法归插件、执行体是工具执行器、两请求类型分开、<code>@</code> 不内联、转义规则只有一处）、Jellyfish-Plugins/README.md:69-123（tools 插件的 <code>@</code> 路径引用与「<code>\ </code> 是空格」）、Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ToolsPlugin.java:62-69（<code>@</code> 只注册一个补全处理器与一份提示词贡献）、Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/FileReferenceCompletion.java:45（标记常量 <code>MARKER = "@"</code>）、Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/PathPolicy.java:140（本插件唯一的配置段是 <code>pathPolicy</code>，与 <code>@</code> 无关）</div>
+
+    <h2>上下文投影上限：500 条消息</h2>
+
+    <p>
+      TUI 的消息区<strong>只投影最近 500 条消息</strong>，更早的以占位行显示：
+    </p>
+
+    <pre><code class="language-text">⎿ N 条更早的消息已折叠</code></pre>
+
+    <div class="callout warn">
+      <span class="callout-title">这只是「屏幕上的投影」，不是会话被截断</span>
+      <p>
+        <strong>500 是界面渲染的上限</strong>，与会话里真正保存了多少条消息、发给模型多少条历史<strong>无关</strong>：
+        会话照旧是完整历史（见上面的「历史一条不删」），发给模型的链路由压缩与老化决定。
+        这条限制写在 README 的 TUI「已知限制」里。
+      </p>
+      <p>同一节里还有两条相关的界面限制：滚动到内容末尾时自动跟随，用户上翻后不再打扰（生成中状态栏显示 <code>↓ 正在生成…</code>）；编辑器的「光标到行尾」不可用（<code>End</code> 归消息区）。</p>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:250-253（TUI 已知限制：消息区只投影最近 500 条、更早的以占位行显示）</div>
+
+    <h2><code>/usage</code> 与 token 记账</h2>
+
+    <div class="feature">
+      <h3>`/usage`（别名 `/cost`）</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>显示<strong>当前会话</strong>的 token 用量与缓存命中率，用来回答「这段活花了多少钱、缓存有没有起作用」。</dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-text">/usage
+/cost</code></pre>
+          TUI 的状态栏也常驻一行用量：<code>agent · provider/模型 · token 用量</code>（有缓存活动时追加命中率）。
+        </dd>
+      </dl>
+
+      <p><strong>记账口径</strong></p>
+      <ul>
+        <li><strong>缓存命中率 = 累计命中 / 累计输入</strong>（两个累计量相除），<strong>不是</strong>把每次调用的命中率取平均——后者会被分母很小的短调用带偏。</li>
+        <li><strong>调用次数只认 assistant 消息</strong>：用户输入与工具结果只累加 token，不算一次调用。</li>
+        <li><strong>子代理花掉的 token 计入父会话</strong>（<code>/usage</code> 看得到），但子代理的会话<strong>不留痕</strong>（不落盘、不进 <code>/session</code> 列表）。</li>
+        <li><strong>用量归集失败只记 WARN</strong>，不影响回合。</li>
+      </ul>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>子代理花了多少看得见吗？</strong>看得见总量（计入父会话），但看不到「哪个子代理花了多少」这一层拆分——那需要看轨迹行里的 <code>⎿ task · 子代理 scout · 3 轮 · 123456 tok</code>。</li>
+        <li><strong>命中率很低怎么办？</strong>先看是不是老化（<code>agingPercent</code>）或压缩太频繁；厂商缓存是前缀匹配，历史被改动的那一瞬命中率就会掉。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:380（<code>/usage</code> / <code>/cost</code> 的作用）、Jellyfish/README.md:190-193（状态栏用量与缓存命中率）、Jellyfish/README.md:449-457（子代理 token 计入父会话、轨迹行格式）、Jellyfish/docs/constraints.md:355-360（用量记账三条口径）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/session/SessionUsage.java:202-207（命中率用累计量相除）</div>
+
+    <h2>常见问题</h2>
+
+    <dl>
+      <dt>退出再进来，会话没了？</dt>
+      <dd>先确认 <code>jellyfish-plugin-session-file</code> 已启用（<code>plugins.enabled</code> 里有没有它），
+        并且插件 jar 是在<strong>启动前</strong>就放好的——新增 / 删除插件 jar 只在启动期确定，需要重启进程。
+        另外，<strong>子代理会话（<code>EPHEMERAL</code>）本来就不落盘</strong>，不参与恢复。</dd>
+
+      <dt><code>/compact</code> 说「压缩不可用」？</dt>
+      <dd>没有插件提供压缩策略。装 <code>jellyfish-plugin-compact</code>（或同类插件）并确认它在
+        <code>plugins.enabled</code> 里；启动日志里出现
+        <code>插件被禁用或版本不满足，未启动: pluginId=jellyfish-plugin-compact</code> 就说明是「在目录里但没启用」。</dd>
+
+      <dt><code>/compact</code> 报「没什么可压」？</dt>
+      <dd>这是 <code>/compact</code> 的正常报错（ERROR），说明可压范围不足（边界对齐后可能退到可压范围下界）。
+        先用 <code>/compact preview</code> 看会压几条、保留几条、丢弃几条——它在同一种情况下返回正常，并且<strong>连模型都不解析</strong>。</dd>
+
+      <dt>压完之后模型好像忘了更早的约定？</dt>
+      <dd>被压缩的那段原文不再发给模型（只给摘要）。若状态栏显示 <code>已压缩 N 条（丢弃 M 条）</code>，
+        <strong>被丢弃的 M 条既不在摘要里、也不会再发给模型</strong>。要长期生效的约定请写进
+        <code>AGENTS.md</code> 或 agent 的提示词文件，而不是只靠对话。</dd>
+
+      <dt>几十轮之前的工具输出路径打不开了？</dt>
+      <dd>落盘目录按「每会话 200 个文件 / 50 MiB」从最旧删起，<code>_path</code> 只在保留窗口内有效。
+        要长期留用的内容请在它还在时另存一份；路径若在主目录内会记成 <code>~/...</code> 形式，文件工具认 <code>~</code>。</dd>
+
+      <dt>落盘的文件会不会被别人看到？</dt>
+      <dd>工具输出目录与新建层级只给本人权限，文件是 <code>600</code>；会话文件同样收到 <code>600</code> / 新目录 <code>700</code>。
+        <strong>已知边界</strong>：这挡的是「同机其他用户读」，挡不住同用户的其它进程，也挡不住已经落地的副本（备份、同步盘）。</dd>
+
+      <dt>会话文件能手工改吗？</dt>
+      <dd>能改，但后果自负：压缩边界若因此失效，内核会按「从未压缩过」处理（不误伤）；快照反序列化失败会让这段会话读不回来。
+        要备份就在会话没在用的时候整目录拷走。</dd>
+    </dl>
+
+    <div class="src-block">Jellyfish/README.md:1106-1112（「几十轮之前的工具输出路径不见了」与滚动 / 复制两类常见问题）、Jellyfish-Plugins/README.md:481-492（「不启用它就没有压缩」的三个后果与禁用日志）、Jellyfish/docs/constraints.md:1074-1080（压缩边界失效按「从未压缩过」处理）、Jellyfish-Plugins/CHANGELOG.md:196-202（落盘权限 600 / 700 与「已知边界」）</div>
+
+    <div class="conclusion">
+      <h2>关键结论</h2>
+      <ol>
+        <li>会话命令只有九个是本页要记的：<code>/new</code>、<code>/session</code>(<code>/sessions</code>)、<code>/resume</code>、
+          <code>/status</code>、<code>/usage</code>(<code>/cost</code>)、<code>/delete</code>(<code>/rm</code>)、<code>/model</code>、
+          <code>/agent</code>(<code>/a</code>)、<code>/compact</code>；<code>-tui</code> 另有五个外壳命令不在 <code>/help</code> 里。</li>
+        <li><strong>会话持久化是插件给的</strong>：<code>session-file</code> 一个会话一个 <code>&lt;sessionId&gt;.json</code>、
+          默认写在 <code>~/.jellyfish/sessions</code>、默认用 git 管历史；不装它，会话只活在内存里，<code>--session</code> 会退 <code>2</code>。</li>
+        <li><code>--agent</code> / <code>--model</code> <strong>只归 <code>-cli</code></strong>，且只在<strong>新建会话</strong>时生效；
+          模型解析是「会话显式 → agent.model → 全局默认」三级回落。</li>
+        <li><strong>压缩是插件能力</strong>：不启用 <code>jellyfish-plugin-compact</code> 就整体不可用、且<strong>不回退内置</strong>；
+          自动压缩在上下文用到 <code>80%</code>（<code>react.autoCompactPercent</code>）或本次已被机械裁剪时触发。</li>
+        <li><strong>历史一条不删</strong>：屏幕、恢复出来的会话、落盘文件都是完整历史，变的只是「发给模型的那条链路从哪里开始」；
+          但被丢弃的那段既不在摘要里、也不再发给模型。</li>
+        <li><strong>工具输出落盘与老化都只改请求</strong>：落盘信封以 <code>_truncated</code> / <code>_tool</code> /
+          <code>_total_chars</code> / <code>_total_lines</code> / <code>_path</code> / <code>_hint</code> / <code>_partial</code> /
+          <code>preview</code> 八个字段为唯一格式；<code>agingPercent</code> 缺省 <code>70</code>，必须略低于 <code>autoCompactPercent</code>（<code>80</code>）。</li>
+        <li><code>@</code> 引用<strong>不内联文件内容</strong>：它只把路径写进消息，读取由模型调 <code>read_file</code> 完成，
+          因此大文件不会撑爆上下文，权限与 <code>max_bytes</code> 照旧生效。</li>
+      </ol>
+    </div>
+
+    <div class="next-steps">
+      <h2>下一步阅读</h2>
+      <ul>
+        <li><a href="10-permissions.html">10 权限与审批</a>——会话里的每一次工具调用都要过两道闸门；这一页讲清了「谁拦谁」与三种外壳下的审批形态。</li>
+        <li><a href="11-plugin-usage.html">11 安装与使用官方插件</a>——本页提到的 session-file / compact / tools 都是官方插件，那里有完整安装与配置步骤。</li>
+        <li><a href="05-config-overview.html">05 配置体系总览</a>——<code>react</code> / <code>permission</code> / <code>ask</code> 段属于哪份文件、全局级与项目级怎么合并。</li>
+      </ul>
+    </div>
+
+    <nav class="pager" aria-label="翻页">
+      <a class="prev" href="08-tools.html"><span class="pager-dir">上一页</span>08 内置工具速查</a>
+      <a class="next" href="10-permissions.html"><span class="pager-dir">下一页</span>10 权限与审批</a>
+    </nav>
+
+  </main>
+</div>
+
+<footer class="footer">
+  <div class="doc-meta">
+    Jellyfish 使用指南 · 本页依据：<code>Jellyfish/README.md</code>（常用命令 / 会话与压缩 / 参数与退出码 / <code>react</code> 与 <code>toolOutput</code> / <code>cache</code> / 已知限制 / 常见问题）、
+    <code>Jellyfish/docs/constraints.md</code>（会话状态 / 落盘 / 会话种类 / 压缩 / 输出截断与落盘 / 上下文老化 / 输入指令 <code>@</code>）、
+    <code>Jellyfish-Plugins/README.md</code>（session-file / compact / tools）、
+    <code>Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/SessionSnapshot.java</code>、
+    <code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/tooloutput/ToolOutputEnvelope.java</code> 等。
+    示例中的密钥、token 一律以占位符表示；<code>【待确认】</code>表示该结论在仓库中未找到出处，请以实际代码为准。
+  </div>
+</footer>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

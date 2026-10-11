@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>03 五分钟快速上手 · Jellyfish 使用指南</title>
+<meta name="description" content="Jellyfish 最短上手动线：环境自检、不配模型离线验证安装、写第一份 .jellyfish/models.json（含环境变量注入与项目级配置默认不加载的坑）、装三个最少必要插件、用三种方式问第一句话、确认工具调用真的发生。每条命令都可直接照着敲。">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="nav-toggle" id="navToggle" aria-label="切换导航" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">🐙 Jellyfish 使用指南</a>
+  <div class="topbar-tools">
+    <input id="navSearch" type="search" placeholder="搜索页面…" aria-label="搜索页面">
+  </div>
+</header>
+
+<div class="layout">
+
+  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <div class="sidebar-title">文档目录</div>
+    <ul class="nav-list">
+      <li><a href="index.html">首页 · 总览与导航</a></li>
+    </ul>
+    <div class="nav-group">一、入门</div>
+    <ul class="nav-list">
+      <li><a href="01-overview.html">01 Jellyfish 是什么</a></li>
+      <li><a href="02-install.html">02 安装与环境准备</a></li>
+      <li><a href="03-quickstart.html" aria-current="page">03 五分钟快速上手</a></li>
+      <li><a href="04-modes.html">04 三种运行模式</a></li>
+    </ul>
+    <div class="nav-group">二、配置</div>
+    <ul class="nav-list">
+      <li><a href="05-config-overview.html">05 配置体系总览</a></li>
+      <li><a href="06-models.html">06 models.json 详解</a></li>
+      <li><a href="07-agents.html">07 agents.json 与工具权限</a></li>
+    </ul>
+    <div class="nav-group">三、日常使用</div>
+    <ul class="nav-list">
+      <li><a href="08-tools.html">08 内置工具速查</a></li>
+      <li><a href="09-session.html">09 会话与上下文</a></li>
+      <li><a href="10-permissions.html">10 权限与审批</a></li>
+    </ul>
+    <div class="nav-group">四、插件</div>
+    <ul class="nav-list">
+      <li><a href="11-plugin-usage.html">11 安装与使用官方插件</a></li>
+      <li><a href="12-plugin-dev.html">12 从零开发一个插件</a></li>
+      <li><a href="13-plugin-advanced.html">13 插件进阶与发布</a></li>
+    </ul>
+    <div class="nav-group">五、集成与排错</div>
+    <ul class="nav-list">
+      <li><a href="14-spring-boot.html">14 整合到 Spring Boot</a></li>
+      <li><a href="15-troubleshooting.html">15 故障排查</a></li>
+      <li><a href="16-faq.html">16 FAQ 与术语表</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <nav class="breadcrumb" aria-label="面包屑">
+      <span>Jellyfish 使用指南</span><span class="sep">/</span><span>03 五分钟快速上手</span>
+    </nav>
+
+    <h1>03 五分钟快速上手</h1>
+    <p class="page-sub">
+      这一页只做一件事：把「能跑起来 → 配一份模型 → 装插件 → 问一句话 → 看见工具真的被调用」这条最短路径走完。
+      每一步都是可直接粘贴的命令，每一步都说明它为什么必要。假设你已经按 <a href="02-install.html">02 安装与环境准备</a>
+      拿到了可执行的 fat jar；如果还没有，先去那一页。
+    </p>
+
+    <section class="goals">
+      <h2>学习目标</h2>
+      <ul>
+        <li>用 <code>java -version</code> / <code>mvn -v</code> 确认 JDK 与 Maven 满足要求；</li>
+        <li>在<strong>不配模型</strong>的前提下跑通 <code>-cli -p "/help"</code>，确认 jar 起得来；</li>
+        <li>写出第一份 <code>.jellyfish/models.json</code>，并用环境变量注入密钥；</li>
+        <li>说清<strong>项目级配置默认不加载</strong>这条闸门，以及 <code>--trust-project-config</code> 与 TUI 确认框两条放行路径；</li>
+        <li>装齐「最少必要」的三个插件，知道不装插件时它只能跑系统命令；</li>
+        <li>让模型真的读一个文件，并在工具轨迹里亲眼看到那次调用。</li>
+      </ul>
+    </section>
+
+    <h2>第 0 步：环境自检（两条命令）</h2>
+
+    <p>
+      Jellyfish 的源码与目标版本都是 Java 1.8，构建要求 Maven 3.2.5 以上。
+      <strong>只运行不构建</strong>的话，Maven 可以没有，但 JRE 必须在 8 以上。
+    </p>
+
+    <pre><code class="language-bash">java -version
+mvn -v</code></pre>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>项</th><th>要求</th><th>你现在该看到什么</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>JDK</td>
+            <td>8（源码与目标版本都是 1.8）；<strong>运行只需 JRE 8+</strong></td>
+            <td><code>java -version</code> 打出 <code>1.8.0_xxx</code> 或更高</td>
+          </tr>
+          <tr>
+            <td>Maven</td>
+            <td>3.2.5 以上（构建用；<code>pom.xml</code> 里打包插件的版本线以此为准）</td>
+            <td><code>mvn -v</code> 打出 Maven 版本与它用的 JDK</td>
+          </tr>
+          <tr>
+            <td>终端</td>
+            <td><code>-tui</code> 需要可交互终端；<code>-cli</code> / <code>-server</code> 不需要</td>
+            <td>本页第 1～5 步全部只用 <code>-cli</code>，在任何终端或管道里都能跑</td>
+          </tr>
+          <tr>
+            <td>模型</td>
+            <td>一个 OpenAI 兼容的 API（<strong>没有也能跑命令</strong>，见第 1 步）</td>
+            <td>第 2 步才需要，随时可以去申请</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">先把命令敲短</span>
+      <p>
+        fat jar 的路径很长，建议先设个别名，后面每一步都能少打一截：
+      </p>
+      <pre><code class="language-bash">alias jellyfish='java -jar /绝对路径/jellyfish-cli/target/jellyfish-cli-0.1.1.jar'</code></pre>
+      <p>本页为了说明「哪个文件是入口」，仍然把完整命令写全。</p>
+    </div>
+    <div class="src-block">Jellyfish/README.md「环境要求」「安装与构建」两节（JDK 8 / Maven 3.2.5+ / 终端 / 模型四项要求、fat jar 路径与 alias 示例）</div>
+
+    <h2>第 1 步：离线验证安装（不需要模型）</h2>
+
+    <div class="feature">
+      <h3>用 <code>/help</code> 确认 jar 真的起得来</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          一部分内核自带命令<strong>根本不需要模型配置</strong>（它们不发起 LLM 调用），因此可以拿它们把
+          「装没装好」和「模型配没配对」这两件事分开验证。这是排查问题的第一刀。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-bash">java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli -p "/help"</code></pre>
+          <p>
+            <strong>看到命令清单就说明装好了</strong>：<code>-cli</code> 走单次调用、<code>-p</code> 给这一次的输入，
+            输入以 <code>/</code> 开头即走命令域。<strong>在碰别的旗标之前，先确保这一条能出结果</strong>——
+            之后任何一次「跑不起来」，都可以退回到这一条来判断是安装问题还是配置问题。
+          </p>
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>参数</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>-cli</td>
+              <td>旗标</td>
+              <td><span class="tag required">必填</span></td>
+              <td>不带任何参数时模式默认 <code>-tui</code></td>
+              <td>单次调用模式：进一个输入、出一次结果后退出（<strong>只要带了参数，模式就必须显式给</strong>）</td>
+              <td><code>-cli</code></td>
+            </tr>
+            <tr>
+              <td>-p, --print</td>
+              <td>字符串</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>从 stdin 读到 EOF（管道可用）</td>
+              <td>单次模式的输入</td>
+              <td><code>-p "/help"</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>完整示例</strong></p>
+      <pre><code class="language-bash"># 方式一：把输入写在命令行上
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli -p "/help"
+
+# 方式二：从管道喂进去（不写 -p 时读到 EOF）
+echo "/help" | java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli</code></pre>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>报 <code>Unable to access jarfile</code>？</strong>路径不对。jar 不在当前目录就用绝对路径；
+          还没构建成功就先回到 <a href="02-install.html">02 安装与环境准备</a>。</li>
+        <li><strong>退出码不是 0？</strong><code>2</code> 是用法错误（参数缺失 / 冲突、没有输入），
+          <code>3</code> 是启动失败（配置、插件或装配出错）。逐条含义见 <a href="04-modes.html">04 三种运行模式</a>。</li>
+      </ul>
+    </div>
+
+    <p>能拿来「离线验安装」的命令不止 <code>/help</code>，下面这些都不需要模型配置：</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>命令</th><th>离线能做什么</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>/help</code></td><td>列出内核自带命令与插件带来的命令（插件装了才会出现）</td></tr>
+          <tr><td><code>/session</code>（别名 <code>/sessions</code>）</td><td>列出全部会话（需要会话持久化插件才看得到落盘的那些）</td></tr>
+          <tr><td><code>/status</code></td><td>显示当前会话概要</td></tr>
+          <tr><td><code>/model</code></td><td>查看（或切换）模型——用它就能确认模型配置到底读到没有</td></tr>
+          <tr><td><code>/compact preview</code></td><td>只回报「将压缩多少条」，不发起压缩（压缩本身仍要压缩插件）</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="src-block">Jellyfish/README.md「快速开始 · 1. 先离线验证安装」、「常用命令」（离线可用命令清单）</div>
+
+    <h2>第 2 步：配一份模型</h2>
+
+    <div class="feature">
+      <h3>写第一份 <code>.jellyfish/models.json</code></h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          要让模型说话，只需要告诉 Jellyfish 三件事：<strong>每个 provider 怎么访问</strong>（<code>type</code> /
+          <code>apiKey</code> / <code>baseUrl</code>）、<strong>它有哪些模型</strong>、以及按需调参。
+          这些全写在一份 <code>models.json</code> 里；要按场景换一套工具权限与提示词，再配一份
+          <code>agents.json</code>（见 <a href="07-agents.html">07 agents.json 与工具权限</a>）。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          <ol>
+            <li>在工作目录（也就是你希望 Jellyfish 干活的那个目录）下建 <code>.jellyfish/</code> 目录；</li>
+            <li>把下面这份 JSON 存成 <code>.jellyfish/models.json</code>；</li>
+            <li>把密钥放进<strong>环境变量</strong>，而不是文件里；</li>
+            <li>如果这是<strong>项目级</strong>配置（放在项目目录下），还要显式信任它——见下面的 danger 提示块。</li>
+          </ol>
+        </dd>
+      </dl>
+
+      <p><strong>完整示例</strong>（可直接用；<code>openai</code> 是 provider 的键名，不是必须叫这个名字）</p>
+      <pre><code class="language-json">{
+  "defaultProvider": "openai",
+  "defaultModel": "gpt-4o",
+  "providers": {
+    "openai": {
+      "type": "openai",
+      "apiKey": "${OPENAI_API_KEY}",
+      "models": [{ "id": "gpt-4o", "name": "gpt-4o", "contextLength": 128000, "maxOutputTokens": 4096 }]
+    }
+  }
+}</code></pre>
+
+      <p>再把密钥放进环境变量（<strong>不要把密钥写进配置文件</strong>）：</p>
+      <pre><code class="language-bash">export OPENAI_API_KEY=sk-***</code></pre>
+
+      <p><strong>字段说明</strong>（入门只用得到这些；<code>sampling</code> / <code>vendorBody</code> /
+        <code>vendorHeaders</code> / <code>cache</code> 等全字段见 <a href="06-models.html">06 models.json 详解</a>）</p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>defaultProvider</td>
+              <td>string</td>
+              <td><span class="tag required">必填</span></td>
+              <td>—</td>
+              <td>不显式指定模型时用哪个 provider（键名必须在下面的 <code>providers</code> 里存在）</td>
+              <td><code>"openai"</code></td>
+            </tr>
+            <tr>
+              <td>defaultModel</td>
+              <td>string</td>
+              <td><span class="tag required">必填</span></td>
+              <td>—</td>
+              <td>不显式指定模型时用哪个模型</td>
+              <td><code>"gpt-4o"</code></td>
+            </tr>
+            <tr>
+              <td>providers</td>
+              <td>object</td>
+              <td><span class="tag required">必填</span></td>
+              <td>—</td>
+              <td>provider 字典；<strong>键名自取</strong>，它就是 <code>/model</code> 里 <code>provider/model</code> 的前半段</td>
+              <td><code>{"openai": { ... }}</code></td>
+            </tr>
+            <tr>
+              <td>providers.&lt;name&gt;.type</td>
+              <td>string</td>
+              <td><span class="tag required">必填</span></td>
+              <td>—</td>
+              <td>用哪套传输实现：<code>openai</code> / <code>claude</code> / <code>deepseek</code> / <code>gemini</code> / <code>minimax</code> 及其别名。写错会报错并列出内核认识的类型</td>
+              <td><code>"openai"</code></td>
+            </tr>
+            <tr>
+              <td>providers.&lt;name&gt;.apiKey</td>
+              <td>string</td>
+              <td><span class="tag required">必填</span></td>
+              <td>—</td>
+              <td>访问密钥。<strong>建议写 <code>${ENV_VAR}</code> 由环境变量注入</strong></td>
+              <td><code>"${OPENAI_API_KEY}"</code></td>
+            </tr>
+            <tr>
+              <td>providers.&lt;name&gt;.baseUrl</td>
+              <td>string</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>该 <code>type</code> 的官方地址</td>
+              <td>服务地址。<strong>必须填最终地址</strong>——出站请求不跟随重定向</td>
+              <td><code>"https://api.openai.com/v1"</code></td>
+            </tr>
+            <tr>
+              <td>providers.&lt;name&gt;.models</td>
+              <td>array</td>
+              <td><span class="tag required">必填</span></td>
+              <td>—</td>
+              <td>该 provider 下的模型清单</td>
+              <td><code>[{ "id": "gpt-4o", ... }]</code></td>
+            </tr>
+            <tr>
+              <td>models[].id</td>
+              <td>string</td>
+              <td><span class="tag required">必填</span></td>
+              <td>—</td>
+              <td>模型标识，<code>/model</code> 里 <code>provider/model</code> 的后半段，<strong>也是发给厂商的模型名</strong></td>
+              <td><code>"gpt-4o"</code></td>
+            </tr>
+            <tr>
+              <td>models[].name</td>
+              <td>string</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>与 <code>id</code> 相同</td>
+              <td>展示名</td>
+              <td><code>"gpt-4o"</code></td>
+            </tr>
+            <tr>
+              <td>models[].contextLength</td>
+              <td>int</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>不写即 <code>0</code>，含义是「未知」</td>
+              <td>上下文窗口（token），内核用它算压缩预算。<strong><code>0</code> 表示未知，内核就完全不按窗口裁剪历史</strong>（宁可让厂商自己报错，也不猜一个数把历史丢掉）</td>
+              <td><code>128000</code></td>
+            </tr>
+            <tr>
+              <td>models[].maxOutputTokens</td>
+              <td>int</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>不写即 <code>0</code>，含义是「未知」</td>
+              <td>单次最大输出 token，内核按次下发。<strong><code>0</code> 表示未知，内核就不下发这个上限</strong>；唯一例外是 Claude 客户端（Messages API 必须给 <code>max_tokens</code>，未下发时它用自带缺省 <code>4096</code> 兜住）</td>
+              <td><code>4096</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        生效方式：<span class="tag hot">/reload 生效</span>——<code>models.json</code> 的内容改动敲一次
+        <code>/reload</code> 就会重读并重建模型索引，不用重启进程。
+      </p>
+
+      <div class="callout warn">
+        <span class="callout-title">「必填」两字在仓库里没有明文</span>
+        <p>
+          README 的说法是「要配的只有三件事：每个 provider 怎么访问（<code>type</code> / <code>apiKey</code> /
+          <code>baseUrl</code>）、它有哪些模型、按需调参」，并没有逐个字段声明「必填」。
+          上表里标的 <code>必填</code> 是按这句话推断的（没有 <code>type</code> 就没有传输实现、没有
+          <code>models</code> 就没有可选模型）。<strong>默认值列写 <code>—</code> 表示「这个字段是必填的，
+          没有默认值可填」</strong>。
+        </p>
+        <p>
+          <code>contextLength</code> / <code>maxOutputTokens</code> 两格的默认值不是猜的：这两个字段在配置类里
+          都是原始类型 <code>int</code>，<strong>不写就是 <code>0</code></strong>，而内核把 <code>0</code> 统一当
+          <strong>「不知道」</strong>处理——<code>contextLength</code> 为 <code>0</code> 就不按窗口裁剪历史
+          （输入预算取「无上限」），<code>maxOutputTokens</code> 为 <code>0</code> 就不往请求里放输出上限字段。
+          这条口径在插件侧的类型 <code>ModelDescriptor</code> 的类注释里写成了明文（「允许为 0，含义是不知道」，
+          并解释了为什么不让插件去猜一个看起来合理的值）。
+        </p>
+      </div>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>写错一个键，为什么不报错？</strong>这份文件关掉了「未知字段」的报错：
+          <strong>表里没列出的字段就是不支持的</strong>，多写一个键既不会有提示、也不会有任何效果。</li>
+        <li><strong><code>baseUrl</code> 收到 301/302？</strong>出站请求不跟随重定向（跟随等于允许上游把你的
+          密钥头送到任意主机）。错误信息里会写明「重定向被禁止」以及目标主机与路径，把 <code>baseUrl</code>
+          改成最终地址即可。</li>
+        <li><strong><code>maxOutputTokens</code> 好像没生效？</strong>它由 <code>maxTokensField</code> 决定挂在
+          <code>max_tokens</code> 还是 <code>max_completion_tokens</code> 上——OpenAI 的推理模型（o 系）与
+          gpt-5 及之后只认后者，用错就是一次 <code>Unsupported parameter</code> 400。见
+          <a href="06-models.html">06 models.json 详解</a>。</li>
+      </ul>
+    </div>
+
+    <h3>环境变量注入的写法</h3>
+
+    <p>
+      只有字符串值里的 <code>${VAR}</code> 会被替换成环境变量，<strong>JSON 的 key 不替换</strong>。
+      三种写法：
+    </p>
+
+    <pre><code class="language-json">{
+  "apiKey": "${OPENAI_API_KEY}",
+  "baseUrl": "${MY_GATEWAY_URL:-https://api.openai.com/v1}"
+}</code></pre>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>写法</th><th>含义</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>${VAR}</code></td><td>替换为环境变量 <code>VAR</code> 的值。<strong>变量未设置时整份配置加载失败</strong>（不是留空、也不是跳过）——要容错就用下一行的写法</td></tr>
+          <tr><td><code>${VAR:-default}</code></td><td>变量取不到时用 <code>default</code></td></tr>
+          <tr><td><code>\${VAR}</code></td><td>转义为字面量（不做替换）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout danger">
+      <span class="callout-title">不要把密钥写进配置文件</span>
+      <p>
+        <code>apiKey</code> 这类敏感值通过环境变量注入，不要落到配置文件里——配置文件会被提交、会被分享、
+        会进备份。本页所有示例里的密钥都是 <code>sk-***</code> 占位符。
+      </p>
+      <p>
+        注意 <code>{agentId}.md</code> 这类提示词文件是<strong>原文</strong>，不做模板插值，别指望在那里写
+        <code>${VAR}</code> 能取到环境变量。
+      </p>
+    </div>
+
+    <h3>全局级 vs 项目级：放哪儿、什么时候生效</h3>
+
+    <p>
+      配置文件走「全局级 <code>~/.jellyfish/</code> + 项目级 <code>&lt;工作目录&gt;/.jellyfish/</code>」双源读取，
+      项目级优先。同名 <code>provider</code> / 模型以项目级<strong>整对象</strong>覆盖。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>放哪儿</th><th>作用范围</th><th>适合什么</th><th>代价</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>~/.jellyfish/models.json</code></td>
+            <td>这台机器上的<strong>所有</strong>项目</td>
+            <td>你日常用的那一套 provider 与模型，一次配好到处能用</td>
+            <td>换机器要重新拷</td>
+          </tr>
+          <tr>
+            <td><code>&lt;工作目录&gt;/.jellyfish/models.json</code></td>
+            <td>只在<strong>这个目录里启动</strong>时生效</td>
+            <td>某个项目要换模型 / 换网关</td>
+            <td><strong>默认不加载</strong>，每次（或第一次）都要显式信任；文件内容一改，信任立即失效</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout danger">
+      <span class="callout-title">坑：项目级配置默认不加载（这不是 bug）</span>
+      <p>
+        <strong><code>&lt;工作目录&gt;/.jellyfish/*.json</code> 默认不加载</strong>，只有被显式信任过才参与合并。
+        两处后果：
+      </p>
+      <ul>
+        <li>你辛辛苦苦写的 <code>.jellyfish/models.json</code>「明明在那里」，<code>/model</code> 里却看不到它；
+          这种情况<strong>会额外发一条配置告警</strong>，但启动不会中断。</li>
+        <li>没有终端可问时（<code>-cli</code> / <code>-server</code>）<strong>只会打印一行提示</strong>，
+          告诉你怎么才能加载，绝不擅自加载。</li>
+      </ul>
+      <p>为什么要这样：项目级配置的读取基准是<strong>进程当前目录</strong>，内容取决于你在哪个目录里启动；
+        而它能决定的东西很重——<code>models.json</code> 里同名 provider 是整对象替换，<code>baseUrl</code> /
+        <code>apiKey</code> 一改，该 provider 的密钥与全部对话正文就送到别处。这些文件会因为
+        <code>git clone</code> / <code>git pull</code> 凭空出现在工作目录里，所以闸门设在「这个目录可不可信」这一层。</p>
+    </div>
+
+    <p><strong>两条放行路径（挑一条）</strong></p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>场景</th><th>做法</th><th>是否落盘</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>-cli</code> / <code>-server</code></td>
+            <td>启动时加 <code>--trust-project-config</code></td>
+            <td>否，<strong>仅本次进程有效</strong></td>
+          </tr>
+          <tr>
+            <td><code>-tui</code></td>
+            <td>启动时弹出确认框，选 <code>y</code> 加载并记住</td>
+            <td>是，记进 <code>~/.jellyfish/trusted-project-configs.json</code></td>
+          </tr>
+          <tr>
+            <td><code>-tui</code></td>
+            <td>同一确认框里选 <code>o</code> 仅本次加载</td>
+            <td>否</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <pre><code class="language-bash"># 路径一：CLI / Server，临时信任一次
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli --trust-project-config -p "/model"
+
+# 路径二：TUI，启动时在确认框里回答 y（记住）或 o（仅本次）
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -tui</code></pre>
+
+    <div class="table-scroll field-table">
+      <table>
+        <thead>
+          <tr><th>参数</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>--trust-project-config</td>
+            <td>旗标</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>不加载（缺省不信任）</td>
+            <td>信任并加载项目级配置（<code>./.jellyfish/*.json</code>），<strong>仅本次进程有效、不落盘</strong></td>
+            <td><code>--trust-project-config</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">省事的做法：全局级放一份，什么都不用信任</span>
+      <p>
+        「一路只读全局级时什么都不用做」——把同一份文件放到 <code>~/.jellyfish/models.json</code>，
+        就不必每次启动都处理信任这回事。项目级只在「这个项目确实要不一样的模型」时才值得用。
+      </p>
+      <p>
+        另外，<code>classpath:</code> 形式的项目级路径（如 <code>classpath:jellyfish/models.json</code>）
+        <strong>不受这道闸管辖</strong>：它属于运行构件本身，与全局级同性质。Spring 接入方正是用它把配置放进自己的
+        <code>resources</code>，从而不必依赖工作目录（见 <a href="14-spring-boot.html">14 整合到 Spring Boot</a>）。
+      </p>
+    </div>
+    <div class="src-block">Jellyfish/README.md「快速开始 · 2. 配一份模型」「配置 · models.json」「配置 · 项目级配置的信任」（双源合并、<code>${VAR}</code> 插值、信任单位是文件绝对路径 + 内容指纹、三种授予方式）；<code>contextLength</code> / <code>maxOutputTokens</code> 两格默认值：Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/Model.java:93-94,100-101（两字段是原始类型 int，JSON 里不写即为 0）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/ModelDescriptor.java:11-16（「允许为 0，含义是不知道」的统一口径）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/prompt/PromptAssembler.java:342-344（&gt;0 才下发输出上限）、Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/prompt/PromptAssembler.java:803-807 与 Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/compact/ConversationCompactor.java:851-855（&lt;=0 视为无窗口，不裁剪）、Jellyfish/docs/constraints.md:613-614、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm/ClaudeLlmClient.java:62,269-270（Claude 未下发时用 4096 兜底）</div>
+
+    <h2>第 3 步：装插件（不装它只能跑系统命令）</h2>
+
+    <div class="callout warn">
+      <span class="callout-title">插件不在内核仓库里</span>
+      <p>
+        内核只保留插件机制与 SPI。<strong>拿到 fat jar 直接跑，除了系统命令之外几乎什么都干不了</strong>——
+        文件工具、shell、会话持久化全在官方插件仓库
+        （<code>Jellyfish-Plugins</code>）。不装 <code>jellyfish-plugin-tools</code>，
+        模型连读一个文件都做不到，「快速上手」到此为止。
+      </p>
+    </div>
+
+    <div class="feature">
+      <h3>最少要装的三个插件</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          官方插件里这三个覆盖了「能干活」的最小集合：<strong>读写文件</strong>、<strong>跑命令</strong>、
+          <strong>把会话存下来</strong>。其余十个按需再加，见
+          <a href="11-plugin-usage.html">11 安装与使用官方插件</a>。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          <p>先把插件仓库构建一遍，再把 jar 拷进扫描目录（缺省 <code>~/.jellyfish/plugins/</code>）：</p>
+          <pre><code class="language-bash">cd /path/to/Jellyfish-Plugins
+mvn -q package -DskipTests
+
+mkdir -p ~/.jellyfish/plugins
+cp jellyfish-plugin-tools/target/jellyfish-plugin-tools-*.jar ~/.jellyfish/plugins/
+cp jellyfish-plugin-shell/target/jellyfish-plugin-shell-*.jar ~/.jellyfish/plugins/
+cp jellyfish-plugin-session-file/target/jellyfish-plugin-session-file-*.jar ~/.jellyfish/plugins/</code></pre>
+          <p>
+            插件仓库自带一个脚本可以一次拷完：<code>./cpPlugins.sh</code>（把各模块 <code>target/*.jar</code>
+            拷进扫描目录）。只想装几个就照上面的写法逐行拷。
+          </p>
+          <p>
+            <strong>拷完必须重启进程</strong>：新增 / 删除插件 jar 只在启动期确定（PF4J 在扫描目录下一层找
+            <code>plugin.properties</code>），<code>/reload</code> 管不了 jar 的增删。
+          </p>
+          <p>
+            仓库里只对 <code>tools</code> 给了字面拷贝示例。上面另外两行的 jar 名不是推断出来的：每个插件模块
+            只声明自己的 <code>&lt;artifactId&gt;</code>（与它 <code>plugin.properties</code> 里的
+            <code>plugin.id</code> 同名），版本继承父 <code>pom.xml</code> 的 <code>0.1.1</code>，全仓库没有一处
+            写 <code>&lt;finalName&gt;</code>，因此产物名就是 <code>&lt;artifactId&gt;-&lt;version&gt;.jar</code>——
+            已构建的 <code>target/</code> 里确实是 <code>jellyfish-plugin-shell-0.1.1.jar</code> 与
+            <code>jellyfish-plugin-session-file-0.1.1.jar</code>（同目录另有一个 shade 留下的
+            <code>original-…jar</code>，上面的通配<strong>不会</strong>命中它）。
+          </p>
+        </dd>
+      </dl>
+
+      <p><strong>装完能得到什么</strong></p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>模块 / plugin.id</th><th>给什么</th><th>不装的后果</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>jellyfish-plugin-tools</code></td>
+              <td>五个文件工具 <code>read_file</code> / <code>write_file</code> / <code>edit_file</code> /
+                <code>list_dir</code> / <code>grep_files</code>；提问工具 <code>ask_user</code>；
+                输入框的 <code>@</code> 文件引用；按路径收口的闸门 <code>pathPolicy</code></td>
+              <td>模型无法读写文件、无法列目录、无法搜代码</td>
+            </tr>
+            <tr>
+              <td><code>jellyfish-plugin-shell</code></td>
+              <td><code>shell</code> 工具（<code>/bin/sh -c</code> 执行命令原文）+ 命令策略（分段判定、白名单准入、
+                可信表免审批、只读不打扰、灾难形状拒绝、命令替换与重定向升级审批、其余审批）+
+                <code>!命令</code> 输入指令。<strong>没有沙箱</strong></td>
+              <td>模型跑不了命令，<code>!命令</code> 只是一段普通文本</td>
+            </tr>
+            <tr>
+              <td><code>jellyfish-plugin-session-file</code></td>
+              <td>会话持久化：一个会话一个 JSON 文件，并用 git 管理历史</td>
+              <td><code>/session</code>、<code>/resume</code>、<code>--session</code> 都没有落盘的会话可用</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>配置</strong></p>
+      <pre><code class="language-json">{
+  "plugins": {
+    "roots": ["~/.jellyfish/plugins/"]
+  }
+}</code></pre>
+      <p>
+        扫描目录写在 <code>config.json</code> 的 <code>plugins.roots</code> 里（顺序即扫描顺序，支持 <code>~</code>
+        与相对路径，相对路径相对<strong>进程工作目录</strong>解析，留空回退默认值 <code>plugins</code>）。
+        启用 / 禁用名单与逐插件配置段写在 <code>jellyfish.json</code>，变化由 <span class="tag hot">/reload 生效</span>；
+        <code>config.json</code> 与插件 jar 的增删是 <span class="tag restart">需重启</span>。
+      </p>
+
+      <p><strong>验证</strong></p>
+      <pre><code class="language-bash"># 重启后，/help 里应该出现插件带来的命令
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli -p "/help"</code></pre>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>拷进去了但没生效？</strong>没重启进程。扫描目录与插件集合只在启动期确定。</li>
+        <li><strong>插件编译时找不到 <code>jellyfish-api</code>？</strong>插件仓库是独立 reactor，
+          <code>jellyfish-api</code> 来自<strong>本地 Maven 仓库</strong>，改插件前先装内核：
+          <code>(cd ../Jellyfish &amp;&amp; mvn -q install -DskipTests)</code>。忘了这一步的表现是
+          「内核明明改了，插件这边编译却看不到」。</li>
+      </ul>
+    </div>
+    <div class="src-block">Jellyfish-Plugins/README.md「环境要求」「构建与安装」「插件一览」、Jellyfish/README.md「插件」一节（扫描目录、重启要求、<code>plugins.roots</code> 语义）；jar 产物名：Jellyfish-Plugins/pom.xml:11（父版本 <code>0.1.1</code>）、Jellyfish-Plugins/jellyfish-plugin-shell/pom.xml:14、Jellyfish-Plugins/jellyfish-plugin-session-file/pom.xml:14（artifactId 与 plugin.id 同名，两模块都未写 finalName）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/resources/plugin.properties:5-7、Jellyfish-Plugins/jellyfish-plugin-shell/target/jellyfish-plugin-shell-0.1.1.jar 与 Jellyfish-Plugins/jellyfish-plugin-session-file/target/jellyfish-plugin-session-file-0.1.1.jar（本仓库已构建的产物）</div>
+
+    <h2>第 4 步：问第一句话</h2>
+
+    <div class="feature">
+      <h3>三种启动方式</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          三个外壳共享同一个入口与同一份装配，只靠启动参数区分。<strong>一个参数都不带直接运行 = <code>-tui</code></strong>。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-bash"># 交互界面（不带参数就等于 -tui，需要可交互终端）
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar
+
+# 单次问答：进一句、出一次结果后退出（推荐第一次用这个）
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli -p "总结一下这个项目"
+
+# 显式指定交互界面
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -tui</code></pre>
+        </dd>
+      </dl>
+
+      <div class="callout warn">
+        <span class="callout-title">兜底只此一处：判据只有「参数个数为零」</span>
+        <ul>
+          <li><strong>一个参数都不带</strong>（含 <code>args</code> 为 <code>null</code>）→ 模式定为 <code>-tui</code>，
+            等价于显式写 <code>jellyfish -tui</code>。</li>
+          <li><strong>只要带了任何参数，模式就必须显式给</strong>：<code>jellyfish --verbose</code> 一样报
+            「请指定启动模式」并退 <code>2</code>。这是刻意的——兜底不许扩成「内容推断」，否则「敲了没反应」
+            和「悄悄挂在等 stdin」两头都可能发生。</li>
+        </ul>
+      </div>
+
+      <p><strong>第一次提问时值得知道的三个参数</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>参数</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>-p, --print</td>
+              <td>字符串</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>从 stdin 读到 EOF</td>
+              <td>单次模式的输入；以 <code>/</code> 开头走命令域，否则走一次 LLM 对话</td>
+              <td><code>-p "总结一下这个项目"</code></td>
+            </tr>
+            <tr>
+              <td>--model</td>
+              <td>字符串</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>用 <code>models.json</code> 的 <code>defaultProvider</code> / <code>defaultModel</code></td>
+              <td>新建会话时指定模型，<strong>必须含 <code>/</code></strong></td>
+              <td><code>--model openai/gpt-4o</code></td>
+            </tr>
+            <tr>
+              <td>--session</td>
+              <td>字符串</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>新建会话</td>
+              <td>切换到已有会话（需安装 <code>jellyfish-plugin-session-file</code> 等持久化插件；会话不存在时按用法错误退 <code>2</code>）</td>
+              <td><code>--session a1b2c3d4</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>完整示例</strong>：把回答与诊断分开存，回答进 <code>answer.txt</code>、诊断进 <code>diag.txt</code></p>
+      <pre><code class="language-bash">java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli -p "总结这个项目" &gt; answer.txt 2&gt; diag.txt</code></pre>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>敲了没反应、像卡住了？</strong>检查后面跟了什么参数。带了参数却没给模式会被拒绝退 <code>2</code>；
+          给了 <code>-cli</code> 但没给 <code>-p</code> 会从 stdin 读——在终端里它就等着你输入，用 <code>Ctrl-D</code>
+          结束。</li>
+        <li><strong>回答里有控制字符被吃掉？</strong>这是刻意的：写出前一律过 <code>ControlChars</code>，
+          重定向到文件时回答里的控制字符也会被剔掉。</li>
+      </ul>
+    </div>
+    <div class="src-block">Jellyfish/README.md「快速开始 · 3. 问第一句话」「三种运行模式」（兜底规则、参数表）、Jellyfish/docs/constraints.md「三个外壳的共同约定」（兜底判据只有「参数个数为零」、CLI 输出契约）</div>
+
+    <h2>第 5 步：确认工具调用真的发生了</h2>
+
+    <div class="feature">
+      <h3>让模型读一个文件，然后在工具轨迹里看它</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          「模型回答了」和「模型真的用了工具」是两件事。工具轨迹是内核按会话里 assistant 的
+          <code>toolCalls</code> 渲染出来的，看到它就说明这一整条链路（权限判定 → 插件执行 → 结果回灌）真的跑过了。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-bash"># 让它读一个真实存在的文件（换上你自己目录里的文件名）
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli -p "读一下 README.md 的前 40 行，用三句话总结"
+
+# 想把调用参数也打出来，加 --show-tool-args
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli --show-tool-args -p "读一下 README.md 的前 40 行，用三句话总结"</code></pre>
+          <p>单次模式的工具轨迹默认<strong>只给「开始」与「结束」两行</strong>（形状示意，参数以你实际那次调用为准）：</p>
+          <pre><code class="language-text">→ read_file
+← read_file 完成（1234 字符）</code></pre>
+          <p>加 <code>--show-tool-args</code> 会在其后补上<strong>单行、最多 200 字</strong>的调用参数：</p>
+          <pre><code class="language-text">→ read_file {"path": "README.md", "limit": 40}</code></pre>
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>参数</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>--show-tool-args</td>
+              <td>旗标</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>不显示（工具轨迹只有开始 / 结束两行）</td>
+              <td><code>-cli</code> 的工具轨迹行上打出调用参数（<strong>单行，过长截断</strong>；TUI 用 <code>Ctrl+E</code> / <code>/toolargs</code>）。<strong>只归 <code>-cli</code></strong>，<code>-tui</code> / <code>-server</code> 带上它退 <code>2</code></td>
+              <td><code>--show-tool-args</code></td>
+            </tr>
+            <tr>
+              <td>--show-thinking</td>
+              <td>旗标</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>不显示（思考过程默认折叠）</td>
+              <td>在工具轨迹之外单独打出思考过程。<strong>只归 <code>-cli</code></strong>（TUI 用 <code>Ctrl+T</code> / <code>/thinking</code>）</td>
+              <td><code>--show-thinking</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout warn">
+        <span class="callout-title">参数不脱敏，这是明说的</span>
+        <p>
+          <code>--show-tool-args</code> 打出来的调用参数<strong>不做脱敏</strong>：外壳按参数名猜不出哪个是密钥，
+          遮不住命令原文与写入正文这些真正会出事的地方。要看参数就别把带密钥的命令往日志或截图里贴。
+          TUI 的 <code>Ctrl+E</code> 同此口径。
+        </p>
+      </div>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>一行工具轨迹都没有？</strong>按这三条排：① 三个插件装了吗、重启了吗（没装
+          <code>jellyfish-plugin-tools</code> 就没有 <code>read_file</code>）；② 工具是不是被 agent 策略写进了
+          <code>askTools</code>——<code>-cli</code> <strong>没有审批界面，<code>askTools</code> 里的工具一律按拒绝处理</strong>，
+          绝不静默放行；③ 模型本身是否可用（没配模型时一发对话就会提示没有可用模型）。</li>
+        <li><strong>模型说它看不到文件？</strong>相对路径按<strong>进程工作目录</strong>解析，确认你启动命令时在哪个目录里。</li>
+        <li><strong>轨迹里参数被截断了？</strong>形如「… 参数过长，已省略后续内容」，这是按显示行数收尾的设计；
+          CLI 侧是单行 200 字封顶。</li>
+      </ul>
+    </div>
+    <div class="src-block">Jellyfish/README.md「输出与退出码」（工具轨迹两行、<code>--show-tool-args</code> 单行最多 200 字、参数不脱敏）、Jellyfish/docs/constraints.md「三个外壳的共同约定」（200 码点封顶、该旗标只被 <code>-cli</code> 接受）</div>
+
+    <h2>五分钟之后去哪</h2>
+
+    <p>路径已经通了。接下来按「你想拿它干什么」挑一条，不必从头读：</p>
+
+    <div class="diagram">
+      <div class="mermaid">
+flowchart TD
+  S["已经跑通一次带工具调用的问答"] --> Q{"接下来想解决什么"}
+  Q -->|"想搞明白四份配置怎么加载、项目级为何不生效"| P05["05 配置体系总览"]
+  Q -->|"想加模型 / 换网关 / 调采样与思考强度"| P06["06 models.json 详解"]
+  Q -->|"想限制模型能用哪些工具、要不要人工审批"| P07["07 agents.json 与工具权限"]
+  Q -->|"想知道有哪些工具、参数怎么写"| P08["08 内置工具速查"]
+  Q -->|"想让会话留下来、太长时压缩"| P09["09 会话与上下文"]
+  Q -->|"想把三个插件换成按需的一组"| P11["11 安装与使用官方插件"]
+  Q -->|"想选 CLI / TUI / Server，或接进自己的服务"| P04["04 三种运行模式"]
+  P11 --> P12["12 从零开发一个插件"]
+  P04 --> P14["14 整合到 Spring Boot"]
+      </div>
+    </div>
+    <p class="figure-cap">图 3-1　上手之后的分叉口：配置三页决定「能不能干活」，插件与模式两页决定「怎么干」</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>你现在的感觉</th><th>下一站</th><th>为什么是它</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>能跑了，但不知道自己配了什么</td>
+            <td><a href="05-config-overview.html">05 配置体系总览</a></td>
+            <td>五份配置文件、双源合并、热更新边界一次说清</td>
+          </tr>
+          <tr>
+            <td>想换成公司网关 / 便宜模型</td>
+            <td><a href="06-models.html">06 models.json 详解</a></td>
+            <td><code>type</code> / <code>baseUrl</code> / <code>sampling</code> / <code>vendorBody</code> 全字段</td>
+          </tr>
+          <tr>
+            <td>怕它乱改文件、乱跑命令</td>
+            <td><a href="07-agents.html">07 agents.json 与工具权限</a>、<a href="10-permissions.html">10 权限与审批</a></td>
+            <td><code>allowedTools</code> / <code>deniedTools</code> / <code>askTools</code> 与三态最严规则</td>
+          </tr>
+          <tr>
+            <td>想把这一套接进自己的程序</td>
+            <td><a href="04-modes.html">04 三种运行模式</a>、<a href="14-spring-boot.html">14 整合到 Spring Boot</a></td>
+            <td>要脚本化用 CLI、要给别人调用 Server、要在 Java 服务里用 Starter</td>
+          </tr>
+          <tr>
+            <td>卡住了</td>
+            <td><a href="15-troubleshooting.html">15 故障排查</a>、<a href="16-faq.html">16 FAQ 与术语表</a></td>
+            <td>按「现象 → 原因 → 解决」查</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="src-block">Jellyfish-Docs/guide/index.html「推荐学习顺序」与「页面规划」（本节的分叉口与后续页面标题均照此对齐）</div>
+
+    <h2>常见问题</h2>
+
+    <div class="feature">
+      <h3>没配模型会怎样？</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          命令照常能用——<code>/help</code> <code>/session</code> <code>/status</code> <code>/model</code>
+          <code>/compact preview</code> 都不需要模型；<strong>一发对话就会提示没有可用模型</strong>。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>按本页第 2 步建一份 <code>models.json</code>（<code>~/.jellyfish/</code> 或项目级 + 信任）。</dd>
+      </dl>
+    </div>
+
+    <div class="feature">
+      <h3>裸跑 <code>jellyfish</code>（不带任何参数）会干什么？</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          等价于 <code>-tui</code>，因此同样需要可交互终端，<strong>在管道 / CI 里一样退 <code>3</code></strong>
+          （这是有意的：否则终端界面会永久挂住）。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          想跑单次问答请显式写 <code>-cli -p "..."</code>：兜底只认「一个参数都不带」，带了参数却没给模式
+          （如 <code>jellyfish --verbose</code>）仍判用法错误退 <code>2</code>。
+        </dd>
+      </dl>
+    </div>
+
+    <div class="feature">
+      <h3><code>-cli</code> 下工具调用总被拒绝？</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          <code>-cli</code> 没有审批界面，<code>askTools</code> 里的工具<strong>一律按拒绝处理</strong>（绝不静默放行）。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          要在无人值守下跑，就别把该工具放进 <code>askTools</code>；要人工确认就用 <code>-tui</code> 或
+          <code>-server</code>。shell 这类插件另有白名单与可信表的口径，见
+          <a href="11-plugin-usage.html">11 安装与使用官方插件</a> 与 <a href="10-permissions.html">10 权限与审批</a>。
+        </dd>
+      </dl>
+    </div>
+
+    <div class="feature">
+      <h3><code>-cli</code> 下 <code>ask_user</code> 会怎样？</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          不会失败、也不会挂住：<code>-cli</code> 不挂答复者，工具立刻返回一条「当前外壳没有交互界面，
+          无法把提问送达用户」，模型据此照自己的判断继续。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>真要人回答就用 <code>-tui</code>（浮层选择）或 <code>-server</code>（走 HTTP 作答）。</dd>
+      </dl>
+    </div>
+
+    <div class="feature">
+      <h3>改了配置不生效？</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          分的很清楚：<code>models.json</code> / <code>agents.json</code> / <code>jellyfish.json</code> 三个内容文件
+          <span class="tag hot">/reload 生效</span>；<code>config.json</code>、新增 / 删除插件 jar
+          <span class="tag restart">需重启</span>。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-bash">java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli -p "/reload"
+java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli -p "/model"   # 看模型索引有没有更新</code></pre>
+          <p>如果改的是<strong>项目级</strong>文件，先确认这一项：项目级文件存在但未被信任时<strong>不加载</strong>，
+            会额外发一条配置告警。</p>
+        </dd>
+      </dl>
+    </div>
+    <div class="src-block">Jellyfish/README.md「常见问题」（没配模型、裸跑 jellyfish、<code>-cli</code> 下工具总被拒绝、<code>-cli</code> 下的 <code>ask_user</code>、改了配置不生效五条）</div>
+
+    <div class="conclusion">
+      <h2>关键结论</h2>
+      <ol>
+        <li><code>-cli -p "/help"</code> 是<strong>不需要模型</strong>的验安装手段；把「装没装好」与「模型配对没有」分开验证。</li>
+        <li>配模型只要三件事：provider 的 <code>type</code> / <code>apiKey</code> / <code>baseUrl</code>、它有哪些模型、按需调参；密钥用 <code>${ENV_VAR}</code> 注入，不写进文件。</li>
+        <li><strong>项目级配置默认不加载</strong>（信任单位是「文件绝对路径 + 内容指纹」，内容一改就失效）。CLI / Server 用 <code>--trust-project-config</code> 信任一次，TUI 启动时在确认框回答 <code>y</code> 或 <code>o</code>。</li>
+        <li>不装插件时内核近乎空转：<strong>最少装 <code>tools</code> / <code>shell</code> / <code>session-file</code></strong>，拷进 <code>~/.jellyfish/plugins/</code> 后<strong>必须重启</strong>。</li>
+        <li>兜底只认「一个参数都不带 = <code>-tui</code>」；<strong>带了任何参数就必须显式给模式</strong>，否则退 <code>2</code>。</li>
+        <li>看到工具轨迹（<code>→ 工具名</code> / <code>← 工具名 完成（N 字符）</code>）才算真的用上了工具；<code>--show-tool-args</code> 能加打参数，但<strong>参数不脱敏</strong>。</li>
+        <li>三个内容文件改完 <code>/reload</code> 生效，<code>config.json</code> 与插件 jar 的增删<strong>需重启</strong>。</li>
+      </ol>
+    </div>
+
+    <div class="next-steps">
+      <h2>下一步阅读</h2>
+      <ul>
+        <li><a href="04-modes.html">04 三种运行模式</a>——你已经用过 <code>-cli</code>，现在把 <code>-tui</code> /
+          <code>-server</code> 的参数、退出码、按键和选择依据一次补齐。</li>
+        <li><a href="05-config-overview.html">05 配置体系总览</a>——本页只写了 <code>models.json</code> 的入门字段；
+          这一页讲清另外几份文件各管什么、怎么合并、哪些改动热生效。</li>
+        <li><a href="11-plugin-usage.html">11 安装与使用官方插件</a>——13 个官方插件各干什么、按需再装哪几个。</li>
+      </ul>
+    </div>
+
+    <nav class="pager" aria-label="翻页">
+      <a class="prev" href="02-install.html"><span class="pager-dir">上一页</span>02 安装与环境准备</a>
+      <a class="next" href="04-modes.html"><span class="pager-dir">下一页</span>04 三种运行模式</a>
+    </nav>
+
+  </main>
+</div>
+
+<footer class="footer">
+  <div class="doc-meta">
+    Jellyfish 使用指南 · 本页依据：<code>Jellyfish/README.md</code>、<code>Jellyfish/docs/constraints.md</code>、
+    <code>Jellyfish-Plugins/README.md</code> 等。
+    示例中的密钥、token 一律以占位符表示；<code>【待确认】</code>表示该结论在仓库中未找到出处，请以实际代码为准。
+  </div>
+</footer>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

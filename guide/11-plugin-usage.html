@@ -1,0 +1,1478 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>11 安装与使用官方插件 · Jellyfish 使用指南</title>
+<meta name="description" content="Jellyfish 官方插件使用指南：13 个插件（tools / shell / session-file / todo / project / compact / skills / mcp / workflow / plan / resmon / python / node）各提供什么能力、三种安装方式、plugins.enabled 与 plugins.disabled 的语义、逐插件配置字段表与完整 JSON 示例，以及三档推荐组合与常见问题。">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="nav-toggle" id="navToggle" aria-label="切换导航" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">🐙 Jellyfish 使用指南</a>
+  <div class="topbar-tools">
+    <input id="navSearch" type="search" placeholder="搜索页面…" aria-label="搜索页面">
+  </div>
+</header>
+
+<div class="layout">
+
+  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <div class="sidebar-title">文档目录</div>
+    <ul class="nav-list">
+      <li><a href="index.html">首页 · 总览与导航</a></li>
+    </ul>
+    <div class="nav-group">一、入门</div>
+    <ul class="nav-list">
+      <li><a href="01-overview.html">01 Jellyfish 是什么</a></li>
+      <li><a href="02-install.html">02 安装与环境准备</a></li>
+      <li><a href="03-quickstart.html">03 五分钟快速上手</a></li>
+      <li><a href="04-modes.html">04 三种运行模式</a></li>
+    </ul>
+    <div class="nav-group">二、配置</div>
+    <ul class="nav-list">
+      <li><a href="05-config-overview.html">05 配置体系总览</a></li>
+      <li><a href="06-models.html">06 models.json 详解</a></li>
+      <li><a href="07-agents.html">07 agents.json 与工具权限</a></li>
+    </ul>
+    <div class="nav-group">三、日常使用</div>
+    <ul class="nav-list">
+      <li><a href="08-tools.html">08 内置工具速查</a></li>
+      <li><a href="09-session.html">09 会话与上下文</a></li>
+      <li><a href="10-permissions.html">10 权限与审批</a></li>
+    </ul>
+    <div class="nav-group">四、插件</div>
+    <ul class="nav-list">
+      <li><a href="11-plugin-usage.html" aria-current="page">11 安装与使用官方插件</a></li>
+      <li><a href="12-plugin-dev.html">12 从零开发一个插件</a></li>
+      <li><a href="13-plugin-advanced.html">13 插件进阶与发布</a></li>
+    </ul>
+    <div class="nav-group">五、集成与排错</div>
+    <ul class="nav-list">
+      <li><a href="14-spring-boot.html">14 整合到 Spring Boot</a></li>
+      <li><a href="15-troubleshooting.html">15 故障排查</a></li>
+      <li><a href="16-faq.html">16 FAQ 与术语表</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <nav class="breadcrumb" aria-label="面包屑">
+      <span>Jellyfish 使用指南</span><span class="sep">/</span><span>11 安装与使用官方插件</span>
+    </nav>
+
+    <h1>11 安装与使用官方插件</h1>
+    <p class="page-sub">
+      内核是「最小内核」——文件读写、跑命令、会话持久化、上下文压缩全都在插件里。这一页回答两件事：
+      <strong>这 13 个插件各是什么、该怎么装</strong>，以及<strong>每个插件的配置段怎么写</strong>。
+      每个插件的字段表都给了类型、必填、默认值与示例，可以直接拼进 <code>jellyfish.json</code>。
+    </p>
+
+    <section class="goals">
+      <h2>学习目标</h2>
+      <ul>
+        <li>说出 13 个官方插件各自的 <code>plugin.id</code> 与它提供的能力，并知道 <code>jellyfish-script</code> 不是插件而是库；</li>
+        <li>用三种方式之一把插件装进扫描目录，并知道为什么「新增 / 删除 jar 必须重启」；</li>
+        <li>写对 <code>plugins.enabled</code> / <code>plugins.disabled</code>，并分清「未声明」与「声明为空」；</li>
+        <li>为任意一个插件写出它自己的配置段（<code>plugins.configurations.&lt;pluginId&gt;</code>）；</li>
+        <li>知道改动哪个配置由 <code>/reload</code> 生效、哪个必须重启进程；</li>
+        <li>按「最小可用 / 日常开发 / 全功能」三档挑出该装的插件；</li>
+        <li>遇到「装了但命令没出现」时能自己定位到扫描目录、禁用名单或配置段这三处。</li>
+      </ul>
+    </section>
+
+    <h2>13 个插件一览</h2>
+
+    <p>
+      官方插件仓库 <code>Jellyfish-Plugins</code> 里 15 个 Maven 模块，其中 13 个产出插件 jar，另外两个是
+      <strong>库</strong>与<strong>示例</strong>。<code>plugin.id</code> 与模块名在官方插件里恰好同名，但你写配置时用的必须是
+      <code>plugin.id</code>（它同时是注册表的 owner 与配置段的键）。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>模块</th><th><code>plugin.id</code></th><th>提供什么能力</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>jellyfish-plugin-tools</code></td>
+            <td>同名</td>
+            <td>五个文件工具 <code>read_file</code> / <code>write_file</code> / <code>edit_file</code> / <code>list_dir</code> / <code>grep_files</code>；提问工具 <code>ask_user</code>；输入框的 <code>@</code> 文件引用；按路径收口的闸门 <code>pathPolicy</code></td>
+          </tr>
+          <tr>
+            <td><code>jellyfish-plugin-shell</code></td>
+            <td>同名</td>
+            <td><code>shell</code> 工具（<code>/bin/sh -c</code> 执行命令原文）+ 命令策略（分段判定、白名单准入、可信表免审批、只读表不打扰、灾难形状拒绝、命令替换与重定向升级审批）+ <code>!命令</code> 输入指令。<strong>没有沙箱</strong></td>
+          </tr>
+          <tr>
+            <td><code>jellyfish-plugin-session-file</code></td>
+            <td>同名</td>
+            <td>会话持久化：一个会话一个 JSON 文件，并用 git 管理历史</td>
+          </tr>
+          <tr>
+            <td><code>jellyfish-plugin-todo</code></td>
+            <td>同名</td>
+            <td>会话待办：<code>todo_write</code> / <code>todo_claim</code> / <code>todo_done</code> / <code>todo_release</code> / <code>todo_block</code> 五个工具 + 只读 <code>/todo</code> 命令 + 随本轮消息送达的待办块 + 状态栏进度 + 左栏清单面板</td>
+          </tr>
+          <tr>
+            <td><code>jellyfish-plugin-project</code></td>
+            <td>同名</td>
+            <td>项目约定：探测工作目录下的 <code>AGENTS.md</code>，小文件内联原文、大文件只给路径；<code>/init [--force]</code> 让模型读仓库后写出它</td>
+          </tr>
+          <tr>
+            <td><code>jellyfish-plugin-compact</code></td>
+            <td>同名</td>
+            <td>会话压缩策略：摘要指令 + 保留条数 / 摘要上限。<strong>不装它就没有压缩</strong></td>
+          </tr>
+          <tr>
+            <td><code>jellyfish-plugin-skills</code></td>
+            <td>同名</td>
+            <td>skills：按目录发现 <code>SKILL.md</code>，元信息常驻 system prompt、正文由模型用 <code>skill</code> 工具按需加载</td>
+          </tr>
+          <tr>
+            <td><code>jellyfish-plugin-mcp</code></td>
+            <td>同名</td>
+            <td>MCP 客户端：stdio 连外部 MCP server，把它的工具以 <code>mcp__&lt;server&gt;__&lt;tool&gt;</code> 接入</td>
+          </tr>
+          <tr>
+            <td><code>jellyfish-plugin-workflow</code></td>
+            <td>同名</td>
+            <td>编排：<code>workflow</code> 工具接受一份声明式 spec，按依赖并发派生子代理并聚合结果</td>
+          </tr>
+          <tr>
+            <td><code>jellyfish-plugin-plan</code></td>
+            <td>同名</td>
+            <td>plan 模式：<code>/plan [on|off]</code> 在会话内开关，开启时只有白名单里的工具可用</td>
+          </tr>
+          <tr>
+            <td><code>jellyfish-plugin-resmon</code></td>
+            <td>同名</td>
+            <td>资源监控：JVM 与 <code>~/.jellyfish</code> 占用采样，只读 <code>/resmon [jvm|disk|auto]</code> 命令 + 右栏常驻面板。<strong>只报告、不清理</strong></td>
+          </tr>
+          <tr>
+            <td><code>jellyfish-plugin-python</code></td>
+            <td>同名</td>
+            <td>Python 脚本插件运行时：把 <code>scripts/python/&lt;id&gt;/</code> 下的脚本目录变成标准插件</td>
+          </tr>
+          <tr>
+            <td><code>jellyfish-plugin-node</code></td>
+            <td>同名</td>
+            <td>Node 脚本插件运行时：与 Python 同构（同一套协议与进程模型），零第三方依赖</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">另外两个模块不是插件</span>
+      <ul>
+        <li><code>jellyfish-script</code> 是<strong>库</strong>：Python / Node 桥接共用的机制层（探测解释器、扫清单、按脚本注册、事件与熔断、按序关闭）。
+          它<strong>不产出到 <code>plugins/</code></strong>，而是被两个桥接插件以 <code>shade</code> 的方式打进各自的 jar。
+          因此你在 <code>plugins/</code> 目录里永远不该看到它的 jar。</li>
+        <li><code>examples/scripts</code> 是<strong>示例脚本目录</strong>：<code>{python,node}/{hello,jira}</code> 是可直接拷贝运行的示例
+          （被端到端用例直接加载），另有仅 Python 的 <code>web</code>、<code>stock</code>、<code>stockpanel</code>。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish-Plugins/README.md:48-67（插件一览表）、Jellyfish-Plugins/pom.xml（<code>&lt;modules&gt;</code> 全量清单）、Jellyfish-Plugins/AGENTS.md「技术架构」表、Jellyfish-Plugins/jellyfish-plugin-tools/src/main/resources/plugin.properties（<code>plugin.id</code> 实例）</div>
+
+    <h2>安装：三种装法</h2>
+
+    <p>
+      插件是<strong>独立打包的 PF4J jar</strong>，安装这件事本身就是「把 jar 放进扫描目录」。扫描目录来自
+      <code>config.json</code> 的 <code>plugins.roots</code>（缺省 <code>["~/.jellyfish/plugins/"]</code>），
+      PF4J 只在目录<strong>下一层</strong>找 <code>plugin.properties</code>——因此把 jar 塞进子目录是找不到的。
+    </p>
+
+    <div class="feature">
+      <h3>方法一：全量装（<code>cpPlugins.sh</code>）</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>仓库根目录的脚本把 13 个插件的 <code>target/*.jar</code> 一次性拷进 <code>~/.jellyfish/plugins</code>，并把几个示例脚本拷进 <code>~/.jellyfish/scripts/</code>。</dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-bash">cd /path/to/Jellyfish-Plugins
+mvn -q package -DskipTests      # 打包全部插件
+./cpPlugins.sh                  # 拷进 ~/.jellyfish/plugins/</code></pre>
+        </dd>
+      </dl>
+      <p><strong>完整示例</strong>：脚本里对每个 jar 就是一行 <code>cp</code>（下面是节选，不是全文）</p>
+      <pre><code class="language-bash">cp Jellyfish-Plugins/jellyfish-plugin-compact/target/jellyfish-plugin-compact-0.1.1.jar ~/.jellyfish/plugins
+cp Jellyfish-Plugins/jellyfish-plugin-tools/target/jellyfish-plugin-tools-0.1.1.jar ~/.jellyfish/plugins
+# …13 个 jar 各一行…
+rm -rf ~/.jellyfish/scripts/python/web
+cp -r Jellyfish-Plugins/examples/scripts/python/web ~/.jellyfish/scripts/python/web</code></pre>
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>脚本报 <code>No such file or directory</code>？</strong>脚本里的路径写成 <code>Jellyfish-Plugins/...</code>，也就是<strong>从工作目录的相对路径</strong>出发的——本套文档的工作目录同时下辖两个仓库，所以能直接用；如果你的目录结构不同，按实际路径改或直接手抄 <code>cp</code> 一行。</li>
+        <li><strong>拷完就生效了吗？</strong>没有。<span class="tag restart">需重启</span> 扫描目录与插件集合只在启动期确定。</li>
+      </ul>
+    </div>
+    <div class="src-block">Jellyfish-Plugins/README.md:30-46（构建与安装）、cpPlugins.sh（脚本全文）、Jellyfish/README.md:462-469（安装与扫描目录）、Jellyfish/README.md:495-509（<code>config.json</code> 的 <code>plugins.roots</code>）</div>
+
+    <div class="feature">
+      <h3>方法二：只装用得到的几个</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>不跑脚本，自己把某几个模块的 jar 拷进扫描目录——少一个插件就少一份启动期开销与一份配置面。</dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-bash">cd /path/to/Jellyfish-Plugins
+mvn -q package -DskipTests
+mkdir -p ~/.jellyfish/plugins
+cp jellyfish-plugin-tools/target/jellyfish-plugin-tools-*.jar ~/.jellyfish/plugins/</code></pre>
+        </dd>
+      </dl>
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>只拷一个模块能构建吗？</strong>能。<code>mvn -q package -DskipTests</code> 在聚合 POM 上是全量打包，但每个插件模块也可以单独构建（<code>-pl jellyfish-plugin-tools</code>）。</li>
+        <li><strong>桥接插件要不要连脚本一起拷？</strong>要。<code>jellyfish-plugin-python</code> / <code>-node</code> 只是运行时，脚本目录在 <code>scripts/python/&lt;id&gt;/</code> 下另行放置（见本页 <a href="#bridge">python / node 桥接</a> 一节）。</li>
+      </ul>
+    </div>
+    <div class="src-block">Jellyfish-Plugins/README.md:38-46（「也可以只装用得到的几个」）</div>
+
+    <div class="feature">
+      <h3>方法三：从源码 <code>mvn package</code>（改代码的人走这条）</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>插件仓库是<strong>独立的 Maven reactor</strong>：<code>jellyfish-api</code> 不来自内核源码树，而是本地 Maven 仓库里那一份。所以改插件之前，先把内核装进本地仓库。</dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-bash"># 0. 先把内核 install 到本地仓库（不能省）
+(cd ../Jellyfish &amp;&amp; mvn -q install -DskipTests)
+# 1. 再构建插件
+cd ../Jellyfish-Plugins
+mvn -q clean package -DskipTests
+./cpPlugins.sh</code></pre>
+        </dd>
+      </dl>
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>为什么编译看不到内核刚改的字段？</strong>漏了第 0 步。表现正是「内核明明改了，插件这边编译却看不到」。</li>
+        <li><strong>需要 clean 吗？</strong>内核升级后必须 clean：增量编译会复用按旧 <code>jellyfish-api</code> 编出的 <code>target/</code>，把<strong>编译问题伪装成运行期问题</strong>（仓库里记录的实例是 11 条 <code>NoSuchMethodError</code>）。</li>
+      </ul>
+    </div>
+    <div class="src-block">Jellyfish-Plugins/README.md:14-28（环境要求与「本仓库是独立的 reactor」）、Jellyfish-Plugins/AGENTS.md「内核升级后要做的检查」、Jellyfish-Plugins/README.md:1032-1052</div>
+
+    <div class="callout warn">
+      <span class="callout-title">一条钉子：新增 / 删除插件 jar 必须重启</span>
+      <p>
+        <strong>扫描目录与插件集合只在启动期确定。</strong>往 <code>plugins/</code> 里加一个 jar 或删一个 jar，都要重启进程才认。
+        与之相对，<strong>改配置不用重启</strong>：启用 / 禁用名单与逐插件配置段写在 <code>jellyfish.json</code>，改动由 <code>/reload</code> 生效。
+      </p>
+    </div>
+    <div class="src-block">Jellyfish-Plugins/README.md:33-35、Jellyfish/README.md:511-513（<code>/reload</code> 与「只重启配置段变了的插件」）、Jellyfish/docs/constraints.md「插件扫描与配置」</div>
+
+    <h2>启用与禁用</h2>
+
+    <p>三件事写在 <code>jellyfish.json</code> 的 <code>plugins</code> 段里：</p>
+
+    <div class="table-scroll field-table">
+      <table>
+        <thead>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>plugins.enabled</td>
+            <td>string[]</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>未声明（＝不额外限定，全部加载）</td>
+            <td>启用名单。<strong>「未声明」与「声明为空」是两回事</strong>：不声明表示「不额外限定」，显式写 <code>[]</code> 表示「一个都不启用」</td>
+            <td><code>["jellyfish-plugin-tools"]</code></td>
+          </tr>
+          <tr>
+            <td>plugins.disabled</td>
+            <td>string[]</td>
+            <td><span class="tag optional">选填</span></td>
+            <td><code>[]</code></td>
+            <td>禁用名单。不声明与写 <code>[]</code> 等价，都不禁用任何插件。同一 pluginId 同时出现在两份名单里时按<strong>禁用</strong>处理，并发一条配置告警</td>
+            <td><code>["jellyfish-plugin-todo"]</code></td>
+          </tr>
+          <tr>
+            <td>plugins.configurations.&lt;pluginId&gt;</td>
+            <td>object</td>
+            <td><span class="tag optional">选填</span></td>
+            <td>未配置（插件拿到空映射）</td>
+            <td>单个插件的配置段，逐插件的键值见插件自己的文档。两级合并时同名插件段是<strong>整对象替换</strong>，项目级一写就整段盖掉全局级</td>
+            <td><code>{"jellyfish-plugin-tools": {"pathPolicy": {…}}}</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>生效方式：<span class="tag hot">/reload 生效</span> 上面三个字段全部由 <code>/reload</code> 生效（内核<strong>只重启配置段变了的插件</strong>）；<span class="tag restart">需重启</span> <code>config.json</code> 的 <code>plugins.roots</code> 与 jar 的增删。</p>
+
+    <p><strong>完整示例</strong>——只想装文件工具、并临时禁用待办插件：</p>
+
+    <pre><code class="language-json">{
+  "plugins": {
+    "enabled": ["jellyfish-plugin-tools"],
+    "disabled": ["jellyfish-plugin-todo"],
+    "configurations": {
+      "jellyfish-plugin-tools": {
+        "pathPolicy": {
+          "write": { "allow": ["."], "outside": "ask" },
+          "read":  { "allow": [".", "~/.jellyfish"], "outside": "deny" }
+        }
+      }
+    }
+  }
+}</code></pre>
+
+    <p><strong>常见问题</strong></p>
+    <ul>
+      <li><strong>我把 <code>enabled</code> 写成 <code>[]</code> 想「不限制」，结果一个插件都没了？</strong>语义反了：不限制就是<strong>不写这个键</strong>；<code>[]</code> 是「一个都不启用」。</li>
+      <li><strong>写错了 pluginId 会怎样？</strong>禁用名单里写错只会「什么也没禁」；<code>configurations</code> 里写错 pluginId 时插件拿到的是空映射，因此配置看起来「被忽略了」——先核对拼写与大小写。</li>
+      <li><strong>项目级配置为什么不生效？</strong>项目级 <code>.jellyfish/jellyfish.json</code> 的插件段是<strong>整对象替换</strong>：项目级一写某个插件段，全局级那一份就整段被盖掉。想同时保留两处，就把完整内容写在生效的那一级。</li>
+    </ul>
+    <div class="src-block">Jellyfish/README.md:814-833（<code>plugins</code> 段字段表与模式类授权）、Jellyfish/README.md:944-954（双源合并与整对象覆盖）、Jellyfish/README.md:511-513（<code>/reload</code> 只重启配置段变了的插件）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/plugin/PluginContext.java（<code>configuration()</code> 未配置时是空映射而非 <code>null</code>）</div>
+
+    <h2>逐个插件</h2>
+
+    <p>
+      下面按「谁最常用」排序。每节的字段表都只列<strong>该插件自己</strong>的键——它们全部写在
+      <code>plugins.configurations.&lt;pluginId&gt;</code> 里。<strong>没写进表的键不代表不存在</strong>：本页对已发现的「README 未收录、源码里有」的键都单独标了出来。
+    </p>
+
+    <div class="feature">
+      <h3>tools —— 文件工具与 <code>@</code> 引用</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>给模型五把文件操作的手（三个只读、两个可写）、一个提问工具，以及输入框里的 <code>@</code> 文件补全。</dd>
+        <dt>装了之后多出什么</dt>
+        <dd>
+          <ul>
+            <li>工具：<code>read_file</code>（按行分片读）、<code>write_file</code>（整文件覆盖写）、<code>edit_file</code>（字面量替换；匹配到多处且未声明 <code>replace_all</code> 时报错而不改文件）、<code>list_dir</code>（只列一层）、<code>grep_files</code>（逐行正则，跳过 <code>.git</code> / <code>target</code> / <code>node_modules</code> 与二进制文件）；</li>
+            <li>工具：<code>ask_user</code>（把一个问题连同 2~6 个候选项摆到用户面前，答案以工具结果回灌给模型；<strong>它不是审批</strong>）；</li>
+            <li>输入引用：<code>@路径</code> 弹出补全面板。<strong>它不内联文件内容</strong>，读取仍由模型调 <code>read_file</code> 完成；</li>
+            <li>一个权限拦截贡献：<code>pathPolicy</code> 闸门（见下）。</li>
+          </ul>
+        </dd>
+      </dl>
+      <p><strong>配置字段</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>pathPolicy</td>
+              <td>object</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>未配置（<code>read</code> 不设限、<code>write</code> 走缺省）</td>
+              <td>路径闸门总开关。文件工具在<strong>允许的路径之外</strong>时升级为人工审批或直接拒绝；粒度是「工具名 + 路径」</td>
+              <td><code>{ "write": {…}, "read": {…} }</code></td>
+            </tr>
+            <tr>
+              <td>pathPolicy.read</td>
+              <td>object</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>不设限</td>
+              <td>读方向的规则，管 <code>read_file</code> / <code>list_dir</code> / <code>grep_files</code>。<strong>不配就不设限</strong></td>
+              <td><code>{ "allow": [".", "~/.jellyfish"], "outside": "deny" }</code></td>
+            </tr>
+            <tr>
+              <td>pathPolicy.write</td>
+              <td>object</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>{ "allow": ["."], "outside": "ask" }</code></td>
+              <td>写方向的规则，管 <code>write_file</code> / <code>edit_file</code>。不配按缺省：只允许工作目录、范围外要审批</td>
+              <td><code>{ "allow": ["."], "outside": "ask" }</code></td>
+            </tr>
+            <tr>
+              <td>pathPolicy.read.allow</td>
+              <td>string[]</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>["."]</code></td>
+              <td>读方向允许的目录。相对路径按<strong>进程工作目录</strong>解析、行首 <code>~</code> 按<strong>用户主目录</strong>，因此 <code>"."</code> 就是工作目录</td>
+              <td><code>[".", "~/.jellyfish"]</code></td>
+            </tr>
+            <tr>
+              <td>pathPolicy.read.outside</td>
+              <td>string（<code>allow</code> / <code>ask</code> / <code>deny</code>）</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>ask</code></td>
+              <td>读方向范围之外的裁定。<code>allow</code> 等于<strong>把该方向的门关掉</strong>（恒无异议）</td>
+              <td><code>deny</code></td>
+            </tr>
+            <tr>
+              <td>pathPolicy.write.allow</td>
+              <td>string[]</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>["."]</code></td>
+              <td>写方向允许的目录，解析规则与读方向的同名键逐字一致（相对路径按进程工作目录、行首 <code>~</code> 按用户主目录）</td>
+              <td><code>["."]</code></td>
+            </tr>
+            <tr>
+              <td>pathPolicy.write.outside</td>
+              <td>string（<code>allow</code> / <code>ask</code> / <code>deny</code>）</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>ask</code></td>
+              <td>写方向范围之外的裁定，取值与语义和读方向的同名键一致（<code>allow</code> 即关掉该方向的闸门）</td>
+              <td><code>"ask"</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>完整示例</strong></p>
+      <pre><code class="language-json">{
+  "plugins": {
+    "configurations": {
+      "jellyfish-plugin-tools": {
+        "pathPolicy": {
+          "write": { "allow": ["."], "outside": "ask" },
+          "read":  { "allow": [".", "~/.jellyfish"], "outside": "deny" }
+        }
+      }
+    }
+  }
+}</code></pre>
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong><code>ask</code> 在 <code>-cli</code> 下等于拒绝？</strong>是。<code>-cli</code> 不挂审批通道，「需要审批」一律按拒绝处理——工作目录外的写在那里会直接失败。要放开就把该方向配成 <code>outside: "allow"</code>，或把目录加进 <code>allow</code>。</li>
+        <li><strong>它是文件系统沙箱吗？</strong>不是。它管不了 <code>shell</code> 命令里出现的路径，也管不了 MCP 工具；它管的是本插件这几个文件工具的 <code>path</code> 参数。符号链接会先解开再比，因此工作目录里放一个指向 <code>/etc</code> 的链接不会成为后门。</li>
+        <li><strong>配置写错会把插件弄挂吗？</strong>不会，只回退并告警（走 <code>ConfigWarningEvent</code>，TUI 上看得见）。</li>
+      </ul>
+    </div>
+    <div class="src-block">Jellyfish-Plugins/README.md:69-123（工具清单与只读口径）、Jellyfish-Plugins/README.md:124-162（<code>pathPolicy</code> 字段表）、Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/PathPolicy.java、Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/ToolsPlugin.java（注册 <code>InputReferenceRequest</code> 与 <code>PermissionCheckRequest</code>）</div>
+
+    <div class="feature">
+      <h3>shell —— 执行命令与 <code>!命令</code></h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>让模型在本机执行命令，外加一套「先拒绝、再免打扰、最后才问人」的命令分类策略。<strong>它没有沙箱</strong>：命令以本进程的权限运行，能读写你这个用户的任意文件。</dd>
+        <dt>装了之后多出什么</dt>
+        <dd>
+          <ul>
+            <li>工具 <code>shell</code>（参数 <code>command</code> / <code>cwd</code> / <code>timeout_seconds</code>）；</li>
+            <li>输入指令 <code>!命令</code>：手动执行一条命令、不进模型，执行完把「命令回显 + 输出」作为一条用户消息落进会话；它复用与模型调用完全相同的执行链路，<strong>照旧过权限与审批</strong>；</li>
+            <li>一个权限拦截贡献：命令策略（白名单、可信表、只读表、拒绝形状、重定向与命令替换升级）。</li>
+          </ul>
+        </dd>
+      </dl>
+      <p><strong>配置字段</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>timeoutSeconds</td>
+              <td>int</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>120</code></td>
+              <td>命令最多允许跑多久；单次调用可用 <code>timeout_seconds</code> 参数覆盖，并被 <code>maxTimeoutSeconds</code> 钳制。<strong>不支持「不超时」</strong></td>
+              <td><code>300</code></td>
+            </tr>
+            <tr>
+              <td>maxTimeoutSeconds</td>
+              <td>int</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>1800</code></td>
+              <td>单次调用能声明的超时上限</td>
+              <td><code>1800</code></td>
+            </tr>
+            <tr>
+              <td>idleTimeoutSeconds</td>
+              <td>int</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>0</code>（关闭）</td>
+              <td>连续多久没有任何输出就判定卡住。<strong>模型不能设置它</strong>，它是用户的环境策略</td>
+              <td><code>600</code></td>
+            </tr>
+            <tr>
+              <td>environment</td>
+              <td>object（string → string）</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>{}</code></td>
+              <td>额外注入或覆盖的环境变量。子进程<strong>继承</strong>父进程环境，但名字匹配 <code>*KEY*</code> / <code>*TOKEN*</code> / <code>*SECRET*</code> / <code>*PASSWORD*</code> 等的变量<strong>不会</strong>传下去；这里写的值可以盖掉防挂死默认值</td>
+              <td><code>{ "HTTP_PROXY": "http://127.0.0.1:7890" }</code></td>
+            </tr>
+            <tr>
+              <td>sensitivePatterns</td>
+              <td>string[]</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>[]</code>（只追加，不替换内置表）<span class="tag todo">【需核实】</span></td>
+              <td>在<strong>内置剔除模式之外</strong>追加要剔除的环境变量名模式</td>
+              <td><code>["*_PWD"]</code></td>
+            </tr>
+            <tr>
+              <td>allowedCommands</td>
+              <td>string[]</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>[]</code></td>
+              <td><strong>非空即默认拒绝</strong>的准入白名单，支持 <code>git status</code> 这种两 token 形式。<strong>它只管准入，不管审批</strong>，也不受 <code>commandPolicy.enabled</code> 影响</td>
+              <td><code>["git status", "mvn test"]</code></td>
+            </tr>
+            <tr>
+              <td>commandPolicy</td>
+              <td>object</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>未配置（等价全缺省）</td>
+              <td>命令分类策略容器</td>
+              <td><code>{ "enabled": true, "trustedCommands": ["mvn test"] }</code></td>
+            </tr>
+            <tr>
+              <td>commandPolicy.enabled</td>
+              <td>boolean</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>true</code></td>
+              <td>只关<strong>分类器</strong>这个便利机制。<code>false</code> 时只读表、重定向 / 命令替换检查与「其余命令问人」都不再表态，但白名单、可信表、拒绝形状照旧生效</td>
+              <td><code>false</code></td>
+            </tr>
+            <tr>
+              <td>commandPolicy.trustedCommands</td>
+              <td>string[]</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>[]</code></td>
+              <td><strong>可信命令表，命中即免审批</strong>。粒度与白名单一致（两 token 形式可用）。判定要求「所有分段都命中」</td>
+              <td><code>["mvn test", "npm run build"]</code></td>
+            </tr>
+            <tr>
+              <td>commandPolicy.readOnlyCommands</td>
+              <td>string[]</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>[]</code></td>
+              <td><strong>追加</strong>在内置只读表之后。内置表<strong>不可替换</strong>，只能追加</td>
+              <td><code>["terraform plan"]</code></td>
+            </tr>
+            <tr>
+              <td>commandPolicy.deniedPatterns</td>
+              <td>string[]</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>[]</code></td>
+              <td><strong>追加</strong>在内置拒绝形状（<code>rm -rf /</code>、<code>mkfs</code>、<code>of=/dev/</code>、<code>:(){</code>）之后，同样不可撤销</td>
+              <td><code>["docker system prune -a"]</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>完整示例</strong>——「<code>mvn test</code> 静默执行，其余非只读命令问人」：</p>
+      <pre><code class="language-json">{
+  "plugins": {
+    "configurations": {
+      "jellyfish-plugin-shell": {
+        "timeoutSeconds": 300,
+        "idleTimeoutSeconds": 600,
+        "commandPolicy": {
+          "enabled": true,
+          "trustedCommands": ["mvn test"]
+        }
+      }
+    }
+  }
+}</code></pre>
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>写进 <code>allowedCommands</code> 了，为什么还弹批准框？</strong>白名单只回答「能不能跑」，<strong>不解除审批</strong>。要它静默执行，就把同一条前缀也写进 <code>trustedCommands</code>。</li>
+        <li><strong>把 <code>rm</code> 写进可信表会不会把 <code>rm -rf /</code> 也放行？</strong>不会。拒绝形状判定排在可信表<strong>之前</strong>。</li>
+        <li><strong><code>-cli</code> / <code>-server</code> 下命令总是被拒？</strong>那两个外壳没有审批者，<code>ASK</code> 就是拒绝。免审批的放行口只剩两个：被分类器判为只读的命令，以及 <code>trustedCommands</code> 里的命令（白名单非空时还要先过白名单）。</li>
+        <li><strong>为什么不支持「不超时」？</strong>README 明确「不支持」。需要长时间跑就调大 <code>maxTimeoutSeconds</code>，或用 <code>idleTimeoutSeconds</code> 只盯「多久没动静」。</li>
+      </ul>
+    </div>
+    <div class="src-block">Jellyfish-Plugins/README.md:163-190（工具与 <code>!命令</code>）、Jellyfish-Plugins/README.md:191-204（配置字段表）、Jellyfish-Plugins/README.md:205-253（六道判定与口径）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/PluginConfig.java（键名与解析）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellPlugin.java（注册 <code>InputDirectiveRequest</code> 与 <code>PermissionCheckRequest</code>）</div>
+
+    <div class="callout warn">
+      <span class="callout-title">关于「<code>/shell</code> 命令」的一处不一致</span>
+      <p>
+        内核 <code>README.md</code> 在举「插件带来的命令」的例子时写到了「shell 的 <code>/shell</code>」，
+        但 <code>Jellyfish-Plugins</code> 里 shell 插件只注册了 <code>shell</code> 工具与 <code>!</code> 输入指令，
+        <strong>没有注册名为 <code>shell</code> 的命令</strong>。以插件源码为准：<code>/help</code> 里不会有 <code>/shell</code>。
+        <span class="tag todo">【待确认】</span>内核文档这一处示例是否为笔误。
+      </p>
+    </div>
+    <div class="src-block">Jellyfish/README.md:386（「插件会带来更多命令」示例句）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellPlugin.java（<code>start</code> 内的两处注册）</div>
+
+    <div class="feature">
+      <h3>session-file —— 会话持久化</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>把会话落成文件并留版本历史。装了它，<code>--session</code> / <code>/resume</code> / <code>/session</code> 才有内容可恢复。</dd>
+        <dt>装了之后多出什么</dt>
+        <dd>
+          <ul>
+            <li>没有新工具、没有新命令：它注册一个<strong>会话恢复处理器</strong>，启动时内核向所有注册了该处理器的插件要回会话，因此上次退出前的会话在下次启动时立即可见；</li>
+            <li>落盘目标是「一会话一个 JSON 文件」，git 历史由它自己维护。</li>
+          </ul>
+        </dd>
+      </dl>
+      <p><strong>配置字段</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>sessionDir</td>
+              <td>string</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>~/.jellyfish/sessions</code></td>
+              <td>会话文件目录。会话是跨项目的运行态数据，因此默认放全局级目录</td>
+              <td><code>~/.jellyfish/sessions</code></td>
+            </tr>
+            <tr>
+              <td>gitEnabled</td>
+              <td>boolean</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>true</code></td>
+              <td>首次落盘时在 <code>sessionDir</code> 里 <code>git init</code>，此后每次内容变化的落盘留一次提交（内容没变则不写文件、也不提交）。机器上没有 git 时只告警，文件照常落盘</td>
+              <td><code>false</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>完整示例</strong></p>
+      <pre><code class="language-json">{
+  "plugins": {
+    "configurations": {
+      "jellyfish-plugin-session-file": {
+        "sessionDir": "~/.jellyfish/sessions",
+        "gitEnabled": true
+      }
+    }
+  }
+}</code></pre>
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>会话目录为什么会越用越大？</strong>因为它同时是一个 git 仓库，且从不 <code>gc</code>。resmon 插件报出的实测口径是「79M 里 54M 是 <code>.git</code>」，它是整套运行时里唯一没有自我约束的增长点，用 <code>/resmon disk</code> 看现状。</li>
+        <li><strong>git 出错会让会话丢吗？</strong>不会：落盘失败会上抛（那一刻起「状态已变」与「状态已落盘」同生共死），而 git 出错与坏文件只告警。</li>
+      </ul>
+    </div>
+    <div class="src-block">Jellyfish-Plugins/README.md:254-265（会话持久化字段表与落盘口径）、Jellyfish-Plugins/README.md:315-423（resmon 对 <code>sessions</code> 目录体积的实测口径）</div>
+
+    <div class="feature">
+      <h3>todo —— 会话待办与子代理认领</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>给模型一份它自己看得见的计划草稿，并让一批子代理按「认领 / 完成 / 卡住」协作。</dd>
+        <dt>装了之后多出什么</dt>
+        <dd>
+          <ul>
+            <li>工具：<code>todo_write</code>（整表覆盖，状态取 <code>pending</code> / <code>in_progress</code> / <code>completed</code> / <code>blocked</code>）、<code>todo_claim</code>（子代理认领下一条）、<code>todo_done</code>、<code>todo_release</code>、<code>todo_block</code>；</li>
+            <li>命令 <code>/todo</code>（只读列出当前会话待办，写入只走 <code>todo_write</code>）；</li>
+            <li>界面：随本轮消息送达的待办块、状态栏进度（<code>待办 2/5</code>）、左栏常驻清单面板。</li>
+          </ul>
+        </dd>
+      </dl>
+      <p><strong>配置字段</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>todoDir</td>
+              <td>string</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>~/.jellyfish/todos</code></td>
+              <td>待办文件目录，一个会话一个 JSON 文件，空表会删掉文件</td>
+              <td><code>~/.jellyfish/todos</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>完整示例</strong></p>
+      <pre><code class="language-json">{
+  "plugins": {
+    "configurations": {
+      "jellyfish-plugin-todo": {
+        "todoDir": "~/.jellyfish/todos"
+      }
+    }
+  }
+}</code></pre>
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>为什么「做不了」要单独一个状态？</strong>没有它，一条做不了的活只能停在 <code>pending</code>，于是一批批子代理反复领走、反复失败——卡住的条目既不算完成、也不可认领。</li>
+        <li><strong>子代理和父回合看到的是同一份清单吗？</strong>是。键是内核算出来的<strong>归属会话</strong>（沿父链只穿子代理的临时会话、遇到用户会话就停），嵌套委派下孙代理读写的仍是用户那一份。</li>
+        <li><strong>plan 模式下 <code>todo_write</code> 会自动可用吗？</strong>不会。只读与否只看你在 plan 插件的 <code>readOnlyTools</code> 里写了什么。</li>
+      </ul>
+    </div>
+    <div class="src-block">Jellyfish-Plugins/README.md:266-314（待办的九个面、状态取值与字段表）、Jellyfish-Plugins/jellyfish-plugin-todo/src/main/java/zcd/jellyfish/plugin/todo/TodoPlugin.java（注册 <code>/todo</code> 命令）</div>
+
+    <div class="feature">
+      <h3>project —— 项目约定 <code>AGENTS.md</code></h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>把工作目录下的 <code>AGENTS.md</code>（构建命令、编码规范、提交格式、模块边界）交给模型，按文件大小分两路：小文件内联原文、大文件只给路径。</dd>
+        <dt>装了之后多出什么</dt>
+        <dd>
+          <ul>
+            <li>命令 <code>/init [--force]</code>：读一遍仓库后写出 <code>AGENTS.md</code>（已有非空文件且没带 <code>--force</code> 时当场拒绝）。命令<strong>自己不写盘</strong>，而是返回一段指令由内核当成你这次的输入接着跑一轮回合；</li>
+            <li>一个提示词贡献：把约定内容拼进 system prompt。</li>
+          </ul>
+        </dd>
+      </dl>
+      <p><strong>配置字段</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>maxInlineBytes</td>
+              <td>int</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>32768</code>（32 KiB）</td>
+              <td>约定文件多大以内可以把<strong>原文</strong>放进 system prompt；<code>0</code> 表示从不内联（彻底关掉内联的逃生门）。上限 1 MiB，超出或为负数会在启动期直接报错。<strong>这个键只认全局级配置</strong>，项目级改它不生效</td>
+              <td><code>4096</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>完整示例</strong>（写在全局级 <code>~/.jellyfish/jellyfish.json</code>，因为该键只认全局级）</p>
+      <pre><code class="language-json">{
+  "plugins": {
+    "configurations": {
+      "jellyfish-plugin-project": {
+        "maxInlineBytes": 32768
+      }
+    }
+  }
+}</code></pre>
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>为什么从项目根目录启动这么重要？</strong>它只查进程工作目录，不向上查找父目录、也不查用户主目录；约定文件名固定为 <code>AGENTS.md</code>，这两项不可配。</li>
+        <li><strong>会话中途改了 <code>AGENTS.md</code> 为什么没生效？</strong>已经读到过的内容按会话缓存一次，开一个新会话即可。<strong>唯一的例外是「什么都没有」不进缓存</strong>：探测不到时每轮重探，所以 <code>/init</code> 刚写出的文件在同一会话的下一轮就能被看到。</li>
+        <li><strong>内联原文安全吗？</strong>它是刻意的取舍（仓库内容因此拿到了最高优先级的话语权），护栏是三条：内联块开头的定性句、足够小的上限、以及把 <code>maxInlineBytes</code> 配成 <code>0</code> 彻底关掉。</li>
+      </ul>
+    </div>
+    <div class="src-block">Jellyfish-Plugins/README.md:424-454（两路分流与字段表）、Jellyfish-Plugins/README.md:455-474（<code>/init</code> 的四个步骤）</div>
+
+    <div class="feature">
+      <h3>compact —— 会话压缩策略</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>给内核一份「这次该压成什么样」的答案：一份摘要指令（插件 jar 里的 <code>summary-prompt.md</code>）+ 两个可选数量参数。</dd>
+        <dt>装了之后多出什么</dt>
+        <dd>
+          <ul>
+            <li>没有新工具与新命令：它让内核已有的 <code>/compact</code> 与自动压缩真正可用；</li>
+            <li><strong>不装它就没有压缩</strong>：<code>/compact</code> 会直接回答「压缩不可用：没有插件提供压缩策略」，<code>/status</code> 的压缩一行显示「不可用」。</li>
+          </ul>
+        </dd>
+      </dl>
+      <p><strong>配置字段</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>keepRecentMessages</td>
+              <td>int</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>省略该键（＝不表态，用内核 <code>react.compactKeepRecentMessages</code>，缺省 <code>20</code>）</td>
+              <td>本插件对压缩保留条数的覆盖值。不写这个键是「不表态」，不是「用 0」；写 <code>0</code> 是合法取值，含义是「一条原文都不留」。小数与超出 <code>int</code> 范围的值按「不表态」处理并记一条 WARN</td>
+              <td><code>30</code></td>
+            </tr>
+            <tr>
+              <td>maxSummaryChars</td>
+              <td>int</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>省略该键（＝用内核 <code>react.compactMaxSummaryChars</code>，缺省 <code>4000</code>）</td>
+              <td>摘要长度上限的覆盖值；内核还会把它们钳制到合法区间</td>
+              <td><code>2000</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>完整示例</strong></p>
+      <pre><code class="language-json">{
+  "plugins": {
+    "configurations": {
+      "jellyfish-plugin-compact": {
+        "keepRecentMessages": 30,
+        "maxSummaryChars": 2000
+      }
+    }
+  }
+}</code></pre>
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>「没装」「装了没压过」「压过了」怎么一眼分辨？</strong>三种状态在界面上可辨：<strong>没装插件</strong>（不可用）、<strong>装了但还没压过</strong>（未压缩）、<strong>压过了</strong>（已压缩 N 条）。jar 在 <code>~/.jellyfish/plugins/</code> 里但没列进 <code>plugins.enabled</code> 时算「没装」，启动日志里会有一条 <code>插件被禁用或版本不满足，未启动: pluginId=jellyfish-plugin-compact</code>。</li>
+        <li><strong>能改摘要措辞吗？</strong>改不了（它在插件 jar 里）。要改就改 <code>jellyfish-plugin-compact/src/main/resources/summary-prompt.md</code> 后重新打包。</li>
+        <li><strong>怎么先看代价？</strong><code>/compact preview</code> 会把「压几条、保留几条、丢弃几条、摘要输入约多少 token」算给你看。</li>
+      </ul>
+    </div>
+    <div class="src-block">Jellyfish-Plugins/README.md:475-506（压缩是插件能力、三态与字段表）</div>
+
+    <div class="feature">
+      <h3>skills —— 目录发现式技能</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>把一个目录里的说明文件变成模型可以按需取用的「技能」：一个子目录一个 skill，正文写在 <code>SKILL.md</code> 里。</dd>
+        <dt>装了之后多出什么</dt>
+        <dd>
+          <ul>
+            <li>工具 <code>skill</code>（<strong>只读</strong>：读一份说明不该需要写权限，因此值得把它写进 plan 模式的白名单）；</li>
+            <li>命令 <code>/skills</code>（列出根目录、已加载清单与扫描期问题）；</li>
+            <li>一个提示词贡献：把「名称 + 描述」常驻 system prompt，正文由模型按需取回。</li>
+          </ul>
+        </dd>
+      </dl>
+      <p><strong>配置字段</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>roots</td>
+              <td>string[]</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>["~/.jellyfish/skills", "./.jellyfish/skills"]</code></td>
+              <td>skill 根目录，<strong>有序</strong>，同名 skill 先到者胜——项目级要覆盖用户级就写在前面。<strong>由项目级配置给出时每一项必须是项目目录内的相对路径</strong>（<code>~</code>、绝对路径、<code>..</code> 逃逸一律启动期报错）</td>
+              <td><code>["./.jellyfish/skills", "~/.jellyfish/skills"]</code></td>
+            </tr>
+            <tr>
+              <td>maxSkills</td>
+              <td>int</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>50</code></td>
+              <td>最多加载多少个 skill</td>
+              <td><code>100</code></td>
+            </tr>
+            <tr>
+              <td>maxDescriptionChars</td>
+              <td>int</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>200</code></td>
+              <td>单条描述的长度上限</td>
+              <td><code>200</code></td>
+            </tr>
+            <tr>
+              <td>maxBodyBytes</td>
+              <td>int</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>65536</code></td>
+              <td>单份 <code>SKILL.md</code> 正文的字节上限</td>
+              <td><code>131072</code></td>
+            </tr>
+            <tr>
+              <td>enabled</td>
+              <td>boolean</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>true</code></td>
+              <td><code>false</code> 时不注册工具与清单贡献，但 <code>/skills</code> 仍可用（那是「为什么什么都看不见」的唯一答案）</td>
+              <td><code>false</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>完整示例</strong></p>
+      <pre><code class="language-json">{
+  "plugins": {
+    "configurations": {
+      "jellyfish-plugin-skills": {
+        "roots": ["./.jellyfish/skills", "~/.jellyfish/skills"],
+        "maxSkills": 50,
+        "maxDescriptionChars": 200,
+        "maxBodyBytes": 65536
+      }
+    }
+  }
+}</code></pre>
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>改了 <code>SKILL.md</code> 要重启吗？</strong>不用。目录缓存按文件系统签名失效，<strong>不需要重启，也不需要 <code>/reload</code></strong>——包括「给一个还缺东西的目录补上」。</li>
+        <li><strong>某个 skill 没出现？</strong><code>description</code> 必填，它是模型判断「该不该用这个 skill」的唯一依据，缺了整条会被跳过并在 <code>/skills</code> 里说明原因。</li>
+        <li><strong><code>/skills</code> 会输出什么？</strong>根目录、已加载清单与扫描期问题（目录写错、缺 description、名称被前面的根目录占掉）。</li>
+      </ul>
+    </div>
+    <div class="src-block">Jellyfish-Plugins/README.md:507-546（skills 约定、字段表与三层渐进披露）、Jellyfish-Plugins/jellyfish-plugin-skills/src/main/java/zcd/jellyfish/plugin/skills/SkillsConfig.java（<code>DEFAULT_ENABLED</code> 等默认值）、Jellyfish-Plugins/jellyfish-plugin-skills/src/main/java/zcd/jellyfish/plugin/skills/SkillsPlugin.java（注册 <code>/skills</code>）</div>
+
+    <div class="feature">
+      <h3>mcp —— 连外部 MCP server</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>用 stdio 连上外部的 MCP server，把它的工具当作本机工具使用。</dd>
+        <dt>装了之后多出什么</dt>
+        <dd>
+          <ul>
+            <li>工具：每个 server 提供的工具以 <code>mcp__&lt;server&gt;__&lt;tool&gt;</code> 出现（前缀让「谁占谁的位置」不成为事实）；server 运行期增删工具时模型下一轮就能看到；</li>
+            <li>命令 <code>/mcp</code>：每个 server 的连接状态、工具数与失败原因——<strong>连不上时的唯一线索</strong>。</li>
+          </ul>
+        </dd>
+      </dl>
+      <p><strong>配置字段</strong>（README 收录的部分）</p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>servers</td>
+              <td>object[]</td>
+              <td><span class="tag optional">选填</span></td>
+              <td>未配置（没有 server）</td>
+              <td>server 清单，每个元素一个 server</td>
+              <td><code>[{ "id": "filesystem", … }]</code></td>
+            </tr>
+            <tr>
+              <td>servers[].id</td>
+              <td>string</td>
+              <td><span class="tag required">必填</span></td>
+              <td>—（README 缺省列写 <code>—</code>）</td>
+              <td>server 标识，工具名前缀用它。它还必须是合法的子标识（不含空白、路径分隔符与命名空间分隔符）</td>
+              <td><code>filesystem</code></td>
+            </tr>
+            <tr>
+              <td>servers[].command</td>
+              <td>string</td>
+              <td><span class="tag required">必填</span></td>
+              <td>—（README 缺省列写 <code>—</code>）</td>
+              <td>起 server 子进程的可执行文件</td>
+              <td><code>npx</code></td>
+            </tr>
+            <tr>
+              <td>servers[].args</td>
+              <td>string[]</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>[]</code><span class="tag todo">【需核实】</span>（README 与 <code>command</code> / <code>env</code> 合并写成 <code>—</code>）</td>
+              <td>命令行参数。启动日志里 <code>--token sk-xxx</code> 这类值会被遮蔽成 <code>***</code>（按旗标名识别）</td>
+              <td><code>["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]</code></td>
+            </tr>
+            <tr>
+              <td>servers[].env</td>
+              <td>object（string → string）</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>{}</code><span class="tag todo">【需核实】</span></td>
+              <td><strong><code>env</code> 是拿到环境变量的唯一通道</strong>：子进程只继承 <code>PATH</code> / <code>HOME</code> / <code>LANG</code> / <code>LC_*</code> / <code>TMPDIR</code> / <code>TEMP</code> / <code>TMP</code> / <code>USER</code> / <code>LOGNAME</code> / <code>SHELL</code>（Windows 另加 <code>SystemRoot</code> / <code>PATHEXT</code> / <code>ComSpec</code> / <code>windir</code>），宿主 JVM 里那些 provider 密钥不会跟过去</td>
+              <td><code>{ "SOME_TOKEN": "${MCP_TOKEN}" }</code></td>
+            </tr>
+            <tr>
+              <td>servers[].callTimeoutSeconds</td>
+              <td>int</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>60</code></td>
+              <td>单次工具调用的超时；<code>0</code> 表示不超时（上限 3600 秒）。不超时不是「永远挂着」——<code>Esc</code> 能取消它，server 进程退出也会叫醒它</td>
+              <td><code>0</code></td>
+            </tr>
+            <tr>
+              <td>servers[].readOnlyTools</td>
+              <td>string[]</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>[]</code></td>
+              <td><strong>本插件审批策略</strong>用的只读名单（与 plan 插件的同名键无关）。只读<strong>只认你写的这份名单</strong>，server 自填的 <code>readOnlyHint</code> 不再采纳；缺省一律按可写</td>
+              <td><code>["read_file", "list_directory"]</code></td>
+            </tr>
+            <tr>
+              <td>askWriteTools</td>
+              <td>boolean</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>true</code></td>
+              <td>写类工具是否要人工审批</td>
+              <td><code>true</code></td>
+            </tr>
+            <tr>
+              <td>startupWaitSeconds</td>
+              <td>int</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>5</code></td>
+              <td>启动期等多久让第一轮就能看到工具；超时就转异步</td>
+              <td><code>10</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>源码里有、README 未收录的键</strong>（字段名与默认值取自源码常量，<span class="tag todo">【需核实】</span>是否属于稳定契约）</p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>toolPrefix</td><td>boolean</td><td><span class="tag optional">选填</span></td><td><code>true</code></td><td>工具名是否加 <code>mcp__&lt;server&gt;__</code> 前缀</td><td><code>true</code></td></tr>
+            <tr><td>toolNameMaxLength</td><td>int</td><td><span class="tag optional">选填</span></td><td><code>64</code>（允许 16~128）</td><td>工具名长度上限；超长时保留前缀并追加哈希</td><td><code>64</code></td></tr>
+            <tr><td>maxToolsPerServer</td><td>int</td><td><span class="tag optional">选填</span></td><td><code>200</code></td><td>单个 server 最多注册多少个工具</td><td><code>200</code></td></tr>
+            <tr><td>servers[].connectTimeoutSeconds</td><td>int</td><td><span class="tag optional">选填</span></td><td><code>15</code></td><td>连接（含起进程与握手）的超时</td><td><code>15</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>完整示例</strong>（README 原文示例，密钥一律用占位符）</p>
+      <pre><code class="language-json">{
+  "plugins": {
+    "configurations": {
+      "jellyfish-plugin-mcp": {
+        "servers": [
+          {
+            "id": "filesystem",
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+            "env": { "SOME_TOKEN": "${MCP_TOKEN}" },
+            "callTimeoutSeconds": 60,
+            "readOnlyTools": ["read_file", "list_directory"]
+          }
+        ],
+        "askWriteTools": true,
+        "startupWaitSeconds": 5
+      }
+    }
+  }
+}</code></pre>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>连不上怎么办？</strong>敲 <code>/mcp</code> 看连接状态、工具数与失败原因。断开会按退避自动重连（1 秒起、每次翻倍、封顶 60 秒、共 6 次，合计约一分钟，<strong>不可配</strong>），重连期间该 server 的工具先被摘掉；约一分钟后仍连不上就停在「失败」并写明 <code>/reload</code> 可重试。</li>
+        <li><strong>一个 server 装错会让内核起不来吗？</strong>不会。连接发生在启动之后，某个 server 装错了不会让内核起不来。</li>
+        <li><strong><code>-cli</code> / <code>-server</code> 下 MCP 写类工具能用吗？</strong>不能：没有审批者，<code>ASK</code> 等于拒绝，因此这两个模式里写类 MCP 工具实际不可用。</li>
+        <li><strong>为什么不能把密钥直接写进 <code>args</code> 里？</strong>写进去会被启动日志打印（只有旗标名命中 <code>KEY</code> / <code>TOKEN</code> / <code>SECRET</code> / <code>PASSWORD</code> / <code>CREDENTIAL</code> / <code>PASSPHRASE</code> / <code>AUTH</code> 的值才遮蔽）。用 <code>env</code> 段 + <code>${ENV}</code> 更稳。</li>
+      </ul>
+    </div>
+    <div class="src-block">Jellyfish-Plugins/README.md:593-676（MCP 字段表、前缀与重连口径、<code>/mcp</code>）、Jellyfish-Plugins/jellyfish-plugin-mcp/src/main/java/zcd/jellyfish/plugin/mcp/McpConfig.java 与 McpServerConfig.java（未收录键的字段名与默认值）</div>
+
+    <div class="feature">
+      <h3>workflow —— 声明式编排子代理</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>让模型一次说清「几件事、什么顺序、怎么合起来」，由插件把它们变成一批并行跑的子代理。</dd>
+        <dt>装了之后多出什么</dt>
+        <dd>
+          <ul>
+            <li>工具 <code>workflow</code>（参数是一份 spec：<code>steps</code> + 可选 <code>aggregate</code>）；</li>
+            <li>界面：消息区上方一块「编排」面板，逐行显示每一步的状态（<code>[ ]</code> 待执行 / <code>[~]</code> 进行中 / <code>[x]</code> 完成 / <code>[!]</code> 失败 / <code>[-]</code> 跳过）与「已完成 X/Y 步」；</li>
+            <li>没有 <code>/workflow</code> 命令：它只提供这一个工具。</li>
+          </ul>
+        </dd>
+      </dl>
+      <p><strong>配置</strong>：<strong>本插件没有配置项</strong>（README 原文一句：「本插件没有配置项。」）。因此不写 <code>plugins.configurations.jellyfish-plugin-workflow</code> 也一样能用。</p>
+      <p><strong>完整示例</strong>——不是配置示例，而是 spec 的写法（README 原文）：</p>
+      <pre><code class="language-json">{"spec": {
+  "name": "调研并写方案",
+  "steps": [
+    {"id": "probe-a", "name": "调研 A 方向", "agent": "scout", "prompt": "调研 A 方向……"},
+    {"id": "probe-b", "name": "调研 B 方向", "agent": "scout", "prompt": "调研 B 方向……"},
+    {"id": "plan", "name": "写方案", "agent": "planner", "prompt": "结合 A 与 B 的结论给出方案",
+     "needs": ["probe-a", "probe-b"]}
+  ],
+  "aggregate": {"mode": "summarize", "agent": "planner"}
+}}</code></pre>
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>为什么我的 spec 被整份拒绝？</strong>校验全部发生在派生任何子代理<strong>之前</strong>——写错的 spec 不会先烧掉几个子代理再报错。常见原因：<code>when: "on_failure"</code> 没声明 <code>needs</code>、步骤超过 12 步、本回合派生额度装不下。</li>
+        <li><strong>额度怎么算？</strong>额度按<strong>顶层回合累计</strong>（<code>subAgent.maxSpawnsPerTurn</code>，缺省 12），与 <code>task</code> 等别的调用方共享；一次编排最多能派的子代理数 = 步骤数 +（声明 <code>summarize</code> 时那一次汇总）。</li>
+        <li><strong>不装它能用子代理吗？</strong>能。只需要「派一个子代理做一件事」时用内置的 <code>task</code>；卸载本插件即回退到那个形态。</li>
+        <li><strong>结论会完整传给下游吗？</strong>不会，是有损转交：每个依赖各有字符额度（合计上限 20000 字符），超出只给头部并标注截了多少字与完整记录的归档路径。</li>
+      </ul>
+    </div>
+    <div class="src-block">Jellyfish-Plugins/README.md:547-592（workflow 的 spec、额度、面板与「本插件没有配置项」）、Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowTool.java</div>
+
+    <div class="feature">
+      <h3>plan —— 先看别改的模式</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>一套「先看，别改」的工作方式：开启后只有你列在 <code>readOnlyTools</code> 里的工具可用，其余一律被拒。</dd>
+        <dt>装了之后多出什么</dt>
+        <dd>
+          <ul>
+            <li>命令 <code>/plan</code>（查看状态并给出 <code>on</code> / <code>off</code> 候选）、<code>/plan on</code>、<code>/plan off</code>；</li>
+            <li>没有新工具：它<strong>不换工具清单，只拦执行</strong>——模型看到的清单不变，写操作在执行时被拒；</li>
+            <li>开关按<strong>会话</strong>存（存在会话扩展条目里，随会话落盘与恢复）；子代理按<strong>会话树</strong>继承。</li>
+          </ul>
+        </dd>
+      </dl>
+      <p><strong>配置字段</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>readOnlyTools</td>
+              <td>string[]</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>[]</code></td>
+              <td><strong>plan 模式的工具白名单</strong>。<strong>不写就等于开启时一个工具都用不了</strong>（白名单语义：「用户没表态」与「用户不准」是同一件事）</td>
+              <td><code>["read_file", "list_dir", "grep_files"]</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>完整示例</strong></p>
+      <pre><code class="language-json">{
+  "plugins": {
+    "configurations": {
+      "jellyfish-plugin-plan": {
+        "readOnlyTools": ["read_file", "list_dir", "grep_files", "todo_write", "skill"]
+      }
+    }
+  }
+}</code></pre>
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>工具能自称只读吗？</strong>不能。<code>ToolDescriptor</code> 里没有该字段，谁能进名单完全由用户说。</li>
+        <li><strong>开关读不出来时按哪边算？</strong>按「开着」（fail-closed），否则限制会在出故障的那一刻静默消失。代价是被拒的工具会给出「开关读不出来」的理由，<code>/plan off</code> 可重置。</li>
+        <li><strong><code>-cli</code> / <code>-server</code> 下有用吗？</strong>有用：它不依赖审批者，因此没有人在场的模式里也能用它兜住写操作。</li>
+      </ul>
+    </div>
+    <div class="src-block">Jellyfish-Plugins/README.md:677-714（plan 命令、字段表与四条口径）、Jellyfish-Plugins/jellyfish-plugin-plan/src/main/java/zcd/jellyfish/plugin/plan/PlanPlugin.java（注册 <code>/plan</code>）</div>
+
+    <div class="feature">
+      <h3>resmon —— 资源监控（只读）</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>回答「Jellyfish 这个进程本身有多重、磁盘上的数据有没有在失控增长」。<strong>它只读</strong>：不删任何文件、不改任何配置，唯一的运行期开关是面板刷不刷新。</dd>
+        <dt>装了之后多出什么</dt>
+        <dd>
+          <ul>
+            <li>命令 <code>/resmon</code>（完整明细，三种外壳都能用）、<code>/resmon jvm</code>、<code>/resmon disk</code>、<code>/resmon auto [on|off]</code>；</li>
+            <li>界面：<code>-tui</code> 右栏常驻面板（标题带采样时刻，关掉自动刷新时标题补 <code>暂停</code>）；没有交互界面的外壳不注册它。</li>
+          </ul>
+        </dd>
+      </dl>
+      <p><strong>配置字段</strong>（README 收录的部分）</p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>baseDir</td><td>string</td><td><span class="tag optional">选填</span></td><td><code>~/.jellyfish</code></td><td>统计根目录：<strong>扫它的一级子项</strong>，不逐个声明别人的落盘位置</td><td><code>~/.jellyfish</code></td></tr>
+            <tr><td>diskEntries</td><td>int</td><td><span class="tag optional">选填</span></td><td><code>12</code></td><td>面板上最多列出几个子项（按体积从大到小），超出补一行「还有 N 项」。<code>/resmon disk</code> 不受限</td><td><code>20</code></td></tr>
+            <tr><td>sampleIntervalMillis</td><td>int</td><td><span class="tag optional">选填</span></td><td><code>2000</code>（<strong>下界 500</strong>）</td><td>JVM 采样间隔；低于下界会开始丢外壳贡献（每个插件来源的信箱只有几十格）</td><td><code>3000</code></td></tr>
+            <tr><td>diskScanIntervalMillis</td><td>int</td><td><span class="tag optional">选填</span></td><td><code>60000</code>（<strong>下界 5000</strong>）</td><td>磁盘递归遍历间隔；它比读 JMX 贵两个数量级，没理由跟着每 2 秒一次</td><td><code>120000</code></td></tr>
+            <tr><td>walkMaxDepth</td><td>int</td><td><span class="tag optional">选填</span></td><td><code>6</code></td><td>目录遍历深度上限。超过深度的部分不计入——避免一次采样走遍用户全部历史</td><td><code>4</code></td></tr>
+            <tr><td>panel</td><td>boolean</td><td><span class="tag optional">选填</span></td><td><code>true</code></td><td>是否注册面板。<code>false</code> 时只保留命令</td><td><code>false</code></td></tr>
+            <tr><td>autoRefresh</td><td>boolean</td><td><span class="tag optional">选填</span></td><td><code>true</code></td><td>是否在每轮采样后推界面失效。<code>false</code> 时面板只在外壳自身的失效点更新</td><td><code>true</code></td></tr>
+            <tr><td>alerts</td><td>boolean</td><td><span class="tag optional">选填</span></td><td><code>true</code></td><td>是否标出越阈值的项（面板里那一行转警示档位、命令输出开头加「告警」段）。关掉只是不标出，读数照旧</td><td><code>true</code></td></tr>
+            <tr><td>alertHeapPercent</td><td>number</td><td><span class="tag optional">选填</span></td><td><code>85</code></td><td>堆使用率告警阈值（百分比）</td><td><code>90</code></td></tr>
+            <tr><td>alertDiskPercent</td><td>number</td><td><span class="tag optional">选填</span></td><td><code>90</code></td><td>分区使用率告警阈值</td><td><code>95</code></td></tr>
+            <tr><td>alertFdPercent</td><td>number</td><td><span class="tag optional">选填</span></td><td><code>85</code></td><td>文件描述符使用率告警阈值</td><td><code>85</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>完整示例</strong></p>
+      <pre><code class="language-json">{
+  "plugins": {
+    "configurations": {
+      "jellyfish-plugin-resmon": {
+        "baseDir": "~/.jellyfish",
+        "diskEntries": 12,
+        "sampleIntervalMillis": 2000,
+        "diskScanIntervalMillis": 60000,
+        "walkMaxDepth": 6,
+        "panel": true,
+        "autoRefresh": true,
+        "alerts": true,
+        "alertHeapPercent": 85,
+        "alertDiskPercent": 90,
+        "alertFdPercent": 85
+      }
+    }
+  }
+}</code></pre>
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>数据挪到别处就统计不到了？</strong>是。它只扫 <code>baseDir</code> 的一级子项，把数据挪到 <code>baseDir</code> 之外（例如把 <code>react.toolOutput.dir</code> 指到别的盘）就看不到了——这是「本插件监控的是这个根目录」这条边界的自然结果。</li>
+        <li><strong>为什么不把它报出来的大目录自动清掉？</strong>因为它<strong>不做清理</strong>：删除文件涉及用户的真实数据，而「哪些能删」要结合会话是否还要用来判断。把输出交给模型，让它给建议，你再自己动手。</li>
+        <li><strong>「体积」和「文件数」为什么口径不同？</strong>体积<strong>含版本库内部</strong>（<code>.git</code> 等），文件数<strong>不含</strong>。少算 git 历史会让合计与分区已用空间对不上；把 git 对象算进文件数又会报出「769 个文件」而用户只聊过 37 次天。</li>
+        <li><strong>它监视内核内部计数器吗？</strong>不。事件通道队列长度、<code>react</code> 池深度、在途子代理许可只有内核知道，本插件不去猜。</li>
+      </ul>
+    </div>
+    <div class="src-block">Jellyfish-Plugins/README.md:315-423（resmon 的面板样张、字段表与多条口径）、Jellyfish-Plugins/jellyfish-plugin-resmon/src/main/java/zcd/jellyfish/plugin/resmon/PluginConfig.java（键名与类型）</div>
+
+    <div class="feature" id="bridge">
+      <h3>python / node —— 脚本插件运行时</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>把 <code>scripts/python/&lt;脚本标识&gt;/</code>（或 <code>scripts/node/...</code>）下的脚本目录变成内核眼里的标准 PF4J 插件。两个插件同构：同一套协议、同一个进程模型、由同一份实现解析配置。</dd>
+        <dt>装了之后多出什么</dt>
+        <dd>
+          <ul>
+            <li>命令 <code>/python</code> / <code>/node</code>：各自的台账（脚本、已登记能力、网关与 worker 的 PID、熔断、事件计数、单脚本问题）；</li>
+            <li>每个脚本声明的工具与命令（例如示例 <code>hello</code> 提供 <code>hello_greet</code> / <code>hello_remember</code> 两个工具与 <code>/hello</code>、别名 <code>/hi</code>）；</li>
+            <li><strong>启动期零进程、零文件写入</strong>：没装解释器也不影响内核启动，工具清单依然完整；首次真正调用某个脚本时才拉起它的进程，空闲后自毁。</li>
+          </ul>
+        </dd>
+      </dl>
+      <p><strong>配置字段</strong>（两个插件共用一份形状，差异只在解释器键与 <code>scriptsRoot</code> 缺省值）</p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>scriptsRoot</td><td>string</td><td><span class="tag optional">选填</span></td><td><code>scripts/python</code> / <code>scripts/node</code></td><td>脚本根目录，相对<strong>进程工作目录</strong>解析；其下每个含 <code>manifest.json</code> 的子目录是一个脚本插件。目录不存在等于「还没建脚本」</td><td><code>~/.jellyfish/scripts/python</code></td></tr>
+            <tr><td>pythonPath</td><td>string</td><td><span class="tag optional">选填</span></td><td><code>python3</code></td><td>Python 解释器（仅 <code>jellyfish-plugin-python</code>）</td><td><code>/usr/local/bin/python3</code></td></tr>
+            <tr><td>nodePath</td><td>string</td><td><span class="tag optional">选填</span></td><td><code>node</code></td><td>Node 解释器（仅 <code>jellyfish-plugin-node</code>）</td><td><code>node</code></td></tr>
+            <tr><td>invokeTimeoutSeconds</td><td>int</td><td><span class="tag optional">选填</span></td><td><code>30</code></td><td>单次调用超时，写 <code>0</code> 表示<strong>没有截止时间</strong>（不是「立刻超时」）；超时会隔离该脚本的 worker 并计入熔断</td><td><code>90</code></td></tr>
+            <tr><td>workerIdleSeconds</td><td>int</td><td><span class="tag optional">选填</span></td><td><code>300</code></td><td>worker 的空闲自毁秒数（写 <code>0</code> 关闭）</td><td><code>600</code></td></tr>
+            <tr><td>gatewayIdleSeconds</td><td>int</td><td><span class="tag optional">选填</span></td><td><code>600</code></td><td>网关的空闲自毁秒数（写 <code>0</code> 关闭）</td><td><code>600</code></td></tr>
+            <tr><td>manifestStrict</td><td>boolean</td><td><span class="tag optional">选填</span></td><td><code>true</code></td><td>脚本首次拉起时逐项比对清单与实现，任何漂移都报错并熔断该脚本</td><td><code>true</code></td></tr>
+            <tr><td>scripts.&lt;脚本 id&gt;</td><td>object</td><td><span class="tag optional">选填</span></td><td><code>{}</code></td><td><strong>逐脚本配置段</strong>，只属于那一个脚本（脚本目录名就是脚本 id），值对桥接层不透明——写密钥、baseUrl、超时随便写。脚本用 <code>ctx.configuration</code> 读（Python 还可用模块级 <code>configuration()</code>）。<strong>脚本 id 写错会在启动时告警</strong></td><td><code>{ "web": { "provider": "auto" } }</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>完整示例</strong>（README 原文示例）</p>
+      <pre><code class="language-json">{
+  "plugins": {
+    "configurations": {
+      "jellyfish-plugin-python": {
+        "scriptsRoot": "scripts/python",
+        "pythonPath": "python3",
+        "invokeTimeoutSeconds": 30,
+        "workerIdleSeconds": 300,
+        "gatewayIdleSeconds": 600,
+        "scripts": {
+          "web": { "provider": "auto", "endpoint": "", "timeoutSeconds": 20 }
+        }
+      },
+      "jellyfish-plugin-node": {
+        "scriptsRoot": "scripts/node",
+        "nodePath": "node"
+      }
+    }
+  }
+}</code></pre>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>报 <code>environment variable is not set: SOME_KEY</code>？</strong>这是<strong>硬失败，不是「取不到就留空」</strong>：配置里写了 <code>${SOME_KEY}</code> 而环境变量没设，整个进程<strong>启动即失败</strong>。确实要用的密钥才写 <code>${...}</code>，并且保证它总是已设。</li>
+        <li><strong>为什么不能靠环境变量把密钥传给脚本？</strong>脚本进程的环境是严格白名单（仅解释器运行与依赖解析必需的那几个），这是有意的安全取舍；与 Java 插件同一条密钥通道是 <code>${ENV}</code> 插值，也就是上面那个 <code>scripts.&lt;id&gt;</code> 段。</li>
+        <li><strong>清单和实现不一致会怎样？</strong>脚本<strong>拒绝服务</strong>（只有这一个脚本受影响）。对宿主而言清单是唯一来源，改完脚本一定要同步清单：<code>dump_manifest --check</code> 用来比对，<code>--write</code> 用来写盘。</li>
+        <li><strong>只写「热路径」贡献的脚本为什么永远不启动？</strong><code>request_tuning</code> / <code>aging_strategy</code> 每次组装请求都会被问到，worker 没热着时它们直接「不表态」；<strong>只提供这两个贡献的脚本永远不会被拉起</strong>，因此也不会因「起不来」被熔断。</li>
+      </ul>
+    </div>
+    <div class="src-block">Jellyfish-Plugins/README.md:715-833（脚本插件两门语言、配置字段表、周期任务）、Jellyfish-Plugins/examples/scripts/README.md（脚本 API、清单一致性、示例）、Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/GatewaySettings.java 与 CircuitBreakerSettings.java（默认值常量）、Jellyfish/README.md:819-829（<code>scripts</code> 段与 <code>${ENV}</code> 硬失败）</div>
+
+    <div class="callout design">
+      <span class="callout-title">脚本桥接还有几个 README 未收录的键</span>
+      <p>
+        <code>jellyfish-script</code> 的 <code>ScriptBridgeConfig</code> 里还有 <code>gatewayRoot</code>（网关资源抽取根目录）、
+        <code>pidDirectory</code>（网关 PID 文件目录）、<code>events.allow</code>（可订阅事件白名单，<strong>只收窄、不扩展</strong>，
+        清单硬编码在运行时里）与 <code>circuitBreaker.failuresToOpen</code>（源码默认 <code>2</code>）、
+        <code>circuitBreaker.cooldownSeconds</code>（<code>60</code>）、<code>circuitBreaker.roundsToPermanent</code>（<code>3</code>）。
+        README 未收录这几个键的<strong>默认值与稳定契约</strong>，<span class="tag todo">【待确认】</span>改动前请以源码为准。
+      </p>
+    </div>
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/ScriptBridgeConfig.java、Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/CircuitBreakerSettings.java</div>
+
+    <h2>该装哪几个</h2>
+
+    <p>
+      三档组合。每一档都只列「必须的」，档与档之间是叠加关系；<strong>共用一份 <code>jellyfish.json</code></strong>，
+      升级一档只需在 <code>enabled</code> 里加名字、再拷对应的 jar。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>档位</th><th>装哪些</th><th>为什么</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>最小可用</strong><br/>（能读文件、能跑命令、会话存得住）</td>
+            <td>
+              <code>jellyfish-plugin-tools</code>、<code>jellyfish-plugin-shell</code>、
+              <code>jellyfish-plugin-session-file</code>、<code>jellyfish-plugin-compact</code>
+            </td>
+            <td>
+              前两个是「模型能动手」的最低配：没有它们，模型只能聊天。<code>session-file</code> 决定「上次的会话还在不在」
+              （装了它 <code>--session</code> / <code>/resume</code> / <code>/session</code> 才有内容可恢复）；
+              <code>compact</code> 决定上下文满了是「压成摘要」还是「只做机械裁剪」——<strong>不装它就没有压缩</strong>。
+            </td>
+          </tr>
+          <tr>
+            <td><strong>日常开发</strong><br/>（上面四个 + 协作与护栏）</td>
+            <td>
+              上一档 + <code>jellyfish-plugin-todo</code>、<code>jellyfish-plugin-project</code>、
+              <code>jellyfish-plugin-skills</code>、<code>jellyfish-plugin-plan</code>、<code>jellyfish-plugin-resmon</code>
+            </td>
+            <td>
+              <code>todo</code> 给模型一份看得见的计划，也让子代理能认领；<code>project</code> 把仓库里的
+              <code>AGENTS.md</code> 交给模型（<strong>因此要从仓库根目录启动</strong>）；<code>skills</code> 把目录里的
+              说明变成按需取用的技能；<code>plan</code> 提供「先看别改」的白名单模式，在没有审批者的
+              <code>-cli</code> / <code>-server</code> 下照样有效；<code>resmon</code> 回答「进程有多重、磁盘有没有失控」。
+            </td>
+          </tr>
+          <tr>
+            <td><strong>全功能</strong><br/>（13 个全装）</td>
+            <td>
+              上面全部 + <code>jellyfish-plugin-workflow</code>、<code>jellyfish-plugin-mcp</code>、
+              <code>jellyfish-plugin-python</code>、<code>jellyfish-plugin-node</code>
+            </td>
+            <td>
+              <code>workflow</code> 只在你要「一次说清一批子代理怎么跑」时才需要（不装也有内置 <code>task</code>）；
+              <code>mcp</code> 需要你<strong>已有</strong>要连的 server（连不上不会让内核起不来，但会浪费启动期的等待）；
+              <code>python</code> / <code>node</code> 只是运行时，装完还要有脚本目录与解释器才有效果。
+              <strong>全装不等于全都开着</strong>：用 <code>plugins.disabled</code> 临时排掉不用的即可。
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">一条经验</span>
+      <p>
+        先装最小可用那一档，把 <a href="03-quickstart.html">03 快速上手</a> 走通，再按需要加插件。
+        每加一个插件多一份启动期开销与一份配置面；反过来，<strong>内核缺能力时第一反应应该是「找插件」而不是「改内核」</strong>——
+        工具、命令、提示词、权限拦截、会话持久化、UI 贡献都是扩展点。
+      </p>
+    </div>
+    <div class="src-block">Jellyfish-Plugins/README.md:48-67 与各插件小节（各项能力的出处见上文各节）、Jellyfish/README.md:7-11（工具即能力 / 权限可控 / 插件式扩展）</div>
+
+    <h2>插件是怎么被加载起来的</h2>
+
+    <div class="diagram">
+      <div class="mermaid">
+flowchart TD
+  J["插件 jar<br/>mvn package 产物"] --> C["cpPlugins.sh / 手工 cp"]
+  C --> D["扫描目录<br/>~/.jellyfish/plugins/<br/>（config.json 的 plugins.roots）"]
+  D --> S["PF4J 启动期扫描<br/>目录下一层找 plugin.properties"]
+  S --> V["描述符体检<br/>plugin.class / requires / 包内容护栏"]
+  V --> E["启用与禁用名单<br/>jellyfish.json 的 plugins.enabled / disabled"]
+  E --> ST["逐插件 start(PluginContext)"]
+  ST --> R["扩展注册表<br/>工具 · 命令 · 贡献 · 事件订阅"]
+  R --> L["模型看到工具与命令<br/>外壳看到命令与面板"]
+  V -.->|"体检不过"| F["插件 FAILED<br/>其余插件与内核照常启动"]
+  E -.->|"被禁用"| G["不启动，启动日志 WARN"]
+      </div>
+    </div>
+    <p class="figure-cap">图 11-1　从 jar 到「模型能用」的六步；右边两条虚线是失败路径——插件起不来不会拖垮内核</p>
+
+    <p>每一步的判据：</p>
+    <ul>
+      <li><strong>扫描目录</strong>来自 <code>config.json</code> 的 <code>plugins.roots</code>（顺序即扫描顺序，支持 <code>~</code> 与相对路径，留空回退默认值 <code>plugins</code>）；<code>config.json</code> <strong>不参与热更新</strong>。</li>
+      <li><strong>描述符体检</strong>查三件事：缺少 <code>plugin.class</code>、<code>requires</code> 版本约束非法、插件包里自带了内核契约或 PF4J 的类。任何一条命中都不启动，并记进描述符的 <code>loadErrors</code>。</li>
+      <li><strong>启用与禁用名单</strong>取自 <code>jellyfish.json</code>；两个名单里都有同一个 id 时按<strong>禁用</strong>处理并发一条配置告警。</li>
+      <li><strong><code>start()</code></strong> 里注册能力；注册窗口其实是插件的<strong>整个存活期</strong>，不限于 <code>start()</code> 之内。</li>
+      <li><strong>注册表</strong>按「类型 + 路由键」找处理器。同一「类型 + 路由键」被两个插件抢时，在<strong>插件启动时</strong>以 <code>DUPLICATE_HANDLER</code> 当场暴露。</li>
+    </ul>
+
+    <div class="src-block">Jellyfish/README.md:458-470（插件安装与扫描目录）、Jellyfish/docs/constraints.md「插件扫描与配置」「插件生命周期」「两个注册式能力面 + 四条插件出边」、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/PluginClasspathGuard.java、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/PF4JPluginManager.java（<code>warnUnavailable</code> 的三条日志）</div>
+
+    <h2>常见问题</h2>
+
+    <div class="feature">
+      <h3>装了插件，但 <code>/help</code> 里没有它的命令</h3>
+      <dl>
+        <dt>原因与排查</dt>
+        <dd>
+          按这个顺序查：
+          <ol>
+            <li>jar 是否在 <code>config.json</code> 的 <code>plugins.roots</code> 指向的目录里（PF4J 只在目录下一层找 <code>plugin.properties</code>）；</li>
+            <li>是否被 <code>jellyfish.json</code> 的 <code>plugins.disabled</code> 排掉，或 <code>plugins.enabled</code> 里没有它（显式写了名单时这是最常见的原因）；</li>
+            <li>新增 jar 之后是否<strong>重启过</strong>——新增 / 删除 jar 只在启动期确定；</li>
+            <li>启动日志里有没有 <code>插件被禁用或版本不满足，未启动: pluginId=…</code>、<code>插件依赖未满足，未启动: …</code>、<code>插件未通过描述符体检，将不启动: …</code>、<code>插件启动失败: …</code>。</li>
+          </ol>
+        </dd>
+      </dl>
+      <p><strong>另外</strong>：命令确实注册了但 <code>-tui</code> 首页敲它被当对话，是 <code>sessionRequired</code> 的语义（缺省 <code>true</code>，即必须有会话）；把命令声明为不依赖会话才会出现在首页。</p>
+    </div>
+    <div class="src-block">Jellyfish-Plugins/README.md:1053-1077（常见问题）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/PF4JPluginManager.java（三条 WARN 与一条 ERROR 的原文）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/CommandDescriptor.java（<code>sessionRequired</code> 缺省 true）</div>
+
+    <div class="feature">
+      <h3>改了插件配置段要重启吗</h3>
+      <dl>
+        <dt>结论</dt>
+        <dd>
+          不用。<code>/reload</code> 会重读配置、重建模型 / agent 索引，并<strong>只重启配置段变了的插件</strong>（同步等结果，毫秒级）。
+          但改 <code>config.json</code>、新增 / 删除 jar 必须重启进程。
+        </dd>
+      </dl>
+      <p><strong>几个例外要知道</strong>：<code>skills</code> 插件的 <code>SKILL.md</code> 改动<strong>连 <code>/reload</code> 都不用</strong>（按文件系统签名失效）；
+      <code>project</code> 插件里「会话中途修改一个已经存在的 <code>AGENTS.md</code>」要开新会话才生效（已读内容按会话缓存），而<strong>新出现的</strong> <code>AGENTS.md</code> 下一轮就能看到。</p>
+    </div>
+    <div class="src-block">Jellyfish-Plugins/README.md:1053-1077、Jellyfish/README.md:511-513、Jellyfish-Plugins/README.md:507-546（skills 的失效口径）、Jellyfish-Plugins/README.md:424-474（project 的缓存口径）</div>
+
+    <div class="feature">
+      <h3>MCP server 连不上</h3>
+      <dl>
+        <dt>结论</dt>
+        <dd>
+          敲 <code>/mcp</code> 看连接状态、工具数与失败原因——<strong>那是唯一的线索</strong>。连不上不会让内核起不来。
+          断开会按退避自动重连（1 秒起、每次翻倍、封顶 60 秒、共 6 次），重连期间该 server 的工具先被摘掉；
+          约一分钟后仍连不上就停在「失败」，<code>/reload</code> 可重试。
+        </dd>
+      </dl>
+      <p><strong>三个常见原因</strong>：<code>command</code> 写的可执行文件不在 <code>PATH</code> 上；需要密钥但没写进 <code>env</code> 段（子进程只继承白名单里那几个环境变量）；用了 <code>sampling</code> / <code>elicitation</code> 这类能力（本客户端<strong>不声明也不支持</strong>，会回一条明确错误）。</p>
+    </div>
+    <div class="src-block">Jellyfish-Plugins/README.md:593-676（MCP 的连接、重连退避、白名单环境与协议能力）、Jellyfish-Plugins/README.md:1053-1077</div>
+
+    <div class="feature">
+      <h3>脚本插件报「环境变量未设置」</h3>
+      <dl>
+        <dt>结论</dt>
+        <dd>
+          配置段里写了 <code>${SOME_KEY}</code> 而环境变量没设，是<strong>硬失败</strong>（整个进程启动即失败，报错形如
+          <code>environment variable is not set: SOME_KEY</code>）。确实要用的密钥才写 <code>${...}</code>，并保证它总是已设。
+        </dd>
+      </dl>
+      <p><strong>推论</strong>：不用某个后端时把对应的 <code>apiKey</code> 留成 <code>""</code>，不要写占位符——写上去就是一个定时炸弹，换个人或换个 shell 拉不到那个变量就起不来。
+      （这条口径在示例脚本 <code>web</code> 的配置段上体现得最清楚。）</p>
+    </div>
+    <div class="src-block">Jellyfish-Plugins/README.md:715-833（<code>${ENV}</code> 是硬失败）、Jellyfish-Plugins/examples/scripts/README.md（「密钥走配置段，不走环境变量」）、Jellyfish-Plugins/README.md:1053-1077</div>
+
+    <div class="feature">
+      <h3>同一个工具被两个插件抢了怎么办</h3>
+      <dl>
+        <dt>结论</dt>
+        <dd>
+          不用自己处理：重复注册默认<strong>直接失败</strong>，冲突在插件启动时以 <code>DUPLICATE_HANDLER</code> 当场暴露，
+          而不是「谁后注册谁生效」。
+        </dd>
+      </dl>
+      <p><strong>要顶替别人（含内核自带的 <code>task</code> 与系统命令）</strong>必须显式声明覆盖（<code>RegisterOptions.override(true)</code>），
+      且覆盖是<strong>压在链顶之上</strong>——旧登记仍在表里只是不生效，覆盖者一被回收（插件停止、<code>/reload</code> 重启插件）旧的就自动重新生效。
+      MCP 工具名带 <code>mcp__&lt;server&gt;__</code> 前缀，正是为了让「重名」不成为事实。</p>
+    </div>
+    <div class="src-block">Jellyfish/docs/constraints.md「覆盖是一条链，不是就地替换」、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/event/RegisterOptions.java（默认不覆盖）、Jellyfish-Plugins/README.md:1005-1016（替换内核自带工具或命令）、Jellyfish-Plugins/README.md:593-676（MCP 工具名前缀）</div>
+
+    <div class="conclusion">
+      <h2>关键结论</h2>
+      <ol>
+        <li>官方插件共 <strong>13 个</strong>（11 个 Java + 2 个脚本桥接），<code>jellyfish-script</code> 是被 shade 进桥接插件的<strong>库</strong>，不产到 <code>plugins/</code>。</li>
+        <li>安装就是「把 jar 放进 <code>plugins.roots</code> 指向的目录」；<strong>新增 / 删除 jar 必须重启</strong>，改配置只需 <code>/reload</code>（且只重启配置段变了的插件）。</li>
+        <li><code>plugins.enabled</code> 不写＝不限制，写 <code>[]</code>＝一个都不启用；两个名单里都有同一个 id 时按禁用处理。</li>
+        <li>每个插件的配置都在 <code>plugins.configurations.&lt;pluginId&gt;</code>；项目级一写某个插件段就是<strong>整对象替换</strong>全局级那一份。</li>
+        <li>三个「不装就没有」：不装 <code>tools</code> 模型读不了文件、不装 <code>compact</code> 就没有压缩、不装 <code>session-file</code> 就没有可恢复的会话。</li>
+        <li>两个「没有沙箱」：<code>shell</code> 以你的权限运行命令；<code>tools</code> 的 <code>pathPolicy</code> 只管这几个文件工具的 <code>path</code>，管不了 shell 与 MCP。</li>
+        <li>插件起不来<strong>不会</strong>拖垮内核：失败只影响它自己，原因在启动日志的 <code>WARN</code> / <code>ERROR</code> 行里。</li>
+      </ol>
+    </div>
+
+    <div class="next-steps">
+      <h2>下一步阅读</h2>
+      <ul>
+        <li>想自己写一个：接 <a href="12-plugin-dev.html">12 从零开发一个插件</a>——本页讲的 <code>plugin.id</code>、<code>plugins.configurations</code>、<code>stop()</code> 之后 fail-closed 这些概念在那边是「你要实现的东西」。</li>
+        <li>只想查某个工具的参数与限制：翻 <a href="08-tools.html">08 内置工具速查</a>（tools / shell / todo / skills / workflow / MCP 各插件的工具都在那里）。</li>
+        <li>想搞清「谁拦谁、审批怎么弹」：看 <a href="10-permissions.html">10 权限与审批</a>——本页多次提到的 <code>askTools</code>、<code>ASK 就是拒绝</code>、<code>trustedCommands</code> 都在那一页统筹。</li>
+      </ul>
+    </div>
+
+    <nav class="pager" aria-label="翻页">
+      <a class="prev" href="10-permissions.html"><span class="pager-dir">上一页</span>10 权限与审批</a>
+      <a class="next" href="12-plugin-dev.html"><span class="pager-dir">下一页</span>12 从零开发一个插件</a>
+    </nav>
+
+  </main>
+</div>
+
+<footer class="footer">
+  <div class="doc-meta">
+    Jellyfish 使用指南 · 本页依据：<code>Jellyfish-Plugins/README.md</code>（插件一览 / 构建与安装 / tools / shell / session-file / todo / project / compact / skills / mcp / workflow / plan / resmon / 脚本插件 / 常见问题各节）、<code>Jellyfish-Plugins/pom.xml</code>、<code>Jellyfish-Plugins/AGENTS.md</code>、<code>cpPlugins.sh</code>、<code>Jellyfish-Plugins/examples/scripts/README.md</code>、<code>Jellyfish/README.md</code>（插件 / 配置 / <code>/reload</code> 各节）、<code>Jellyfish/docs/constraints.md</code>（扩展层与插件运行时）、<code>Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/plugin/</code> 下插件运行时源码。
+    示例中的密钥、token 一律以占位符表示；<code>【待确认】</code>表示该结论在仓库中未找到出处，<code>【需核实】</code>表示属于合理推断但无明文，请以实际代码为准。
+  </div>
+</footer>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

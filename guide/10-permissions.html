@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>10 权限与审批 · Jellyfish 使用指南</title>
+<meta name="description" content="Jellyfish 权限与审批：核心策略加插件拦截两道闸门的判定顺序、三段权限在运行时的语义与优先级、三种外壳下审批与提问的形态、permission.approvalTimeoutSeconds 与 ask.timeoutSeconds 的字段表与写 0 的代价、!命令 输入指令、shell 六道判定与五个字段、无人值守下的放行口、plan 模式与 MCP 审批。">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="nav-toggle" id="navToggle" aria-label="切换导航" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">🐙 Jellyfish 使用指南</a>
+  <div class="topbar-tools">
+    <input id="navSearch" type="search" placeholder="搜索页面…" aria-label="搜索页面">
+  </div>
+</header>
+
+<div class="layout">
+
+  <nav class="sidebar" id="sidebar" aria-label="文档导航">
+    <div class="sidebar-title">文档目录</div>
+    <ul class="nav-list">
+      <li><a href="index.html">首页 · 总览与导航</a></li>
+    </ul>
+    <div class="nav-group">一、入门</div>
+    <ul class="nav-list">
+      <li><a href="01-overview.html">01 Jellyfish 是什么</a></li>
+      <li><a href="02-install.html">02 安装与环境准备</a></li>
+      <li><a href="03-quickstart.html">03 五分钟快速上手</a></li>
+      <li><a href="04-modes.html">04 三种运行模式</a></li>
+    </ul>
+    <div class="nav-group">二、配置</div>
+    <ul class="nav-list">
+      <li><a href="05-config-overview.html">05 配置体系总览</a></li>
+      <li><a href="06-models.html">06 models.json 详解</a></li>
+      <li><a href="07-agents.html">07 agents.json 与工具权限</a></li>
+    </ul>
+    <div class="nav-group">三、日常使用</div>
+    <ul class="nav-list">
+      <li><a href="08-tools.html">08 内置工具速查</a></li>
+      <li><a href="09-session.html">09 会话与上下文</a></li>
+      <li><a href="10-permissions.html" aria-current="page">10 权限与审批</a></li>
+    </ul>
+    <div class="nav-group">四、插件</div>
+    <ul class="nav-list">
+      <li><a href="11-plugin-usage.html">11 安装与使用官方插件</a></li>
+      <li><a href="12-plugin-dev.html">12 从零开发一个插件</a></li>
+      <li><a href="13-plugin-advanced.html">13 插件进阶与发布</a></li>
+    </ul>
+    <div class="nav-group">五、集成与排错</div>
+    <ul class="nav-list">
+      <li><a href="14-spring-boot.html">14 整合到 Spring Boot</a></li>
+      <li><a href="15-troubleshooting.html">15 故障排查</a></li>
+      <li><a href="16-faq.html">16 FAQ 与术语表</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <nav class="breadcrumb" aria-label="面包屑">
+      <span>Jellyfish 使用指南</span><span class="sep">/</span><span>10 权限与审批</span>
+    </nav>
+
+    <h1>10 权限与审批</h1>
+    <p class="page-sub">
+      这一页不重复 <a href="07-agents.html">07 页</a>「怎么写名单」，而是讲<strong>运行时到底按什么顺序判定</strong>、
+      三种外壳下的审批各长什么样、<strong>写 <code>0</code> 表示永不超时</strong>的代价是什么、以及
+      <code>!命令</code>、<code>shell</code> 白名单、plan 模式、MCP 这几处各自的边界。
+      一句话记住方向：<strong>插件只能收紧、不能放宽</strong>；<strong>没人裁决 = 拒绝</strong>。
+    </p>
+
+    <section class="goals">
+      <h2>学习目标</h2>
+      <ul>
+        <li>画出「核心策略 → 插件拦截 → 审批通道」的判定顺序，并说明为什么没有 <code>ALLOW</code> 这一态；</li>
+        <li>说清三段权限在运行时各产生什么结论，以及哪一段的否定是硬结论；</li>
+        <li>说出审批在 <code>-tui</code> / <code>-server</code> / <code>-cli</code> 下分别发生什么，并能读懂审批框上的每一行；</li>
+        <li>会配 <code>permission.approvalTimeoutSeconds</code>，并解释写 <code>0</code> 为什么可能「卡住整个 TUI」；</li>
+        <li>会区分「审批」与「提问」：一个卡住执行、一个不卡住，<code>Esc</code> 的含义也不同；</li>
+        <li>能用 <code>!命令</code> 手动跑一条命令，并知道它照旧过权限；</li>
+        <li>按六道判定顺序配好 <code>shell</code> 的五个字段，知道「白名单只管准入、可信表才免审批」；</li>
+        <li>在无人值守（<code>-cli</code> / <code>-server</code>）下说清还有哪两个放行口，并会用 plan 模式兜住写操作。</li>
+      </ul>
+    </section>
+
+    <h2>两道闸门：判定顺序总览</h2>
+
+    <p>
+      权限由<strong>两层</strong>组成：<strong>核心策略</strong>（内核按 <code>agentId</code> 取三段名单）与
+      <strong>插件拦截</strong>（插件对这一次调用表态）。两者汇合后<strong>统一处理 ASK 与审计</strong>。
+    </p>
+
+    <div class="mermaid">
+flowchart TD
+  A["模型发起的工具调用 / ! 输入指令"] --> B["参数改写链<br/>（排在权限判定之前，防 TOCTOU）"]
+  B --> C["核心策略：按 agentId 取<br/>deniedTools / askTools / allowedTools"]
+  C -->|"deniedTools 命中：硬否定"| X["拒绝<br/>（不进审批）"]
+  C --> D["插件拦截 PermissionVerdict<br/>ABSTAIN / ASK / DENY，合并取最严<br/>抛错或返回 null 一律按 DENY"]
+  D -->|"DENY（短路）"| X
+  D -->|"ASK"| E["审批通道 ApprovalChannel"]
+  D -->|"全 ABSTAIN 且核心未要求 ASK"| H["执行工具"]
+  E -->|"明确批准"| H
+  E -->|"无审批者 / 超时 / 中断 / 通道关闭"| X
+    </div>
+    <p class="figure-cap">图 10-1　先「硬否定」，再「取最严」，最后才轮到问人；审批的每一条失败出口都通向拒绝</p>
+
+    <div class="callout design">
+      <span class="callout-title">为什么判定里没有 <code>ALLOW</code></span>
+      <p>
+        插件拦截的结论类型是三态 <code>ABSTAIN</code> / <code>ASK</code> / <code>DENY</code>，
+        <strong>合并取最严（<code>DENY &gt; ASK &gt; ABSTAIN</code>）且 <code>DENY</code> 短路</strong>。
+        类型里<strong>根本没有 <code>ALLOW</code></strong>，因此「插件不能放宽核心策略」是<strong>编译期约束</strong>，
+        不是靠约定或代码评审守住的。核心策略的 <code>ASK</code> 也因此<strong>无法被插件的「无异议」降级</strong>
+        ——插件的裁定只能收紧、不能放宽。
+      </p>
+    </div>
+
+    <div class="callout warn">
+      <span class="callout-title">两个容易被忽略的次序细节</span>
+      <ul>
+        <li>
+          <strong>参数改写排在权限判定之前（防 TOCTOU）</strong>：排在之后就会出现「审批浮层显示参数 A、
+          真正执行参数 B」。排在之前则审批记录、界面轨迹行、<code>-cli --show-tool-args</code>、
+          会话里落库的 <code>toolCalls</code> 是<strong>同一份文本</strong>。
+          它<strong>不是放宽权限的入口</strong>：改写之后照旧走核心策略与插件拦截。
+          改写链上的 <code>DENY</code> <strong>不进权限审计</strong>——那表现为一条 <code>terminal=REJECTED</code> 的工具失败结果。
+        </li>
+        <li>
+          <strong>工具清单的过滤复用执行期判定</strong>：因此 <strong><code>ASK</code> 不算被拒</strong>（工具仍出现在清单里），
+          而<strong>插件拦截不参与过滤</strong>（它要看参数、可能问人）——所以「模式类收窄」在工具清单里看不到。
+        </li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish/docs/constraints.md:435-455（权限两层、fail-open 只覆盖「取不到策略」、参数改写顺序与 TOCTOU、<code>ToolFilter</code> 的判据）、Jellyfish/docs/constraints.md:457-465（插件拦截三态、取最严、抛错按 DENY、无 <code>ALLOW</code>）</div>
+
+    <h2>三段权限在运行时怎么被判定</h2>
+
+    <p>
+      语义本身（「字段缺失 = 不限制，显式写 <code>[]</code> = 该方向上一个都不放行」、优先级
+      <code>deniedTools &gt; askTools &gt; allowedTools</code>）见 <a href="07-agents.html">07 agents.json 与工具权限</a>。
+      这里只讲<strong>运行时它产生什么结论、能不能被别处改写</strong>。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>名单</th><th>命中后的结论</th><th>还能不能被插件改写</th><th>典型误配</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>deniedTools</code></td>
+            <td><strong>硬拒绝</strong>：工具调用直接失败，不进审批</td>
+            <td>不能。优先级最高，插件只能表示「无异议」或更严</td>
+            <td>用它把 <code>ask_user</code> 拦掉来「不想让模型问」——有效，但那不是建议而是硬结论</td>
+          </tr>
+          <tr>
+            <td><code>askTools</code></td>
+            <td><strong>ASK</strong>：每次调用都要人工审批</td>
+            <td>不能降级。插件的「无异议」不会把它变成免审批</td>
+            <td>把它写成整个 <code>shell</code>、<code>-cli</code> 下等于禁用；连 <code>git status</code> 都要批准</td>
+          </tr>
+          <tr>
+            <td><code>allowedTools</code></td>
+            <td>「允许」：不产生硬结论，仍要过插件拦截</td>
+            <td>能被插件收紧；<strong>还决定子代理能看到哪些工具</strong>（只随委派生效）</td>
+            <td>写 <code>"allowedTools": []</code> 想表达「只拒绝两个工具」——那是<strong>全拦</strong>；要表达仅两次拒绝就直接省略该字段</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>「取不到策略」与「查不到身份」是两件事</h3>
+
+    <div class="callout pitfall">
+      <span class="callout-title">改名 / 删配置之后，旧会话会被「全拦」</span>
+      <ul>
+        <li><strong>fail-open 只覆盖「取不到策略」这一种情况</strong>（会话没绑 <code>agentId</code>）；
+          策略一旦生效，它的否定就是硬结论。</li>
+        <li>
+          <strong>「绑了一个查不到的身份」<em>不是</em>「取不到」</strong>：它在配置里查不到（改名、删除、
+          从别处恢复出来的会话），因此内核返回<strong>「全拦」</strong>并附一条 <code>ConfigWarningEvent</code>
+          （每个标识只发一次）。继续放行等于「配置里改个名字就悄悄把一批旧会话提权」。
+        </li>
+        <li>看到工具突然全部被拒时，先去 <code>agents.json</code> 核对那个 <code>agentId</code> 还在不在。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:723-739（三段语义、优先级、三外壳行为表）、Jellyfish/docs/constraints.md:439-445（fail-open 的边界与「查不到身份」返回全拦 + <code>ConfigWarningEvent</code>）、Jellyfish/docs/constraints.md:420-423（模式类授权名单不回内核）</div>
+
+    <h2>审批在三种外壳下的行为</h2>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>外壳</th><th>有审批者吗</th><th>发生什么</th><th>怎么裁决</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>-tui</code></td>
+            <td>有</td>
+            <td>弹出审批选择框，<strong>优先于补全面板与二级选择页</strong>；批准才执行</td>
+            <td><code>↑</code>/<code>↓</code> 选、<code>Enter</code> 确认、<code>Esc</code> 拒绝<strong>并</strong>中断回合</td>
+          </tr>
+          <tr>
+            <td><code>-server</code></td>
+            <td>有</td>
+            <td>把待审批项推进 SSE 流（事件名 <code>approval_required</code>）</td>
+            <td><code>POST /sessions/{id}/approvals/{requestId}</code>；发现入口是 <code>GET /approvals</code>（跨会话最早一条，带 <code>sessionId</code>）</td>
+          </tr>
+          <tr>
+            <td><code>-cli</code></td>
+            <td><strong>没有</strong></td>
+            <td>没有审批界面、也没有审批者，需要审批的调用<strong>一律按拒绝处理</strong></td>
+            <td>不存在。绝不静默放行</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>TUI 的审批框长什么样</h3>
+
+    <pre><code class="language-text">╭ ⏸ 需要审批 ────────────────────────╮
+│ 工具 bash                          │
+│ 参数 {"command": "rm -rf build"}   │
+│ 理由 agent 策略要求人工审批该工具   │
+│ 会话 a1b2c3d4… · 模式 normal       │
+│                                    │
+│  ❯ 允许一次   本次调用放行…        │
+│    拒绝       本次调用按拒绝处理…  │
+│    ↑/↓ 选择 · Enter 确认 · Esc 拒绝并中断 │
+╰────────────────────────────────────╯</code></pre>
+
+    <ul>
+      <li><strong>参数原样显示</strong>（含 <code>apiKey</code> 这类键的值）：审批要回答的是「放不放行这次调用」，而能回答它的只有原文。</li>
+      <li><strong>超长参数折行显示</strong>并在截断处写明省略了几行。</li>
+      <li><strong><code>Esc</code> 是「拒绝<em>并</em>中断回合」</strong>——只拒绝的话模型往往会换个方式接着试。</li>
+      <li>框里的「理由」一行由发起方给出（例如「agent 策略要求人工审批该工具」）。</li>
+    </ul>
+
+    <h3>Server 侧的裁决契约</h3>
+
+    <ul>
+      <li><strong>必须按会话寻址</strong>：<code>POST /sessions/{id}/approvals/{requestId}</code> 要求 <code>requestId</code>
+        属于路径里那个会话、且是它的<strong>头槽位</strong>，否则 <code>404</code>。</li>
+      <li><strong>头槽位是每会话一个</strong>：同会话内是「一个头槽位 + FIFO 队列 + 只对头生效 + 首次结论胜出」，
+        队列<strong>上限 8 条</strong>，超出<strong>只拒新请求</strong>、已排队的不受影响；<strong>会话之间互不排队</strong>。</li>
+      <li><strong>排队中的请求裁决它等于无事发生</strong>——能裁决的始终只有头槽位那一条。</li>
+      <li><strong>子代理的审批落在它自己的会话上</strong>：按主会话订阅的流看不到它，所以要用
+        <code>GET /approvals</code> 这个只读发现入口，否则只能等超时被拒。</li>
+    </ul>
+
+    <div class="src-block">Jellyfish/README.md:731-739（三外壳行为表）、Jellyfish/README.md:267-292（TUI 审批框原文、参数原样显示、<code>Esc</code> 的含义）、Jellyfish/README.md:1038-1053（<code>/approvals</code> 与 <code>/sessions/{id}/approvals</code>、头槽位与队列上限 8、<code>GET /approvals</code> 的用途）、Jellyfish/docs/constraints.md:467-481（审批 fail-closed、头槽位规则、读侧两个口、「有没有审批者」只是静态语义）</div>
+
+    <h2><code>permission</code> 段：审批超时</h2>
+
+    <div class="feature">
+      <h3>`permission.approvalTimeoutSeconds`</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>决定 <code>askTools</code> 里的工具在 TUI 上弹出审批框之后<strong>最多等多久</strong>；等不到人一律按拒绝处理。</dd>
+        <dt>怎么用</dt>
+        <dd>
+          写在 <code>jellyfish.json</code> 的 <code>permission</code> 段，<strong>每轮现读</strong>；改完 <code>/reload</code> 生效。
+          <pre><code class="language-json">{
+  "permission": { "approvalTimeoutSeconds": 120 }
+}</code></pre>
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>permission.approvalTimeoutSeconds</td>
+              <td>int（秒）</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>120</code></td>
+              <td><code>askTools</code> 里的工具在 TUI 上弹审批框后最多等这么久，超时按拒绝处理；<strong>写 <code>0</code> 表示永不超时</strong>（一直等到有人裁决）。负数按非法处理：回退 <code>120</code> 并告警；超过 <code>3600</code> 的值照旧生效但也会告警</td>
+              <td><code>300</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p><span class="tag hot">/reload 生效</span>（该键<strong>每轮现读</strong>）</p>
+
+      <p><strong>写 <code>0</code> 的代价（务必先读）</strong></p>
+      <div class="callout danger">
+        <span class="callout-title">永不超时 = 一直卡住，不是「更安全」</span>
+        <ul>
+          <li>配 <code>0</code> 时启动会有一条 <code>ConfigWarningEvent</code>（来源 <code>permission</code>）说明代价。</li>
+          <li>fail-closed 的形状从「等不到人就拒绝」变成<strong>「等不到人就一直卡住」</strong>：
+            那一条 <code>react</code> 线程在有人裁决之前<strong>不会自愈</strong>。</li>
+          <li>而 <code>react</code> 线程池<strong>只有 8 条</strong>（= 并发顶层回合上限）——几条这样的等待就能把并发占满，
+            表现为「TUI 里点哪个会话都不动」。</li>
+          <li>仍然会放开的两条出口：<strong>外壳退出</strong>（通道关闭）或<strong>回合被取消</strong>。</li>
+          <li><strong>永不超时只改变「等多久」，不改变 fail-closed 这条口径。</strong></li>
+        </ul>
+      </div>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>写了个负数会怎样？</strong>按非法处理：回退 <code>120</code> 秒并告警（同样在事件面，来源 <code>permission</code>）。</li>
+        <li><strong>写了 <code>7200</code> 呢？</strong>照旧生效，但会告警——多半是笔误；真要不设上限应当写 <code>0</code>。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:887-899（<code>permission</code> 段字段表与「写 0 的代价」「负数非法」「超过 3600 告警」）、Jellyfish/docs/constraints.md:471-477（<code>ApprovalChannel.waitForever</code>、三条出口、启动告警）</div>
+
+    <h2><code>ask_user</code>：向用户提问</h2>
+
+    <div class="feature">
+      <h3>`ask_user` 提问</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          让模型把一个<strong>问题连同若干选项</strong>摆到你面前，你挑一个即可，不必自己敲答案。
+          <strong>它不是审批</strong>：在这里选任何一项都<strong>不会放行任何工具</strong>，只是把答案告诉模型。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          由模型发起（工具在官方 tools 插件里，机制在内核的 <code>AskChannel</code>）。
+          <code>-tui</code> 下弹出提问浮层，末项固定是<strong>「其它（自己输入）」</strong>：
+          选中后按键交给常驻输入框，写下答案按 <code>Enter</code> 提交，<code>Esc</code> 退回选项。
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>ask.timeoutSeconds</td>
+              <td>int（秒）</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>120</code></td>
+              <td><code>ask_user</code> 弹出的提问框最多等这么久，超时后工具回一条「用户没有回答」让模型继续；<strong>写 <code>0</code> 表示永不超时</strong>。负数按非法处理：回退 <code>120</code> 并告警</td>
+              <td><code>60</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p><span class="tag hot">/reload 生效</span>（<strong>每次提问现读</strong>）</p>
+
+      <p><strong>它与审批的三处刻意区别</strong></p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>维度</th><th>审批（<code>askTools</code>）</th><th>提问（<code>ask_user</code>）</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>作用</td>
+              <td>「能不能执行」卡在半路等人放行</td>
+              <td>「问你一件事」，<strong>不放行任何工具</strong></td>
+            </tr>
+            <tr>
+              <td>等不到人的结果</td>
+              <td><strong>按拒绝处理</strong>（fail-closed）</td>
+              <td>返回<strong>成功的工具结果</strong>，文本说明原因（「用户没有回答」），让模型自行判断</td>
+            </tr>
+            <tr>
+              <td>TUI 里 <code>Esc</code> 的含义</td>
+              <td><strong>拒绝并中断回合</strong></td>
+              <td><strong>放弃作答</strong>，回合继续（模型收到「用户取消了这次提问」后自己接着判断）</td>
+            </tr>
+            <tr>
+              <td>超时键</td>
+              <td><code>permission.approvalTimeoutSeconds</code></td>
+              <td><code>ask.timeoutSeconds</code>（<strong>刻意分开</strong>，改一个不会顺带改另一个）</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>为什么提问不是 fail-closed</strong></p>
+      <p>
+        审批者缺席时放行等于静默放宽权限；而提问缺席时让模型照自己的判断继续，<strong>代价只是它可能猜错并说出来</strong>。
+        做成失败会让模型以为环境出错、反复重试。因此「无答复者 / 超时 / 用户放弃」三种都返回<strong>成功</strong>的工具结果。
+      </p>
+
+      <p><strong>三种外壳下的行为</strong></p>
+      <ul>
+        <li><strong><code>-tui</code></strong>：提问浮层，优先级<strong>低于审批、高于二级选择页与补全</strong>；选项很长时<strong>光标停在哪一项，那一项就完整折行展开</strong>（标签与说明都显示，最多 6 行，超出写明省略了几行），其余各项单行截断——保证「你准备按 <code>Enter</code> 的那一项一定是完整的」。</li>
+        <li><strong><code>-server</code></strong>：推 <code>ask_required</code>，由 <code>POST /sessions/{id}/asks/{requestId}</code> 作答，请求体给 <code>{"optionId":"…"}</code> 或 <code>{"text":"…"}</code>；两种都不给回 <code>400</code>（「用户自己填的答案」与「客户端写错了请求」必须能分开）；连接断开时收敛未决项。发现入口是 <code>GET /asks</code>。</li>
+        <li><strong><code>-cli</code></strong>：不挂答复者，工具<strong>立刻返回一条</strong>「当前外壳没有交互界面，无法把提问送达用户」，模型据此照自己的判断继续——<strong>不会失败、也不会挂住</strong>。</li>
+        <li><strong>子代理回合里当场拒绝</strong>：外层界面按<strong>当前会话</strong>取待答项，而子代理有独立的会话，它的提问不会出现在任何一个界面上；因此工具直接返回「子代理回合里无法向用户提问」，<strong>绝不进通道等待</strong>（那只会静默卡到超时）。</li>
+      </ul>
+
+      <p><strong>头槽位与审批同口径</strong></p>
+      <p>
+        每会话一个 + FIFO 队列 + 只对头槽位生效 + 首次结论胜出 + 排队上限 <code>8</code>；会话之间互不排队。
+        裁决、超时、关闭三方都在同一把锁内落定，后到者当作无事发生。
+      </p>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>写 <code>ask.timeoutSeconds: 0</code> 与审批写 <code>0</code> 一样有代价吗？</strong>同源：提问发生在 <code>react</code> 线程上并被同步等待，而那个池只有 8 条线程，每一次这样的等待都占住其中一条；配 <code>0</code> 时启动有一条告警（来源 <code>ask</code>）——不报的话，「故意配的」与「手滑写了个 0」在日志里长得一样。</li>
+        <li><strong>不想让模型问怎么办？</strong>用 agent 的 <code>deniedTools</code> 把 <code>ask_user</code> 拦掉：那是硬结论，不是建议。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:293-319（提问框原文、选项折行规则、与审批的区别、<code>ask.timeoutSeconds</code>）、Jellyfish/README.md:900-912（<code>ask</code> 段字段表与「刻意分开」「写 0 的代价」「负数回退」）、Jellyfish/docs/constraints.md:489-518（机制在内核工具在插件、不是审批不涉及权限、不是 fail-closed、头槽位与审批同口径、子代理回合当场拒绝、三外壳、选项区不复用命令候选渲染、<code>AskChannel.waitForever</code>）、Jellyfish/README.md:1040-1057（<code>ask_required</code> 与 <code>POST /asks/{id}</code>、两种请求体、400 的语义）</div>
+
+    <h2>输入指令 <code>!命令</code></h2>
+
+    <div class="feature">
+      <h3>`!命令`：手动执行一条 shell 命令</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          在输入框里直接敲一条 shell 命令并执行。它<strong>不进模型</strong>——但执行完会把
+          <strong>「命令回显 + 输出」作为一条用户消息落进会话</strong>，因此下一次提问时模型看得到结果。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-text">!git status --short
+!mvn -q -pl jellyfish-core test</code></pre>
+          指令依赖 <code>jellyfish-plugin-shell</code>：<strong>没有装它，<code>!</code> 只是一段普通文本。</strong>
+          <code>Esc</code> 可以中断正在跑的命令；指令执行队列满时当场报错（<code>JellyfishException</code>，提示稍后重试），<strong>不会静默丢弃</strong>。
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>—（无专属配置项）</td>
+              <td>—</td>
+              <td>—</td>
+              <td>—</td>
+              <td>标记由插件声明、执行权在内核；它<strong>复用与模型调用完全相同的执行链路</strong>，因此权限与审批用的是 <code>shell</code> 那一套配置</td>
+              <td>—</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>四条口径</strong></p>
+      <ul>
+        <li><strong><code>!</code> 依旧过权限与审批</strong>：复用与模型调用完全相同的工具执行链路，只读命令静默执行、其余照旧弹审批框。</li>
+        <li><strong>结果落成 user 消息，不是 tool 消息</strong>：tool 消息必须与 <code>assistant.toolCalls</code> 配对，而这里没有模型回合。</li>
+        <li><strong>恰好一条终态</strong>：<code>Esc</code> 中断的报 <code>cancelled</code>，其余报 <code>completed</code>。终端态只说「这条事件流到此为止」——<strong>命令为什么失败写在落进会话的那条消息里</strong>。</li>
+        <li><strong>插件只能声明映射、不能自己执行</strong>：插件拿不到权限管理器，任何在 handler 里直接执行命令的实现都是错的。</li>
+      </ul>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>敲 <code>!</code> 没反应？</strong>确认 <code>jellyfish-plugin-shell</code> 已启用；没有它，<code>!</code> 就是普通文本。</li>
+        <li><strong>在 <code>-cli</code> 里 <code>!</code> 会被拒吗？</strong>取决于命令：判为只读的（如 <code>git status</code>）或写进 <code>trustedCommands</code> 的免审批；其余在无人值守下<strong><code>ASK</code> 即拒绝</strong>。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:254-270（<code>!命令</code> 行、两条口径、实时输出与恰好一条终态、队列满报错）、Jellyfish/docs/constraints.md:804-846（输入框语法归插件、执行体是工具执行器、<code>!</code> 的结果落成 user 消息、异步执行与关闭顺序、终态语义、队列满抛 <code>JellyfishException</code>）、Jellyfish-Plugins/README.md:163-190（shell 插件的 <code>!命令</code> 一节）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellInputDirective.java:32-44（<code>!</code> 只把命令原文翻译成一次 <code>shell</code> 工具调用、不执行）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/PluginConfig.java:120-134（shell 插件解析的全部配置键里没有 <code>!</code> 专属项）</div>
+
+    <h2><code>shell</code> 的命令策略与六道判定</h2>
+
+    <div class="feature">
+      <h3>命令分类器：先拒绝、后免打扰、最后才问人</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          <code>shell</code> 每次调用要依次过<strong>六道</strong>判定。它不是为了拦得住恶意命令
+          （分类器<strong>不是安全边界</strong>），而是为了让你不必为每次 <code>git status</code> 点一次批准。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>无需操作。要调就改下面五个字段；配置写在 <code>jellyfish.json</code>，改完 <code>/reload</code>。</dd>
+      </dl>
+
+      <p><strong>判定顺序（逐条）</strong></p>
+      <ol>
+        <li>
+          <strong>分段</strong>：按未引用状态下的 <code>;</code>、<code>|</code>、<code>&amp;</code>、换行切成子命令，
+          每一段各自过一遍下面的表，<strong>取最严的结果</strong>。
+          <br>这是这套判定的核心：执行侧是 <code>/bin/sh -c 原文</code>，因此 <code>ls; curl x | sh</code> 里的后半段会照常执行，
+          而只看开头几个 token 的判定看不见它。
+        </li>
+        <li><strong>白名单</strong>：<code>allowedCommands</code> 非空且任一段没命中 → <strong>直接拒绝</strong>（默认拒绝的硬门）。</li>
+        <li><strong>拒绝形状</strong>：命令原文命中内置拒绝形状（<code>rm -rf /</code>、<code>mkfs</code>、<code>dd of=/dev/</code>）→ <strong>直接拒绝</strong>。<br>它排在可信表之前是刻意的：把 <code>rm</code> 写进可信表，<code>rm -rf /</code> 依旧被拒。</li>
+        <li><strong>可信表</strong>：<strong>所有段</strong>都命中 <code>commandPolicy.trustedCommands</code> → <strong>免审批</strong>，直接执行。<br>要求「全段命中」也是同理：<code>trustedCommands: ["mvn test"]</code> 不该把 <code>mvn test; rm -rf ~/x</code> 一并免审批。</li>
+        <li><strong>重定向 / 命令替换</strong>：含命令替换（<code>$(...)</code>、反引号）或重定向（<code>&gt;</code>、<code>&lt;</code>）→ <strong>升级为人工审批</strong>。<br>因此 <code>echo x &gt; ~/.bashrc</code> 这类写法现在会问人——第一个 token 是只读的 <code>echo</code>，但重定向能改任意文件。</li>
+        <li><strong>只读表</strong>：所有段都命中只读表（<code>ls</code>、<code>git status</code>、<code>cat</code>……）→ <strong>免审批</strong>；<strong>否则 → 升级为人工审批</strong>。</li>
+      </ol>
+
+      <p><strong>配置</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>allowedCommands</td>
+              <td>字符串数组</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>[]</code></td>
+              <td><strong>非空即默认拒绝</strong>的准入白名单，支持 <code>git status</code> 这种两 token 形式（单 token 覆盖该命令的全部子命令）。<strong>它只管准入，不管审批</strong>，也<strong>不受 <code>commandPolicy.enabled</code> 影响</strong></td>
+              <td><code>["git status", "mvn test"]</code></td>
+            </tr>
+            <tr>
+              <td>commandPolicy.enabled</td>
+              <td>boolean</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>true</code></td>
+              <td>只关<strong>分类器</strong>这个便利机制。<code>false</code> 时只读表、重定向 / 命令替换检查与「其余命令问人」都不再表态，但白名单、可信表、拒绝形状照旧生效</td>
+              <td><code>false</code></td>
+            </tr>
+            <tr>
+              <td>commandPolicy.trustedCommands</td>
+              <td>字符串数组</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>[]</code></td>
+              <td><strong>可信命令表，命中即免审批</strong>。粒度与白名单一致</td>
+              <td><code>["mvn test"]</code></td>
+            </tr>
+            <tr>
+              <td>commandPolicy.readOnlyCommands</td>
+              <td>字符串数组</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>[]</code></td>
+              <td><strong>追加</strong>在内置只读表之后。内置表<strong>不可替换</strong>，只能追加</td>
+              <td><code>["my-readonly-tool"]</code></td>
+            </tr>
+            <tr>
+              <td>commandPolicy.deniedPatterns</td>
+              <td>字符串数组</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>[]</code></td>
+              <td><strong>追加</strong>在内置拒绝形状（<code>rm -rf /</code>、<code>rm -fr /</code>、<code>mkfs</code>、<code>of=/dev/</code>、<code>:(){</code>）之后，同样<strong>不可撤销</strong>；判据是<strong>子串包含</strong></td>
+              <td><code>["shutdown -h"]</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        完整的配置键是 <code>plugins.configurations.jellyfish-plugin-shell.*</code>；
+        <span class="tag hot">/reload 生效</span>（逐插件配置段写在 <code>jellyfish.json</code>）。
+      </p>
+      <div class="callout tip">
+        <span class="callout-title"><code>deniedPatterns</code> 是<strong>子串匹配</strong>，不是正则</span>
+        <p>
+          README 只把它描述为「拒绝形状」，没说匹配方式；命令策略的实现里判据是
+          <code>command.contains(pattern)</code>——<strong>对命令原文做子串包含判断，正则元字符一律按字面量处理</strong>。
+          因此 <code>"shutdown -h"</code> 只要出现在命令里的任何位置就命中；写 <code>"^rm"</code> 也<strong>不会</strong>得到
+          「只匹配行首」的效果，它找的字面量就是 <code>^rm</code>。
+        </p>
+        <p>
+          两个连带口径：判据作用在<strong>整条命令原文上</strong>（含引号与空格，不区分「命令名」与「参数」，
+          也不按段分别判断）；内置形状实际是<strong>五条</strong>——<code>rm -rf /</code>、<code>rm -fr /</code>、<code>mkfs</code>、
+          <code>of=/dev/</code>、<code>:(){</code>，插件 README 的字段表里只列了其中四条（漏了 <code>rm -fr /</code>），以源码为准。
+        </p>
+      </div>
+
+      <p><strong>完整示例：允许跑但每次都要我批准</strong></p>
+      <pre><code class="language-json">{
+  "plugins": {
+    "configurations": {
+      "jellyfish-plugin-shell": {
+        "allowedCommands": ["git status", "git diff", "mvn test"],
+        "commandPolicy": {
+          "enabled": true,
+          "trustedCommands": ["git status", "git diff"],
+          "readOnlyCommands": [],
+          "deniedPatterns": []
+        }
+      }
+    }
+  }
+}</code></pre>
+      <p>
+        这份配置下：<code>git status</code> / <code>git diff</code> 免审批（可信表命中）；
+        <code>mvn test</code> <strong>每次都要批准</strong>——白名单只回答「能不能跑」。
+      </p>
+
+      <p><strong>三条最容易踩的口径</strong></p>
+      <ul>
+        <li><strong>白名单只管准入，不管审批</strong>：<code>allowedCommands</code> 里的 <code>mvn test</code> 每次仍然弹批准框。要它静默执行，就把同一条前缀<strong>也</strong>写进 <code>trustedCommands</code>。</li>
+        <li><strong>可信表才是免审批</strong>：「允许跑但每次都要我批准」这种姿态仍然写得出来——只配白名单、不配可信表即可。</li>
+        <li><strong><code>commandPolicy.enabled=false</code> 会连第 5 步一起关掉</strong>：它关的是「分类器」这个便利机制，只读表、重定向 / 命令替换检查与「其余命令问人」都不再表态；白名单、可信表、拒绝形状照旧生效。</li>
+      </ul>
+
+      <div class="callout danger">
+        <span class="callout-title">shell 没有沙箱</span>
+        <p>
+          命令以<strong>本进程的权限</strong>运行，能读写你这个用户的任意文件。
+        </p>
+        <ul>
+          <li><strong>分类器不是安全边界</strong>：<code>FOO=bar cmd</code>、别名、<code>sh -c</code> 嵌套照旧能绕过前缀判定。</li>
+          <li><strong>不做目录围栏</strong>：它可绕过（<code>cd /</code>、绝对路径、<code>sh -c</code> 嵌套），与文件工具没有围栏也不自洽。<strong>真正的边界是审批加白名单。</strong></li>
+          <li>真正的最强姿态是<strong>把 <code>shell</code> 写进 <code>askTools</code></strong>（每条命令都要批准，连 <code>git status</code> 也要），代价是噪音。</li>
+          <li>子进程<strong>继承父进程环境</strong>，但名字匹配 <code>*KEY*</code> / <code>*TOKEN*</code> / <code>*SECRET*</code> / <code>*PASSWORD*</code> / <code>*CREDENTIAL*</code> / <code>*_PAT*</code> / <code>*AUTH*</code> / <code>*NETRC*</code> / <code>*PROXY*</code> / <code>*PASSPHRASE*</code> / <code>*_PWD</code> 的变量<strong>不会</strong>传下去（工具输出会送到远端 LLM）。</li>
+        </ul>
+      </div>
+
+      <p><strong>其它边界</strong></p>
+      <ul>
+        <li><strong>引号内的分隔符与重定向是字面量</strong>：<code>echo "a;b"</code>、<code>echo 'a &gt; b'</code> 仍是一条只读命令；<strong>引号没闭合时不给结论，一律问人</strong>。</li>
+        <li><strong><code>find</code> / <code>git fetch</code> / <code>git branch</code> / <code>git remote</code> / <code>npm test</code> 刻意不算只读</strong>（<code>find -delete</code> 会删东西、<code>git fetch</code> 改 ref、<code>npm test</code> 执行仓库里的任意代码），它们免审批的唯一正当路径是<strong>可信表</strong>。</li>
+        <li><strong>进程树只能尽力杀</strong>：杀 <code>sh -c</code> 不一定带走孙进程，工具用 <code>pgrep -P</code> 递归尽力而为，<strong>杀不干净是已知边界</strong>。</li>
+        <li><strong>插件停止时在途命令会被连根拔掉</strong>：<code>/reload</code> 与内核关闭都会终止正在跑的命令；停止之后新来的调用回「插件已停止，进程已终止」，<strong>这与「已取消」分开说</strong>。</li>
+        <li><strong>Windows 未验证</strong>：非 POSIX 平台映射成 <code>cmd.exe /c</code>，但没有在真机上跑过。</li>
+      </ul>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>配了白名单怎么还每次问批准？</strong>因为白名单只管准入。把同一条前缀也写进 <code>trustedCommands</code>。</li>
+        <li><strong><code>echo x &gt; file</code> 为什么突然要审批？</strong>第 5 步：有重定向就升级为人工审批（重定向能改任意文件）。要静默执行就把<strong>整条命令（含重定向）</strong>写进 <code>trustedCommands</code>——可信表优先于这一步。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish-Plugins/README.md:191-204（五个字段表）、Jellyfish-Plugins/README.md:205-253（六道判定、三条关键口径、边界与已知限制、端到端测试 profile）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/PluginConfig.java:120-134（配置键与缺省值）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:102-104（内置拒绝形状五条）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:271-274（拒绝形状按命令原文匹配）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommandPolicy.java:514-522（子串匹配判据 <code>command.contains(pattern)</code>）、Jellyfish-Plugins/jellyfish-plugin-shell/src/test/java/zcd/jellyfish/plugin/shell/CommandPolicyTest.java:182（<code>["shutdown -h"]</code> 的用例）</div>
+
+    <h2>无人值守模式下的放行口</h2>
+
+    <div class="callout danger">
+      <span class="callout-title"><code>-cli</code> / <code>-server</code> 没有审批者：ASK 就是拒绝</span>
+      <ul>
+        <li>这两个模式<strong>不挂审批通道</strong>，因此 <code>askTools</code> 等于禁用，「等不到人」的结果就是<strong>拒绝</strong>。</li>
+        <li><strong>免审批的放行口只剩两个</strong>：<strong>被分类器判为只读的命令</strong>，以及 <strong><code>commandPolicy.trustedCommands</code> 里的命令</strong>（白名单非空时还得先过白名单）。</li>
+        <li><strong>想在无人值守下跑 <code>mvn test</code> 这类非只读命令，必须把它写进 <code>trustedCommands</code>。</strong></li>
+        <li>MCP 同理：<code>-cli</code> / <code>-server</code> 下写类 MCP 工具实际不可用（<code>ASK</code> 等于拒绝）。</li>
+        <li>文件工具也同理：<code>pathPolicy</code> 的 <code>outside: "ask"</code> 在没有审批界面的外壳里<strong>等于拒绝</strong>。</li>
+      </ul>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">无人值守的三条实用做法</span>
+      <ul>
+        <li>用<strong>plan 模式</strong>兜住写操作：<code>/plan on</code> 之后只有白名单里的工具可用，它<strong>不依赖审批者</strong>，因此在没有人在场的模式里同样有效。</li>
+        <li>把要跑的构建 / 测试命令写进 <code>trustedCommands</code>，别把整个 <code>shell</code> 放进 <code>askTools</code>。</li>
+        <li>需要审批的活改到 <code>-tui</code> 或 <code>-server</code>（Server 侧由客户端订阅 <code>approval_required</code> 后裁决）。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish-Plugins/README.md:247-249（<code>-cli</code> / <code>-server</code> 下免审批只剩两个放行口）、Jellyfish-Plugins/README.md:658（MCP：这两个模式下写类工具实际不可用）、Jellyfish-Plugins/README.md:154-156（<code>pathPolicy</code> 的 <code>ask</code> 在无审批界面外壳里等于拒绝）、Jellyfish/README.md:1095-1100（「<code>-cli</code> 下工具调用总被拒绝？」）、Jellyfish-Plugins/README.md:712（plan 在 <code>-cli</code> / <code>-server</code> 下同样有效）</div>
+
+    <h2>plan 模式：一套「先看，别改」的工作方式</h2>
+
+    <div class="feature">
+      <h3>`/plan on` / `/plan off`</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          开启后<strong>只有你列在 <code>readOnlyTools</code> 里的工具可用</strong>，其余一律被拒。
+          拒绝理由会告诉模型「plan 模式下只能使用只读工具：……」，它就不会反复去试一个注定失败的写操作。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          <pre><code class="language-text">/plan            查看当前状态（并给出 on / off 候选）
+/plan on         开启：只有白名单里的工具可用
+/plan off        关闭：恢复正常</code></pre>
+          <strong>装了这个插件才有 <code>/plan</code></strong>；不带它的内核里没有「模式」这个概念，也<strong>没有 <code>--mode</code> 参数</strong>。
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>readOnlyTools</td>
+              <td>字符串数组（工具名）</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>[]</code></td>
+              <td><strong>plan 模式的工具白名单</strong>。<strong>不写就等于开启时一个工具都用不了</strong>（白名单语义：「用户没表态」与「用户不准」是同一件事）</td>
+              <td><code>["read_file", "list_dir", "grep_files", "todo_write", "skill"]</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>完整键是 <code>plugins.configurations.jellyfish-plugin-plan.readOnlyTools</code>；<span class="tag hot">/reload 生效</span>。</p>
+
+      <p><strong>完整示例</strong></p>
+      <pre><code class="language-json">{
+  "plugins": {
+    "configurations": {
+      "jellyfish-plugin-plan": {
+        "readOnlyTools": ["read_file", "list_dir", "grep_files", "todo_write", "skill"]
+      }
+    }
+  }
+}</code></pre>
+
+      <p><strong>五条口径</strong></p>
+      <ul>
+        <li><strong>开关按会话存</strong>：存在会话扩展条目里，随会话一起落盘与恢复；同一个进程里可以一个会话开着、另一个关着。</li>
+        <li><strong>子代理按会话树继承</strong>：判定沿父链——父会话开着 plan 时，它派生出来的子代理会话同样只看不写。子代理是模型自己派出来的，只看本会话的话，「把被禁的写操作交给子代理」就能绕开这道限制。<br>
+          <span class="tag focus">注意</span> 内核的约束只要求「插件自己决定要不要传播」（开关存在会话上、子代理是另一个会话），<strong>官方 plan 插件选择的传播方式就是按会话树继承</strong>。</li>
+        <li><strong>开关读不出来时按「开着」处理</strong>（fail-closed）：判不出开没开就按最严的一侧倒，否则限制会在出故障的那一刻静默消失。代价是被拒的工具会给出「开关读不出来」的理由，<code>/plan off</code> 可重置。</li>
+        <li><strong>不换工具清单，只拦执行</strong>：模型看到的工具清单不变，写操作在执行时被拒——清单进的是请求前缀里很靠前的位置，换集合会让那一轮之后的前缀（连同全部历史）全部作废。</li>
+        <li><strong><code>-cli</code> / <code>-server</code> 下同样有效</strong>：它不依赖审批者，因此没有人在场的模式里也能用它兜住写操作。</li>
+      </ul>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>开了 plan 连 <code>read_file</code> 都用不了？</strong><code>readOnlyTools</code> 没写（或写成了空数组）：白名单为空 = 一个都不许。补上名单再 <code>/reload</code>。</li>
+        <li><strong>工具无法自称只读吗？</strong>对。工具描述符里<strong>没有</strong>「是否只读」字段，谁能进名单完全由你说了算。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish-Plugins/README.md:677-714（plan 模式：三个命令、<code>readOnlyTools</code> 表、按会话存、子代理继承、fail-closed、不换清单只拦执行、<code>-cli</code> / <code>-server</code> 有效、装插件才有 <code>/plan</code>）、Jellyfish/docs/constraints.md:483-487（插件侧的模式实现要求：白名单为空即全禁、拒绝文案要点明配置键、告警只在因白名单为空而拒绝时发、开关放会话扩展条目、子代理不自动继承由插件决定）、Jellyfish/README.md:813-817（模式类授权由插件提供）</div>
+
+    <h2>路径闸门与 MCP 审批</h2>
+
+    <div class="feature">
+      <h3>tools 插件的 <code>pathPolicy</code>（要点回顾）</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          文件工具在<strong>允许的路径之外</strong>时会升级为人工审批或直接拒绝。粒度是「工具名 + 路径」——
+          否则「允许 <code>write_file</code>」就等于「允许往任何地方写」。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          详见 <a href="08-tools.html">08 内置工具速查</a>的 <code>pathPolicy</code> 一节（含完整 JSON 与五条口径）。
+          这里只强调与权限判定相关的三条：
+          <ul>
+            <li><strong>只有 tools 插件自己的几个文件工具受管</strong>：<code>read_file</code> / <code>list_dir</code> / <code>grep_files</code> 归读，
+              <code>write_file</code> / <code>edit_file</code> 归写；<code>ask_user</code> 不碰路径因此不受管。
+              闸门<strong>不认识别家的工具</strong>——<code>shell</code>、MCP 工具送到它面前时一律「无异议」。</li>
+            <li><strong>判据看真实位置</strong>：符号链接会先解开再比；<code>ask</code> 在没有审批界面的外壳里<strong>等于拒绝</strong>。</li>
+            <li><strong>它不是文件系统沙箱</strong>：管不了 <code>shell</code> 命令里出现的路径（那是命令策略的事），也管不了 MCP 工具。</li>
+          </ul>
+        </dd>
+      </dl>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong><code>pathPolicy</code> 配错了会不会让插件起不来？</strong>不会：只回退并告警，告警走 <code>ConfigWarningEvent</code>（TUI 上看得见）。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish-Plugins/README.md:124-162（<code>pathPolicy</code> 字段表与五条口径）、Jellyfish-Docs/guide/08-tools.html（<code>pathPolicy</code> 完整一节）</div>
+
+    <div class="feature">
+      <h3>MCP 工具的只读名单与写类审批</h3>
+      <dl>
+        <dt>是什么</dt>
+        <dd>
+          MCP server 提供的工具也过本机这套权限：<strong>只读与否只认你写的名单</strong>，
+          写类工具是否要人工审批由一个开关决定。
+        </dd>
+        <dt>怎么用</dt>
+        <dd>
+          写在 <code>jellyfish.json</code> 的 <code>plugins.configurations.jellyfish-plugin-mcp</code> 段，
+          改完 <code>/reload</code>。工具名带前缀：<code>mcp__&lt;server&gt;__&lt;tool&gt;</code>，
+          因此<strong>权限名单里也要带这个前缀</strong>。
+        </dd>
+      </dl>
+
+      <p><strong>配置</strong></p>
+      <div class="table-scroll field-table">
+        <table>
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>必填</th><th>默认值</th><th>含义</th><th>示例</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>servers[].readOnlyTools</td>
+              <td>字符串数组（工具名）</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>[]</code></td>
+              <td><strong>本插件审批策略</strong>用的只读名单（与 plan 插件的同名键<strong>无关</strong>）。<strong>只读只认你写的这一份</strong>——server 自填的 <code>readOnlyHint</code> 不再采纳；<strong>缺省一律按可写</strong></td>
+              <td><code>["read_file", "list_directory"]</code></td>
+            </tr>
+            <tr>
+              <td>askWriteTools</td>
+              <td>boolean</td>
+              <td><span class="tag optional">选填</span></td>
+              <td><code>true</code></td>
+              <td>写类工具是否要人工审批</td>
+              <td><code>false</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p><span class="tag hot">/reload 生效</span></p>
+
+      <p><strong>完整示例</strong></p>
+      <pre><code class="language-json">{
+  "plugins": {
+    "configurations": {
+      "jellyfish-plugin-mcp": {
+        "servers": [
+          {
+            "id": "filesystem",
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+            "env": { "SOME_TOKEN": "${MCP_TOKEN}" },
+            "callTimeoutSeconds": 60,
+            "readOnlyTools": ["read_file", "list_directory"]
+          }
+        ],
+        "askWriteTools": true,
+        "startupWaitSeconds": 5
+      }
+    }
+  }
+}</code></pre>
+
+      <p><strong>四条要记住的口径</strong></p>
+      <ul>
+        <li><strong>缺省一律按可写</strong>：不写 <code>readOnlyTools</code> 就等于所有 MCP 工具都算写类；<code>askWriteTools</code> 为 <code>true</code> 时每个都要审批。</li>
+        <li><strong>不采纳 server 自填的只读标记</strong>：这是「工具不能自称只读」这条原则在 MCP 上的落点。</li>
+        <li><strong>刷新期没有「免审批」空窗</strong>：一次 <code>tools/list</code> 就是一次整体替换，任何时刻「能调用的名字」都已经带着审批用的标记；两个 server 提供同名工具时<strong>按最严算</strong>。</li>
+        <li><strong>无人值守下写类工具实际不可用</strong>：<code>-cli</code> / <code>-server</code> 里 <code>ASK</code> 等于拒绝（与 <code>shell</code> 同理）。</li>
+      </ul>
+
+      <p><strong>常见问题</strong></p>
+      <ul>
+        <li><strong>把只读工具写进 plan 的 <code>readOnlyTools</code> 会影响 MCP 吗？</strong>不会，两者是同一名字的两处独立配置。</li>
+        <li><strong>MCP 工具的调用超时怎么配？</strong><code>servers[].callTimeoutSeconds</code>（缺省 <code>60</code>，<code>0</code> 表示不超时，上限 3600 秒），见 <a href="08-tools.html">08 页</a>。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish-Plugins/README.md:593-676（MCP：配置字段表、只读与审批、刷新期无空窗、同名按最严、无人值守下写类不可用）、Jellyfish-Plugins/README.md:677（plan 的 <code>readOnlyTools</code> 与 MCP 同名键无关）</div>
+
+    <h2>常见问题</h2>
+
+    <dl>
+      <dt>配了 <code>askTools</code>，工具调用却直接失败、连框都不弹？</dt>
+      <dd>看外壳。<code>-cli</code> 不挂审批者，需要审批的调用<strong>一律按拒绝处理</strong>；要在无人值守下跑，
+        就别把该工具放进 <code>askTools</code>，要人工确认就用 <code>-tui</code> 或 <code>-server</code>。</dd>
+
+      <dt>配了 <code>approvalTimeoutSeconds: 0</code> 之后，TUI 里点哪个会话都不动？</dt>
+      <dd>这是写 <code>0</code> 的已知代价：永不超时会在一条 <code>react</code> 线程上一直等，而线程池只有
+        <strong>8 条</strong>（= 并发顶层回合上限）。外壳退出或回合被取消仍会放开它。生产上更推荐给一个
+        合理的秒数（如 <code>300</code>），而不是不设上限。</dd>
+
+      <dt>把 <code>shell</code> 放进 <code>askTools</code> 之后连 <code>git status</code> 也要批准？</dt>
+      <dd>是的，而且这是刻意的最强姿态：核心策略的 <code>ASK</code> <strong>无法被插件的「无异议」降级</strong>。
+        想两头都要，就不要把 <code>shell</code> 放进 <code>askTools</code>，改用白名单 + 可信表。</dd>
+
+      <dt><code>-cli</code> 下 <code>ask_user</code> 会挂住吗？</dt>
+      <dd>不会。它<strong>立刻</strong>返回一条「当前外壳没有交互界面，无法把提问送达用户」，模型据此照自己的判断继续。
+        真要人回答就用 <code>-tui</code> 或 <code>-server</code>。</dd>
+
+      <dt>子代理能替我批准或替我回答吗？</dt>
+      <dd>不能。<strong>子代理回合里的提问当场被拒</strong>（判据是这次调用带着 run 标识），绝不进通道等待。
+        而子代理的<strong>审批</strong>落在它自己的会话上：Server 侧要用 <code>GET /approvals</code> 才看得到
+        （按主会话订阅的流看不到，那就只能等超时被拒）。</dd>
+
+      <dt>改了 agent 名字以后，旧会话里的工具全被拒了？</dt>
+      <dd>这是「绑了一个查不到的身份」的情况：内核返回<strong>全拦</strong>并发一条 <code>ConfigWarningEvent</code>。
+        把 <code>agentId</code> 改回来，或用 <code>/agent</code> 切到一个配置里存在的 agent。</dd>
+
+      <dt>怎么让我自己写的插件也不能偷偷放宽权限？</dt>
+      <dd>不用做什么——插件拦截返回值的类型里<strong>没有 <code>ALLOW</code></strong>，这是编译期就堵死的；
+        而且插件抛错或返回 <code>null</code> 一律按 <code>DENY</code> 处理。细节见 <a href="12-plugin-dev.html">12 从零开发一个插件</a>。</dd>
+    </dl>
+
+    <div class="src-block">Jellyfish/README.md:1094-1105（<code>-cli</code> 下工具被拒与 <code>ask_user</code> 的行为）、Jellyfish/docs/constraints.md:467-481（审批 fail-closed 与永不超时的代价）、Jellyfish/docs/constraints.md:507-512（子代理回合必须当场拒绝）、Jellyfish/docs/constraints.md:441-445（查不到身份即全拦）</div>
+
+    <div class="conclusion">
+      <h2>关键结论</h2>
+      <ol>
+        <li>权限是<strong>两道闸门</strong>：核心策略（<code>deniedTools</code> 是硬否定）→ 插件拦截（三态取最严、<code>DENY</code> 短路、抛错按 <code>DENY</code>），
+          最后 ASK 统一收口到审批通道。<strong>没有 <code>ALLOW</code> 这一态</strong>，所以插件永远只能收紧。</li>
+        <li>三段名单里 <code>deniedTools</code> 与 <code>askTools</code> 的结论<strong>都不能被插件放宽</strong>；
+          <code>allowedTools</code> 才是「允许」并仍受插件收紧；字段缺失 = 不限制，显式 <code>[]</code> = 全拦。</li>
+        <li><strong>审批的每一条失败出口都通向拒绝</strong>：无审批者、超时、溢出、通道关闭、中断一律拒绝；
+          <code>Esc</code> 是「拒绝<strong>并</strong>中断回合」。<code>-cli</code> 没有审批者，所以需要审批的调用在那里一律被拒。</li>
+        <li><code>permission.approvalTimeoutSeconds</code> 缺省 <code>120</code>；写 <code>0</code> 表示永不超时，
+          <strong>代价是那一条 react 线程一直卡住，而池子只有 8 条</strong>；负数回退 <code>120</code> 并告警，超过 <code>3600</code> 也告警。</li>
+        <li><code>ask_user</code> <strong>不是审批</strong>：选任何一项都不放行工具，超时/放弃都返回<strong>成功</strong>的结果让模型继续，
+          <code>Esc</code> 只是放弃作答。超时键 <code>ask.timeoutSeconds</code>（缺省 <code>120</code>）与审批<strong>刻意分开</strong>。</li>
+        <li><code>!命令</code> <strong>不进模型但照旧过权限与审批</strong>，结果以<strong>用户消息</strong>落进会话（不是 tool 消息），
+          依赖 <code>jellyfish-plugin-shell</code>；没有它，<code>!</code> 只是普通文本。</li>
+        <li><code>shell</code> 的六道判定是「分段 → 白名单 → 拒绝形状 → 可信表 → 重定向 / 命令替换 → 只读表」；
+          <strong>白名单只管准入、可信表才免审批</strong>，<code>commandPolicy.enabled=false</code> 会连重定向检查和「其余命令问人」一起关掉。
+          <strong>shell 没有沙箱</strong>，真正的边界是审批加白名单。</li>
+        <li>无人值守（<code>-cli</code> / <code>-server</code>）下 <strong>ASK 就是拒绝</strong>，免审批只剩「判为只读的命令」与 <code>trustedCommands</code> 两个口；
+          要兜住写操作就用 <strong>plan 模式</strong>（<code>readOnlyTools</code> 白名单，不写等于全禁）。</li>
+      </ol>
+    </div>
+
+    <div class="next-steps">
+      <h2>下一步阅读</h2>
+      <ul>
+        <li><a href="11-plugin-usage.html">11 安装与使用官方插件</a>——本页提到的 shell / plan / MCP / tools 都是官方插件，那里有安装步骤与每个插件的配置段全集。</li>
+        <li><a href="07-agents.html">07 agents.json 与工具权限</a>——三段名单怎么写、优先级怎么写进 <code>agents.json</code>、子代理为什么只看得到 <code>allowedTools</code>。</li>
+        <li><a href="15-troubleshooting.html">15 故障排查</a>——「工具全被拒」「审批框不弹」「<code>-cli</code> 下什么都跑不了」这些现象的三步定位。</li>
+      </ul>
+    </div>
+
+    <nav class="pager" aria-label="翻页">
+      <a class="prev" href="09-session.html"><span class="pager-dir">上一页</span>09 会话与上下文</a>
+      <a class="next" href="11-plugin-usage.html"><span class="pager-dir">下一页</span>11 安装与使用官方插件</a>
+    </nav>
+
+  </main>
+</div>
+
+<footer class="footer">
+  <div class="doc-meta">
+    Jellyfish 使用指南 · 本页依据：<code>Jellyfish/README.md</code>（参数与退出码 / 审批 / 提问 / 三段权限 / <code>permission</code> 与 <code>ask</code> 段 / Server 接口 / 常见问题）、
+    <code>Jellyfish/docs/constraints.md</code>（权限两层 / 插件拦截三态 / 审批 fail-closed / 插件侧模式实现要求 / 向用户提问 / 输入指令 / 命令域 / <code>ToolExecutor</code> 七步）、
+    <code>Jellyfish-Plugins/README.md</code>（shell 命令策略六道判定与字段表 / <code>pathPolicy</code> / MCP / plan / tools）。
+    示例中的密钥、token 一律以占位符表示；<code>【待确认】</code>表示该结论在仓库中未找到出处，请以实际代码为准。
+  </div>
+</footer>
+
+<script src="assets/app.js"></script>
+</body>
+</html>
