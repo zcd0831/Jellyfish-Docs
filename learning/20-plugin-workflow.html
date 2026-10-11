@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>20 workflow 插件 · Jellyfish 源码深度解析</title>
-<meta name="description" content="逐类拆解 jellyfish-plugin-workflow：声明式 spec 的数据模型、解析期校验与环检测、按依赖分层的调度与 when 语义、经 SubAgentPort 派生与聚合、台账与编排面板，以及它为什么必须住在内核之外。">
+<meta name="description" content="逐类拆解 jellyfish-plugin-workflow：声明式 spec 的数据模型、解析期校验与环检测、按依赖分层的调度与 when 语义、经 SubAgentPort 派生与聚合、台账与「链 + 汇合线」的编排面板，以及它为什么必须住在内核之外。">
 <link rel="stylesheet" href="assets/style.css">
 <!-- 代码高亮主题已内联进 assets/style.css：无需外部样式表，断网也能正确着色 -->
 </head>
@@ -87,12 +87,12 @@
       <h2>学习目标</h2>
       <ul>
         <li>说清 <code>task</code> 的缺口在哪，以及声明式 spec 为什么是补上它的合适形状；</li>
-        <li>列出本插件的 5 个协作者类与 4 个不可变值类型，说清各自的职责边界；</li>
+        <li>列出本插件的各个类（含面板排版用的那三个）与不可变值类型，说清各自的职责边界；</li>
         <li>拿到 spec 的完整字段模型（<code>steps</code> / <code>needs</code> / <code>when</code> / <code>aggregate</code>）与校验清单，知道环检测在哪一行做；</li>
         <li>解释「按依赖分层」的调度判据、<code>when</code> 的三个取值，以及一步失败后整条编排的走向；</li>
         <li>确认编排的「执行者」是谁：它复用内核的委派端口，还是自己起线程（源码依据，不靠推断）；</li>
         <li>说清上游结论如何被转交给下游、为什么只有直接 <code>needs</code>、为什么截断是刻意的；</li>
-        <li>理解台账与面板的分工、面板用哪个 UI 扩展点，以及「进程重启后这次编排会怎样」。</li>
+        <li>理解台账与面板的分工、面板怎么把步骤画成一张图、数字为什么能自己跳，以及「进程重启后这次编排会怎样」。</li>
       </ul>
     </section>
 
@@ -188,7 +188,7 @@ flowchart LR
       注释给的理由是「处理器一旦注册就可能被调用，依赖必须已经就绪」——注册不是配置，是立即可见的暴露。
     </p>
 
-    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowPlugin.java:35-51（类声明与 start：装配与三条注册）</div>
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowPlugin.java:37-57（类声明与 start：装配与三条注册）</div>
 
 <pre><code class="language-java">public final class WorkflowPlugin implements JellyfishPlugin {
 
@@ -198,13 +198,16 @@ flowchart LR
     @Override
     public void start(PluginContext context) {
         SubAgentPort port = context.delegations();
+        // 面板与台账共用同一个时钟：耗时文案（「已跑」「已 38s」）必须和记账时刻同源，
+        // 否则注入时钟的单测会在面板上算出「跑了 50 年」这种数字
+        LongSupplier clock = System::currentTimeMillis;
         // 先装配台账与引擎再注册：处理器一旦注册就可能被调用，依赖必须已经就绪
-        WorkflowTracker tracker = new WorkflowTracker(invalidator(context));
+        WorkflowTracker tracker = new WorkflowTracker(invalidator(context), clock);
         WorkflowEngine engine = new WorkflowEngine(port, tracker);
         context.handle(ToolCallRequest.class, WorkflowTool.NAME, WorkflowTool.descriptor(),
                 new WorkflowTool(engine));
         context.contribute(PromptContributionRequest.class, new WorkflowGuidance());
-        context.contribute(PanelContributionRequest.class, new WorkflowPanel(tracker));
+        context.contribute(PanelContributionRequest.class, new WorkflowPanel(tracker, clock));
         LOG.info("编排插件已启动: tool={}", WorkflowTool.NAME);
     }</code></pre>
 
@@ -216,8 +219,14 @@ flowchart LR
     </p>
 
     <p>
+      那个 <code>clock</code> 也值得看一眼：它被<strong>同时</strong>交给台账与面板，
+      于是「记账用哪一刻」「显示算到哪一刻」是同一个钟。这是耗时类文案能被逐字断言的前提——
+      测试注一个可控时钟进去，面板就会照着它算出「已跑 39s」，而不是去读真实的墙上时间。
+    </p>
+
+    <p>
       类注释把本插件描述成「只占两个扩展点」（
-      <code>Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowPlugin.java:16-21</code>），
+      <code>Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowPlugin.java:17-23</code>），
       而 <code>start()</code> 实际注册了三条——多出来的一条是面板贡献。
       它不算矛盾：前两条（工具、提示词）属于「模型看得见的能力」，面板属于界面侧的常驻展示，内核收集它们的时机完全不同。
     </p>
@@ -251,8 +260,8 @@ jellyfish.tags=workflow,orchestration,subagent</code></pre>
         <thead><tr><th>类</th><th>行数</th><th>职责</th><th>线程 / 可变性</th></tr></thead>
         <tbody>
           <tr>
-            <td><code>WorkflowPlugin</code></td><td>75</td>
-            <td>入口：拿端口、造台账与引擎、注册三条贡献、把台账变化变成失效事件</td>
+            <td><code>WorkflowPlugin</code></td><td>80</td>
+            <td>入口：拿端口与时钟、造台账与引擎、注册三条贡献、把台账变化变成失效事件</td>
             <td>只在 <code>start()</code> 里跑一次</td>
           </tr>
           <tr>
@@ -271,14 +280,31 @@ jellyfish.tags=workflow,orchestration,subagent</code></pre>
             <td>无状态（除端口与台账引用）</td>
           </tr>
           <tr>
-            <td><code>WorkflowTracker</code></td><td>240</td>
-            <td>正在跑的编排的台账：引擎写、面板读；状态变化时回调 <code>onChange</code></td>
+            <td><code>WorkflowTracker</code></td><td>308</td>
+            <td>正在跑的编排的台账：引擎写、面板读；记下依赖/层号/次序与每步起止时刻；状态变化时回调 <code>onChange</code></td>
             <td>全部状态由自身锁保护，对外只给不可变快照</td>
           </tr>
           <tr>
-            <td><code>WorkflowPanel</code></td><td>199</td>
-            <td>面板处理器：读一次台账快照、拼几行文本、落 <code>UiRegion.TOP</code></td>
+            <td><code>WorkflowPanel</code></td><td>155</td>
+            <td>面板处理器：读一次台账快照、拼标题行 + 图、落 <code>UiRegion.TOP</code></td>
             <td>快且只读；不发失效事件</td>
+          </tr>
+          <tr>
+            <td><code>WorkflowLayout</code></td><td>921</td>
+            <td>把步骤排成「链 + 汇合线」：链压一行、多上游汇合、分叉下引、行数不够先撤已完成的层；
+                算不出图形时退化成清单</td>
+            <td>无状态、纯函数（给定快照与行数，输出的行完全确定）</td>
+          </tr>
+          <tr>
+            <td><code>WorkflowText</code></td><td>199</td>
+            <td>显示宽度（中日韩算两列、框线算一列）与耗时文案（<code>38s</code> / <code>1m02s</code> / <code>2h05m</code>）；
+                连线要对齐、名字要收进预算，都靠它</td>
+            <td>无状态、纯函数</td>
+          </tr>
+          <tr>
+            <td><code>WorkflowLayers</code></td><td>72</td>
+            <td>静态分层：按最长路径给每步算层号，同层即「可以并行」；真有环时夹住层号而不抛错</td>
+            <td>无状态、纯函数</td>
           </tr>
           <tr>
             <td><code>WorkflowGuidance</code></td><td>51</td>
@@ -326,8 +352,9 @@ jellyfish.tags=workflow,orchestration,subagent</code></pre>
             <td>不可变</td>
           </tr>
           <tr>
-            <td><code>WorkflowProgress</code></td><td>172</td>
-            <td>面板读的只读快照（含嵌套的 <code>Step</code> 值类型）；内含「已了结步数」的判据</td>
+            <td><code>WorkflowProgress</code></td><td>293</td>
+            <td>面板读的只读快照（含嵌套的 <code>Step</code> 值类型）：带依赖、静态层号、声明次序与每步起止时刻；
+                内含「已了结步数」与「几个在跑」的判据</td>
             <td>不可变快照</td>
           </tr>
         </tbody>
@@ -335,8 +362,8 @@ jellyfish.tags=workflow,orchestration,subagent</code></pre>
     </div>
 
     <p>
-      主源码共 <strong>16 个文件、2571 行</strong>；测试 7 个类、2189 行。
-      两类文件的分工很干净：能变的只有台账（<code>WorkflowTracker</code> 里那两个 <code>Map</code>），
+      主源码共 <strong>19 个文件、3913 行</strong>；测试 10 个类、2774 行。
+      两类文件的分工很干净：能变的只有台账（<code>WorkflowTracker</code> 里那张 <code>Map</code> 与它护着的每步状态），
       其余全是不可变值类型或纯函数——这也是「引擎跑在工具线程、面板跑在渲染线程」能不出问题的前提。
     </p>
 
@@ -956,38 +983,56 @@ stateDiagram-v2
       <code>WorkflowTracker</code> 是它们之间唯一的交汇点：引擎不关心有没有人看，面板也不需要知道引擎在哪一步。
     </p>
 
-    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowTracker.java:45-64（started：先登记再干活）</div>
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowTracker.java:81-94（started：先登记，顺手把层号、依赖与顺序装进快照）</div>
 
-<pre><code class="language-java">    /**
-     * 登记一次编排。
-     * <p>
-     * 在派生任何子代理之前调用，因此面板从一开始就能显示出「还有哪些步骤没跑」——
-     * 只显示「已跑完的」会让它看起来像在倒退。
-     *
-     * @param sessionId 所属会话，不可为空白
-     * @param spec      生效的 spec，不可为 {@code null}
-     * @return 编排标识，用于后续更新与移除
-     */
-    synchronized String started(String sessionId, WorkflowSpec spec) {
+<pre><code class="language-java">    synchronized String started(String sessionId, WorkflowSpec spec) {
         String workflowId = UUID.randomUUID().toString();
+        Map&lt;String, Integer&gt; layers = WorkflowLayers.of(spec.getSteps());
         List&lt;Step&gt; steps = new ArrayList&lt;Step&gt;();
+        int order = 0;
         for (WorkflowStep step : spec.getSteps()) {
-            steps.add(new Step(step.getId(), step.getName(), step.getAgent(), StepState.PENDING));
+            Integer layer = layers.get(step.getId());
+            steps.add(new Step(step.getId(), step.getName(), step.getAgent(), step.getNeeds(),
+                    layer == null ? 1 : layer.intValue(), order++, StepState.PENDING, 0L, 0L));
         }
-        entries.put(workflowId, new Entry(sessionId, spec.displayName(), steps));
+        entries.put(workflowId, new Entry(sessionId, spec.displayName(), steps, clock.getAsLong()));
         notifyChanged();
         return workflowId;
     }</code></pre>
 
     <p>
-      台账对外只有五个写入口和一个读入口：<code>started</code> / <code>stepStarted</code> /
-      <code>stepFinished</code> / <code>summarising</code> / <code>finished</code>，加上给面板的
-      <code>snapshot(sessionId)</code>（<code>WorkflowTracker.java:55-143</code>）。
-      每次状态变化都会在锁内回调一次 <code>onChange</code>（<code>WorkflowTracker.java:164-166</code>），
-      而这个回调只做一件事：发一条 <code>UiInvalidatedEvent</code>。
+      留意快照里多了三样东西：<strong>依赖</strong>（<code>needs</code>）、<strong>静态层号</strong>与
+      <strong>声明次序</strong>，外加两个时刻（<code>startedAt</code> / <code>settledAt</code>，登记时是 0）。
+      这不是「顺手多存点」，而是面板要画图所必需的一份数据：
+    </p>
+    <ul>
+      <li><code>needs</code> 与层号回答<strong>「谁等谁、哪几步会一起跑」</strong>——光有「名字 + 状态」只画得出一列清单；</li>
+      <li>次序让<strong>同一层的步骤按 spec 里写下的顺序</strong>画，面板的行序不随机；</li>
+      <li>两个时刻回答<strong>「它还在动吗」</strong>：面板上「已跑 39s」「这一步已 38s」都由它们算出来（见本节末尾的「会自己跳的数字」）。</li>
+    </ul>
+    <p>
+      层号来自 <code>WorkflowLayers.of</code>，判据是<strong>最长路径</strong>
+      （<code>layer(step) = 1 + max(layer(needs))</code>）——与引擎运行期「依赖都已决才能开跑」
+      是同一套口径，因此「同一层 = 可以并行」这句话在面板上是<strong>静态可见</strong>的，
+      不必等它跑起来才知道。
     </p>
 
-    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowPlugin.java:55-73（invalidator：状态变化 → 失效事件，失败只记日志）</div>
+    <p>
+      台账对外只有五个写入口和一个读入口：<code>started</code> / <code>stepStarted</code> /
+      <code>stepFinished</code> / <code>summarising</code> / <code>finished</code>，加上给面板的
+      <code>snapshot(sessionId)</code>（<code>WorkflowTracker.java:158-190</code>）。
+      每次状态变化都会在锁内回调一次 <code>onChange</code>（<code>WorkflowTracker.java:197-199</code>），
+      而这个回调只做一件事：发一条 <code>UiInvalidatedEvent</code>。
+    </p>
+    <p>
+      写入口各自负责记哪一刻，是这块设计里最容易被忽略、却直接决定面板能不能「动起来」的一条：
+      <code>stepStarted</code> 记开始时刻、<code>stepFinished</code> 记终态时刻、
+      <code>summarising</code> 记汇总的开始时刻、<code>started</code> 记整条编排的开始时刻
+      （<code>WorkflowTracker.java:81-93、102-149</code>）。<strong>面板只算差值，不自己看表</strong>——
+      时间从哪来只有一处，注入时钟的单测也因此能逐字断言「已跑 39s」这种文案。
+    </p>
+
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowPlugin.java:71-80（invalidator：状态变化 → 失效事件，失败只记日志）</div>
 
 <pre><code class="language-java">     * <b>为什么必须发</b>：外壳只在缓存失效时收集面板，而「某一步跑完了」发生在回合内部的工具调用里，
      * 外壳自己看不到。没有这条通知，面板会在编排结束后才第一次出现——那时它已经空了。
@@ -1018,39 +1063,134 @@ stateDiagram-v2
       （<code>UiContributions.java:275-296</code>）。<code>WorkflowPanel</code> 每次被问到就读一次快照、拼几行文本。
     </p>
 
-    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowPanel.java:78-97（handle：没有在跑的编排就返回空贡献）</div>
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowPanel.java:77-106（handle：没有在跑的编排就返回空贡献）</div>
 
 <pre><code class="language-java">    public PanelContribution handle(PanelContributionRequest request) {
         List&lt;WorkflowProgress&gt; active = tracker.snapshot(request.getSessionId());
         if (active.isEmpty()) {
             return PanelContribution.empty();
         }
-        // 留一行给「还有 N 步未显示」：先画满再把话说不完，比画到一半被外壳截断更好读
-        int limit = MAX_LINES - 1;
         List&lt;UiLine&gt; lines = new ArrayList&lt;UiLine&gt;();
-        int skipped = 0;
+        int budget = MAX_LINES;
+        int shown = 0;
         for (WorkflowProgress progress : active) {
-            if (!lines.isEmpty()) {
-                lines.add(UiLine.EMPTY);
+            int left = active.size() - shown;
+            if (budget &lt; MIN_WORKFLOW_LINES) {
+                break;
             }
-            skipped += appendWorkflow(lines, progress, limit);
+            // 给后面还没画的编排留出下限，免得第一个编排把行吃光
+            int share = Math.max(MIN_WORKFLOW_LINES, budget - (left - 1) * MIN_WORKFLOW_LINES);
+            List&lt;UiLine&gt; block = blockOf(progress, share - 1);
+            if (shown &gt; 0 &amp;&amp; budget - block.size() &gt;= 1) {
+                lines.add(UiLine.EMPTY);
+                budget--;
+            }
+            lines.addAll(block);
+            budget -= block.size();
+            shown++;
         }
-        if (skipped &gt; 0) {
-            lines.add(UiLine.of(UiSegment.of("…另有 " + skipped + " 步未显示", UiEmphasis.DIM)));
+        if (shown &lt; active.size()) {
+            lines.add(UiLine.of(UiSegment.of(WorkflowText.ELLIPSIS + "另有 " + (active.size() - shown)
+                    + " 个编排", UiEmphasis.DIM)));
         }
         return PanelContribution.of(TITLE, lines, UiRegion.TOP);
     }</code></pre>
+
+    <p>
+      <code>handle</code> 自己只做三件事：取快照、算每块编排分到几行、拼标题行。
+      真正把步骤画成那张图的是 <code>WorkflowLayout</code>，
+      <code>blockOf</code>（<code>WorkflowPanel.java:115-129</code>）负责把「标题行 + 图 + 汇总行」拼起来。
+    </p>
+
+    <h3>8.1 面板画的是什么：链 + 汇合线</h3>
+
+    <p>
+      这块面板历史上是一列平铺的清单（<code>[x] 名字（agent）</code>），问题是<strong>看不出并行</strong>：
+      三步并行与三步串行在清单上长得一模一样。现在按静态层号画成一张图，规则只有三条：
+    </p>
+    <ul>
+      <li><strong>链压一行</strong>：某步只有一个上游、而那个上游正好是它所在行的行尾，就接在同一行后面；</li>
+      <li><strong>汇合</strong>：某步有多个上游时，它画在<strong>第一个上游</strong>那一行的右端，
+      其余上游各自在自己行尾用 <code>───┤</code> / <code>───┘</code> 拐上去；</li>
+      <li><strong>分叉</strong>：某步有多个下游时，第一个接在行内，其余从同一列往下引（下行以 <code>└──></code> 开头）。</li>
+    </ul>
+
+<pre><code class="language-text">调研并写方案 · 1/3 步 · 已跑 39s · 1 在跑
+L1 [x] 调研 A（scout） ────────┬──> L2 [ ] 写方案（planner）
+L1 [~] 调研 B（scout） 已 38s ─┘</code></pre>
+
+    <p>
+      两处细节值得注意。第一，<strong>连线的列位置由插件算</strong>：<code>┬</code> 与 <code>┘</code> 必须落在同一列，
+      否则这张图读不懂——而列宽只有外壳知道，插件拿不到终端尺寸，因此它在
+      <code>WorkflowText</code> 里自带一份显示宽度计算（中日韩算两列、框线字符算一列，
+      与外壳的 <code>DisplayWidth</code> 同一口径）。
+      <strong>这是一次对「插件不做界面计算」的有意偏离</strong>，理由与
+      <code>jellyfish-plugin-resmon</code> 的 <code>ResmonFormat</code> 相同：插件不许用宽度做<em>对齐</em>，
+      但把自己内容<em>限制在预算内</em>是它自己的责任——没有尺度，一个中文名字就能把整行顶到折行，
+      而<strong>折行会让图形断开</strong>，还额外吃掉一行预算。
+    </p>
+
+    <p>
+      第二，<strong>算不出就退化成清单，而不是画歪</strong>：一行上要出现两个连线字形（同一行既有分叉又有汇合）、
+      竖线要穿过一行比它更宽的内容、汇合点落在行首（它的左臂没地方去）时，整条编排改用每步一行的清单，
+      行尾用 <code>&lt;- 上游</code> 标出依赖（<code>WorkflowLayout.java:387-400</code>）。
+      宁可少画一张图，也不要给一张会让人读错的图——这条取舍写在类的注释里
+      （<code>WorkflowLayout.java:42-45</code>）。
+    </p>
+
+    <h3>8.2 行数预算：8 行，先撤已完成的层</h3>
 
     <p>
       面板用了哪些 UI 扩展点，可以说得很具体：贡献类型是
       <code>PanelContributionRequest → PanelContribution</code>，落位是 <code>UiRegion.TOP</code>
       （<code>UiRegion</code> 只有 <code>DOCK</code> 与 <code>TOP</code> 两个取值，
       <code>Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/ui/UiRegion.java:19-28</code>），
-      标题常量是「编排」，行数上限 <code>MAX_LINES = 12</code>
-      （<code>WorkflowPanel.java:46</code>、<code>49</code>）。
-      插件注释给的理由是：停靠区里已经排了内核那块「子代理」面板，而一次编排<em>就是</em>批量派子代理——
-      两块面板恰好在同一时刻都要看，同区域等于永远只能看见一个；上方是全宽，顺带解决了纵向栏 18 列宽导致的折行
-      （<code>WorkflowPanel.java:21-25</code>，注释同时说明这只是<strong>软建议</strong>，外壳可以忽略）。
+      标题常量是「编排」，<strong>行数上限 <code>MAX_LINES = 8</code></strong>
+      （<code>WorkflowPanel.java:46</code>、<code>54</code>）。
+    </p>
+    <p>
+      <strong>8 这个数是抄外壳的</strong>：外壳给 <code>TOP</code> 区域的内容行上限是
+      <code>ChatLayout.PANEL_MAX_ROWS = 8</code>（<code>Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/ChatLayout.java:68</code>，
+      经 <code>ChatLayout.panelRows</code> 与 <code>ChatShell.panelElement</code> 施加）。
+      两边口径不一致时，插件精心折叠出来的「…另有 N 步未显示」<strong>永远轮不到触发</strong>——
+      先被外壳换成一句通用的「… 还有 N 行」。这是「插件自己先收一道，不依赖外壳兜底」的一个反例：
+      可自收的<em>方式</em>由插件定，<em>数额</em>必须与外壳对齐。
+    </p>
+    <p>
+      放不下时的收口顺序是有讲究的：<strong>先撤掉「已完成的层」</strong>（该层全部成功或跳过），
+      把行让给正在跑与还没跑的；撤掉时下游那一行的行首补 <code>… ───></code>，
+      说明「它是从上面接下来的」，而不是编排的起点。<strong>失败不在可撤之列</strong>——
+      失败必须一直看得见，那正是要看面板的时刻。连已完成的层都撤完了还不够，才截断并在末行如实报出
+      「…另有 N 步未显示」（<code>WorkflowLayout.java:115-141</code>、<code>316-345</code>）。
+    </p>
+    <p>
+      插件注释给 TOP 的理由是：停靠区里已经排了内核那块「子代理」面板，而一次编排<em>就是</em>批量派子代理——
+      两块面板恰好在同一时刻都要看，同区域等于永远只能看见一个；上方是全宽，连线也不会因为纵向栏只有 18 列而折行
+      （<code>WorkflowPanel.java:22-25</code>，注释同时说明这只是<strong>软建议</strong>，外壳可以忽略）。
+    </p>
+
+    <h3>8.3 会自己跳的数字</h3>
+
+    <p>
+      编排最长的一段是「什么都不输出」的沉默期（几个子代理各自在调模型）。这段时间里，
+      <strong>用户确认「它还在动」的唯一依据就是会变的数字</strong>：标题行的「已跑 39s · 1 在跑」，
+      以及在跑那一步自己的「已 38s」。
+    </p>
+    <p>
+      关键在于这套东西<strong>不需要插件起线程</strong>：外壳在回合进行中
+      <strong>每秒主动让插件内容失效一次</strong>
+      （<code>Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiApp.java:300</code> 的
+      <code>LIVE_REFRESH_MILLIS = 1000L</code>，在 <code>render()</code> 里置位），
+      于是「面板内容里带有时间」就等于「它会自己跳」。
+      内核那块「子代理」面板的「已运行 Ns」用的是同一条路
+      （<code>Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/subagent/SubAgentPanel.java:133-152</code>）。
+      插件要做的只有一件事：<strong>把时刻记下来</strong>（见本节开头），面板只算差值。
+    </p>
+    <p>
+      耗时文案是三档：一分钟以内说秒（<code>38s</code>）、一小时以内说分秒（<code>1m02s</code>）、
+      再长说时分（<code>2h05m</code>）（<code>WorkflowText.java:117-126</code>）。
+      <strong>只有正在跑的那一步带耗时</strong>：已结束的不需要再证明自己跑过，未开始的没有可说；
+      真正回答「卡没卡」的是标题行上的整条编排墙钟。
     </p>
 
     <p>
@@ -1075,8 +1215,8 @@ stateDiagram-v2
     <p>
       「失败与跳过也算已了结」这条常被忽略，<code>WorkflowProgress.settledCount()</code> 的注释专门解释了它：
       它们不会再跑第二次，因此进度条该往前走——否则「3 步跑了 2 步、其中 1 步失败」会显示成 1/3，看起来像卡住了；
-      失败这件事由标题行的警示档位与步骤标记表达，不靠进度数字（<code>WorkflowProgress.java:69-86</code>、
-      <code>WorkflowPanel.java:108-111</code>）。
+      失败这件事由标题行的警示档位与步骤标记表达，不靠进度数字（<code>WorkflowProgress.java:111-150</code>、
+      <code>WorkflowPanel.java:141-155</code>）。
     </p>
 
     <div class="callout pitfall">
@@ -1178,7 +1318,7 @@ stateDiagram-v2
     <p>
       这一点值得写明确，因为它与「编排」这个名字给人的预期相反：<strong>本插件不注册任何命令</strong>。
       <code>start()</code> 的三条注册里没有 <code>CommandContributionRequest</code>
-      （<code>Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowPlugin.java:46-49</code>），
+      （<code>Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowPlugin.java:51-54</code>），
       <code>src/main/resources/</code> 下也只有 <code>plugin.properties</code> 一个文件——
       <strong><code>/workflow</code> 这样的命令不存在</strong>。编排的入口只有模型主动调用工具，
       而工具调用的准入、审批、回灌走的是内核既有的那条路（见 <a href="07-tools-io.html">07 页</a>、
@@ -1187,7 +1327,7 @@ stateDiagram-v2
 
     <p>
       配置项同样没有，而且是有意为之：类注释写着「本插件没有配置项：spec 的形状是模型与插件之间的契约，不是部署参数」
-      （<code>WorkflowPlugin.java:31</code>）。<code>start()</code> 里也从不读 <code>context.configuration()</code>，
+      （<code>WorkflowPlugin.java:33</code>）。<code>start()</code> 里也从不读 <code>context.configuration()</code>，
       而是把「一次编排能多大」写成源码常量 <code>MAX_STEPS = 12</code>。
       需要调整规模时，改的是<strong>内核侧</strong>的 <code>subAgent.maxSpawnsPerTurn</code>（额度），
       而不是插件配置——因为「本回合还能派几个」这件事只有内核知道。
@@ -1292,7 +1432,7 @@ stateDiagram-v2
             <td>与内核的分工</td>
             <td>内核只出原语（委派端口 + 工具/提示词/面板扩展点），spec 的形状与聚合方式全在插件里</td>
             <td>插件缺席时 <code>task</code> 薄工具照旧可用，这正是「卸载即回退」；
-                而编排的表达形式演化时不必动内核的发布节奏（<code>WorkflowPlugin.java:27-29</code>）</td>
+                而编排的表达形式演化时不必动内核的发布节奏（<code>WorkflowPlugin.java:29-33</code>）</td>
           </tr>
         </tbody>
       </table>
@@ -1329,11 +1469,17 @@ stateDiagram-v2
     <div class="callout pitfall">
       <span class="callout-title">坑点：面板的「失效通知」漏了，面板会晚到且已经空了</span>
       <p>
-        <strong>现象</strong>：编排期间界面上什么都没有，跑完之后才闪出一个空面板（甚至不出现）。
+        <strong>现象</strong>：整条编排期间面板始终不出现，直到跑完之后才闪一下（那时它已经空了）。
         <strong>根因</strong>：外壳只在缓存失效时收集面板，而「某一步跑完了」发生在回合内部的工具调用里，外壳自己看不到。
         <strong>规避</strong>：任何改变面板内容的写操作都要回调一次失效通知——本项目里
         <code>WorkflowTracker</code> 的每个写方法都在锁内调 <code>notifyChanged()</code>，
         由插件把它变成 <code>UiInvalidatedEvent</code>。漏一个写点，那一类状态变化就永远看不出来。
+      </p>
+      <p>
+        <strong>别把它和「数字会自己跳」混为一谈</strong>：外壳在回合进行中每秒会让插件内容失效一次
+        （<code>TuiApp.java:300</code> 的 <code>LIVE_REFRESH_MILLIS</code>），于是面板上的「已跑 39s」会自己走。
+        那条机制只对<em>已经在显示</em>的面板生效——它让内容变新，不能让一块从没出现过的面板出现。
+        两条路径都要有，面板才既出现、又活着。
       </p>
     </div>
 
@@ -1435,7 +1581,7 @@ stateDiagram-v2
         <li>
           <strong>可观测靠三个站点凑齐</strong>：<code>WorkflowTool</code> 的首行结论与元数据（模型可见）、
           <code>ToolOutputSink</code> 的单行进度（工具行可见）、<code>WorkflowPanel</code> 落 <code>UiRegion.TOP</code> 的常驻面板
-          （人可见，且靠 <code>UiInvalidatedEvent</code> 才能及时刷新）。
+          （人可见，靠 <code>UiInvalidatedEvent</code> 才能及时出现，靠外壳每秒的失效让面板上的耗时自己跳）。
         </li>
       </ol>
     </div>
@@ -1451,7 +1597,8 @@ stateDiagram-v2
 <footer class="footer">
   Jellyfish 源码深度解析 · 本页源码依据：<code>WorkflowPlugin.java</code>、<code>WorkflowTool.java</code>、
   <code>WorkflowSpecParser.java</code>、<code>WorkflowEngine.java</code>、<code>WorkflowTracker.java</code>、
-  <code>WorkflowPanel.java</code>、<code>WorkflowGuidance.java</code>、<code>SpecValues.java</code>、
+  <code>WorkflowPanel.java</code>、<code>WorkflowLayout.java</code>、<code>WorkflowText.java</code>、
+  <code>WorkflowLayers.java</code>、<code>WorkflowGuidance.java</code>、<code>SpecValues.java</code>、
   <code>StepCondition.java</code>、<code>AggregateMode.java</code>、<code>StepState.java</code>、
   <code>WorkflowSpec.java</code>、<code>WorkflowStep.java</code>、<code>StepOutcome.java</code>、
   <code>WorkflowRun.java</code>、<code>WorkflowProgress.java</code>、<code>plugin.properties</code>、
@@ -1461,8 +1608,10 @@ stateDiagram-v2
   <code>PluginContext.java</code>、<code>ToolCallRequest.java</code>、<code>ToolMetadata.java</code>、
   <code>PromptContribution.java</code>、<code>UiRegion.java</code>、<code>UiInvalidatedEvent.java</code>、
   <code>SubAgentSettings.java</code>、<code>ReactSettings.java</code>、<code>UiContributions.java</code>、
+  <code>ChatLayout.java</code>、<code>ChatShell.java</code>、<code>TuiApp.java</code>、<code>SubAgentPanel.java</code>、
   <code>WorkflowEngineTest.java</code>、<code>WorkflowSpecParserTest.java</code>、<code>WorkflowEndToEndTest.java</code>、
-  <code>WorkflowPanelTest.java</code>、<code>WorkflowTrackerTest.java</code>、<code>WorkflowToolTest.java</code>、
+  <code>WorkflowPanelTest.java</code>、<code>WorkflowTrackerTest.java</code>、<code>WorkflowLayoutTest.java</code>、
+  <code>WorkflowTextTest.java</code>、<code>WorkflowLayersTest.java</code>、<code>WorkflowToolTest.java</code>、
   <code>WorkflowPluginLoadingTest.java</code>（Jellyfish-Plugins）。
 </footer>
 

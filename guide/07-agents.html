@@ -954,7 +954,7 @@ java -jar /path/to/jellyfish-cli-0.1.1.jar -cli --agent coder -p "帮我看看�
       （见 <a href="08-tools.html">08 内置工具速查</a>的 workflow 一节）。
     </p>
 
-    <div class="src-block">Jellyfish/README.md:695-727（agent 四字段与示例）、Jellyfish/README.md:429-462（委派示例与隔离规则）、Jellyfish-Plugins/README.md:557-602（编排 spec 里的 `agent` / `needs` 用法）</div>
+    <div class="src-block">Jellyfish/README.md:695-727（agent 四字段与示例）、Jellyfish/README.md:429-462（委派示例与隔离规则）、Jellyfish-Plugins/README.md:557-621（编排 spec 里的 `agent` / `needs` 用法）</div>
 
     <h2>常见问题</h2>
 
@@ -978,7 +978,7 @@ java -jar /path/to/jellyfish-cli-0.1.1.jar -cli --agent coder -p "帮我看看�
       <dd>只派一个子代理做一件事用内核自带的 <code>task</code>；「几件事可以同时做、再把结果合起来」用 <code>workflow</code> 插件的 spec。两者在内核里走同一条委派路径，并发、深度、预算、取消口径完全一致。</dd>
     </dl>
 
-    <div class="src-block">Jellyfish/README.md:751-765（默认 agent 的绑定规则）、Jellyfish/README.md:728-744（三段语义）、Jellyfish/README.md:918-946（`subAgent` 生效方式）、Jellyfish-Plugins/README.md:557-602（workflow 与 task 的分工）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/AgentPromptLoader.java:83-88 与 Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/prompt/PromptAssembler.java:478-483、820-833（`{agentId}.md` 无长度上限、原样进 system prompt、裁剪不碰它）</div>
+    <div class="src-block">Jellyfish/README.md:751-765（默认 agent 的绑定规则）、Jellyfish/README.md:728-744（三段语义）、Jellyfish/README.md:918-946（`subAgent` 生效方式）、Jellyfish-Plugins/README.md:557-621（workflow 与 task 的分工）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/AgentPromptLoader.java:83-88 与 Jellyfish/jellyfish-core/src/main/java/zcd/jellyfish/core/prompt/PromptAssembler.java:478-483、820-833（`{agentId}.md` 无长度上限、原样进 system prompt、裁剪不碰它）</div>
 
     <div class="conclusion">
       <h2>关键结论</h2>

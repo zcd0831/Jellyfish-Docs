@@ -228,7 +228,7 @@ flowchart LR
       </p>
     </div>
 
-    <div class="src-block">Jellyfish-Plugins/README.md:48-66（插件一览：每个插件提供什么工具）、Jellyfish-Plugins/README.md:69-123（tools 插件六个工具）、Jellyfish-Plugins/README.md:163-204（shell）、Jellyfish-Plugins/README.md:276-324（todo）、Jellyfish-Plugins/README.md:517-556（skills）、Jellyfish-Plugins/README.md:557-602（workflow）、Jellyfish-Plugins/README.md:603-686（MCP）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/ToolDescriptor.java（「这里没有『是否只读』字段」）、Jellyfish/README.md:463-486（插件装载：新增 / 删除只在启动期确定）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:48-66（插件一览：每个插件提供什么工具）、Jellyfish-Plugins/README.md:69-123（tools 插件六个工具）、Jellyfish-Plugins/README.md:163-204（shell）、Jellyfish-Plugins/README.md:276-324（todo）、Jellyfish-Plugins/README.md:517-556（skills）、Jellyfish-Plugins/README.md:557-621（workflow）、Jellyfish-Plugins/README.md:622-705（MCP）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/ToolDescriptor.java（「这里没有『是否只读』字段」）、Jellyfish/README.md:463-486（插件装载：新增 / 删除只在启动期确定）</div>
 
     <h2>内核自带：<code>task</code></h2>
 
@@ -915,7 +915,7 @@ description: 处理 PDF 时使用：拆分、合并、提取文本
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish-Plugins/README.md:517-556（skills：目录约定、`SKILL.md` 头部字段、`root` / `maxSkills` / `maxDescriptionChars` / `maxBodyBytes`、`skill` 只读、`/skills`）、Jellyfish-Plugins/README.md:687-724（plan 白名单示例含 `skill`）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:517-556（skills：目录约定、`SKILL.md` 头部字段、`root` / `maxSkills` / `maxDescriptionChars` / `maxBodyBytes`、`skill` 只读、`/skills`）、Jellyfish-Plugins/README.md:706-743（plan 白名单示例含 `skill`）</div>
 
     <h2>workflow 插件：<code>workflow</code></h2>
 
@@ -942,7 +942,7 @@ description: 处理 PDF 时使用：拆分、合并、提取文本
           </thead>
           <tbody>
             <tr><td>spec</td><td>object</td><td><span class="tag required">必填</span></td><td>—</td><td>编排定义</td><td><code>{ "spec": { "steps": [ … ] } }</code></td></tr>
-            <tr><td>spec.name</td><td>string</td><td><span class="tag optional">选填</span></td><td>面板退回显示 <code>id</code></td><td>人类可读名字，<strong>只用于编排面板展示</strong>，不进任何机器可读的位置</td><td><code>"调研并写方案"</code></td></tr>
+            <tr><td>spec.name</td><td>string</td><td><span class="tag optional">选填</span></td><td>面板退回显示 <code>id</code></td><td>人类可读名字，<strong>只用于编排面板展示</strong>，不进任何机器可读的位置；面板上按显示宽度截到 20 列（中日韩算两列）</td><td><code>"调研并写方案"</code></td></tr>
             <tr><td>spec.steps</td><td>array&lt;object&gt;</td><td><span class="tag required">必填</span></td><td>—</td><td>步骤列表，<strong>最多 12 步</strong></td><td><code>[ { "id": "probe-a", … } ]</code></td></tr>
             <tr><td>spec.steps[].id</td><td>string</td><td><span class="tag required">必填</span></td><td>—</td><td>被 <code>needs</code> 引用的键</td><td><code>"probe-a"</code></td></tr>
             <tr><td>spec.steps[].name</td><td>string</td><td><span class="tag optional">选填</span></td><td>面板退回显示 <code>id</code></td><td>人类可读名字，只用于面板展示；超过 20 字会被截短</td><td><code>"调研 A 方向"</code></td></tr>
@@ -984,8 +984,25 @@ description: 处理 PDF 时使用：拆分、合并、提取文本
       </p>
 
       <p>
-        <strong>跑的时候看得见</strong>：消息区上方有一块「编排」面板，逐行显示每一步的状态
-        （<code>[ ]</code> 待执行 / <code>[~]</code> 进行中 / <code>[x]</code> 完成 / <code>[!]</code> 失败 / <code>[-]</code> 跳过）与「已完成 X/Y 步」。
+        <strong>跑的时候看得见</strong>：消息区上方有一块「编排」面板。标题行给「进度（已了结/总 步数）· 整条编排已跑多久 · 几个在跑」，
+        正文把步骤画成一张图：<strong>链压一行</strong>（<code>L1 [x] 调研 A（scout） ───> L2 [~] 写方案（planner）</code>）、
+        <strong>汇合</strong>（多上游用 <code>┬</code>/<code>┤</code>/<code>┘</code> 的竖线汇到第一个上游那一行）、
+        <strong>分叉</strong>（第一个下游接在行内，其余从同一列往下引）。<strong>同一层 = 可以并行</strong>，一眼能数出哪几步在一起跑。
+      </p>
+      <pre><code class="language-text">调研并写方案 · 1/3 步 · 已跑 39s · 1 在跑
+L1 [x] 调研 A（scout） ────────┬──> L2 [ ] 写方案（planner）
+L1 [~] 调研 B（scout） 已 38s ─┘</code></pre>
+      <ul>
+        <li><strong>耗时只标在正在跑的那一步上</strong>（<code>已 38s</code>），整条编排的墙钟放在标题行。
+          这些数字会自己跳（外壳每秒让插件内容失效一次），因此那段什么都不输出的沉默期里，
+          屏幕上看得出它还在动。</li>
+        <li><strong>放不下时先撤掉已完成的层</strong>（失败不撤，那正是要看面板的时刻），
+          下游行首补 <code>… ───></code>；连已完成的层都撤完了还不够，才截断并写出「…另有 N 步未显示」。</li>
+        <li><strong>画不出图就退化成清单</strong>：一行上要出现两个连线字形（同一行既有分叉又有汇合）、
+          竖线要穿过更宽的内容、汇合点落在行首时，正文改成每步一行，行尾用 <code>&lt;- 上游</code> 标依赖。
+          宁可少画一张图，也不要给一张会让人读错的图。</li>
+      </ul>
+      <p>
         本插件<strong>没有配置项</strong>。
       </p>
 
@@ -996,7 +1013,7 @@ description: 处理 PDF 时使用：拆分、合并、提取文本
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish-Plugins/README.md:557-602（workflow：spec 结构、`needs` / `when` / `aggregate`、有损转交、额度、面板）、Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowTool.java:97-109（参数 `spec` 与 `steps` 必填、`aggregate.mode` 的枚举）、WorkflowSpecParser.java:65-75（不写 `aggregate` 时 `mode` 落到 `collect`、`agent` 为 `null`；`summarize` 缺 `agent` 当场抛错）、AggregateMode.java:17、51-56（`COLLECT` 是缺省、取值只认 `collect` / `summarize`）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:557-621（workflow：spec 结构、`needs` / `when` / `aggregate`、有损转交、额度、面板）、Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowTool.java:97-109（参数 `spec` 与 `steps` 必填、`aggregate.mode` 的枚举）、WorkflowSpecParser.java:65-75（不写 `aggregate` 时 `mode` 落到 `collect`、`agent` 为 `null`；`summarize` 缺 `agent` 当场抛错）、AggregateMode.java:17、51-56（`COLLECT` 是缺省、取值只认 `collect` / `summarize`）</div>
 
     <h2>MCP 插件：<code>mcp__&lt;server&gt;__&lt;tool&gt;</code></h2>
 
@@ -1089,7 +1106,7 @@ mcp__filesystem__list_directory</code></pre>
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish-Plugins/README.md:603-686（MCP：工具名前缀、配置字段表、重连退避、只读与审批、协议能力、二进制落盘、子进程环境白名单）、Jellyfish-Plugins/jellyfish-plugin-mcp/src/main/java/zcd/jellyfish/plugin/mcp/McpServerConfig.java:97-110（配置解析）、:228-232（`args` 缺省返回空列表）、:253-257（`env` 缺省返回空映射）、Jellyfish-Plugins/README.md:687-724（plan 插件同名键与 MCP 无关的说明）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:622-705（MCP：工具名前缀、配置字段表、重连退避、只读与审批、协议能力、二进制落盘、子进程环境白名单）、Jellyfish-Plugins/jellyfish-plugin-mcp/src/main/java/zcd/jellyfish/plugin/mcp/McpServerConfig.java:97-110（配置解析）、:228-232（`args` 缺省返回空列表）、:253-257（`env` 缺省返回空映射）、Jellyfish-Plugins/README.md:706-743（plan 插件同名键与 MCP 无关的说明）</div>
 
     <h2>tools 插件的路径闸门：<code>pathPolicy</code></h2>
 
@@ -1252,7 +1269,7 @@ mcp__filesystem__list_directory</code></pre>
       </p>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:728-744（三段名单与三外壳行为）、Jellyfish/README.md:816-839（`plugins.enabled` / `plugins.disabled`、plan 白名单）、Jellyfish/README.md:918-946（`subAgent.enabled`）、Jellyfish-Plugins/README.md:205-263（shell 分类器：插件裁定只能收紧）、Jellyfish-Plugins/README.md:687-724（plan：不换清单只拦执行）</div>
+    <div class="src-block">Jellyfish/README.md:728-744（三段名单与三外壳行为）、Jellyfish/README.md:816-839（`plugins.enabled` / `plugins.disabled`、plan 白名单）、Jellyfish/README.md:918-946（`subAgent.enabled`）、Jellyfish-Plugins/README.md:205-263（shell 分类器：插件裁定只能收紧）、Jellyfish-Plugins/README.md:706-743（plan：不换清单只拦执行）</div>
 
     <h2>常见问题</h2>
 

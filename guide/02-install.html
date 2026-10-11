@@ -416,7 +416,7 @@ cp jellyfish-plugin-tools/target/jellyfish-plugin-tools-*.jar ~/.jellyfish/plugi
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish-Plugins/README.md:30-46（构建与安装、只装几个）、Jellyfish-Plugins/README.md:1027-1041（打包、安装与调试）、Jellyfish/README.md:463-486（插件一节：扫描目录、重启、<code>plugins.roots</code>）、Jellyfish/README.md:500-519（<code>config.json</code> 与 <code>plugins.roots</code> 语义）、Jellyfish/README.md:820-825（<code>plugins.enabled</code> / <code>plugins.disabled</code> / <code>plugins.configurations</code>）、Jellyfish/README.md:990-997（临时禁用某个插件）、Jellyfish/jellyfish-cli/src/main/resources/config.json、工作目录根的 cpPlugins.sh（13 行 <code>cp</code> 均带 <code>Jellyfish-Plugins/</code> 前缀）、Jellyfish-Plugins/README.md:34 与 Jellyfish-Plugins/AGENTS.md:25（两份文档的注释现已明确「在聚合工作目录根执行」，因为插件仓库根无此文件）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:30-46（构建与安装、只装几个）、Jellyfish-Plugins/README.md:1046-1060（打包、安装与调试）、Jellyfish/README.md:463-486（插件一节：扫描目录、重启、<code>plugins.roots</code>）、Jellyfish/README.md:500-519（<code>config.json</code> 与 <code>plugins.roots</code> 语义）、Jellyfish/README.md:820-825（<code>plugins.enabled</code> / <code>plugins.disabled</code> / <code>plugins.configurations</code>）、Jellyfish/README.md:990-997（临时禁用某个插件）、Jellyfish/jellyfish-cli/src/main/resources/config.json、工作目录根的 cpPlugins.sh（13 行 <code>cp</code> 均带 <code>Jellyfish-Plugins/</code> 前缀）、Jellyfish-Plugins/README.md:34 与 Jellyfish-Plugins/AGENTS.md:25（两份文档的注释现已明确「在聚合工作目录根执行」，因为插件仓库根无此文件）</div>
 
     <h2>插件仓库是独立的 reactor：改插件前先装内核</h2>
 
@@ -451,7 +451,7 @@ mvn -q -Pshell-it test                            # 2. 三个端到端 profile
 mvn -q -Pmcp-it test
 mvn -q -Pscript-it test</code></pre>
 
-    <div class="src-block">Jellyfish-Plugins/README.md:14-28（独立 reactor 与 <code>mvn install</code>）、Jellyfish-Plugins/README.md:1042-1061（内核升级后要做的检查）、Jellyfish-Plugins/AGENTS.md「内核升级后要做的检查」、Jellyfish-Spring-Boot-Starter/README.md:38-47（Starter 侧同一坑）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:14-28（独立 reactor 与 <code>mvn install</code>）、Jellyfish-Plugins/README.md:1061-1080（内核升级后要做的检查）、Jellyfish-Plugins/AGENTS.md「内核升级后要做的检查」、Jellyfish-Spring-Boot-Starter/README.md:38-47（Starter 侧同一坑）</div>
 
     <h2>验证安装：用不需要模型的命令</h2>
 
@@ -542,7 +542,7 @@ echo "/help" | java -jar jellyfish-cli/target/jellyfish-cli-0.1.1.jar -cli</code
       </p>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:1143-1167（发布到 Maven Central：发哪些、不发哪些）、Jellyfish-Plugins/CHANGELOG.md:89（官方插件不发布到 Central）、Jellyfish-Spring-Boot-Starter/README.md:435-441（Starter 发布坐标与内核依赖）、Jellyfish/CHANGELOG.md:415-417（<code>[Unreleased]</code> / <code>[0.1.1]</code> / <code>[0.1.0]</code> 的 compare 与 <code>releases/tag</code> 链接）、https://github.com/zcd0831/Jellyfish/releases/tag/v0.1.0（资产 <code>jellyfish-cli-0.1.0.jar</code>，15.6 MB，<code>sha256:fecab762…</code>；<code>releases/tag/v0.1.1</code> 为 404）</div>
+    <div class="src-block">Jellyfish/README.md:1143-1167（发布到 Maven Central：发哪些、不发哪些）、Jellyfish-Plugins/CHANGELOG.md:104（官方插件不发布到 Central）、Jellyfish-Spring-Boot-Starter/README.md:435-441（Starter 发布坐标与内核依赖）、Jellyfish/CHANGELOG.md:415-417（<code>[Unreleased]</code> / <code>[0.1.1]</code> / <code>[0.1.0]</code> 的 compare 与 <code>releases/tag</code> 链接）、https://github.com/zcd0831/Jellyfish/releases/tag/v0.1.0（资产 <code>jellyfish-cli-0.1.0.jar</code>，15.6 MB，<code>sha256:fecab762…</code>；<code>releases/tag/v0.1.1</code> 为 404）</div>
 
     <h2>在 IDEA 里调试</h2>
 
@@ -690,7 +690,7 @@ java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005 \
       但「该到哪个版本」仓库是写明的：见 <code>Jellyfish/README.md</code> 的「环境要求」表——JDK <code>8</code>、Maven <code>3.2.5</code> 以上。其余各条都直接来自内核仓库的安装与验证章节。
     </p>
 
-    <div class="src-block">Jellyfish/README.md:32-70（构建、产物、快速开始三步）、Jellyfish/README.md:120-138（<code>--trust-project-config</code>）、Jellyfish/README.md:371-407（命令清单与插件命令）、Jellyfish-Plugins/README.md:30-46 与 :1053-1070（插件安装与「装了却没生效」）、Jellyfish/README.md:963-989（项目级配置的信任）、Jellyfish/README.md:23-29（环境要求表：JDK 8 / Maven 3.2.5+ 是判定标准；<code>java -version</code> / <code>mvn -v</code> 这两条命令本身仓库未单独收录）</div>
+    <div class="src-block">Jellyfish/README.md:32-70（构建、产物、快速开始三步）、Jellyfish/README.md:120-138（<code>--trust-project-config</code>）、Jellyfish/README.md:371-407（命令清单与插件命令）、Jellyfish-Plugins/README.md:30-46 与 :1072-1089（插件安装与「装了却没生效」）、Jellyfish/README.md:963-989（项目级配置的信任）、Jellyfish/README.md:23-29（环境要求表：JDK 8 / Maven 3.2.5+ 是判定标准；<code>java -version</code> / <code>mvn -v</code> 这两条命令本身仓库未单独收录）</div>
 
     <div class="conclusion">
       <h2>关键结论</h2>

@@ -216,7 +216,7 @@ flowchart LR
       </p>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:13-22（姊妹仓库表）、Jellyfish/pom.xml:8-11 与 :34-42（坐标与 7 个模块）、Jellyfish/AGENTS.md「技术架构」（模块职责与依赖方向）、Jellyfish-Spring-Boot-Starter/README.md:15-23（它不是什么）、Jellyfish/README.md:1143-1167（内核构件发布范围）、Jellyfish-Plugins/CHANGELOG.md:89（官方插件不发布到中央仓库）</div>
+    <div class="src-block">Jellyfish/README.md:13-22（姊妹仓库表）、Jellyfish/pom.xml:8-11 与 :34-42（坐标与 7 个模块）、Jellyfish/AGENTS.md「技术架构」（模块职责与依赖方向）、Jellyfish-Spring-Boot-Starter/README.md:15-23（它不是什么）、Jellyfish/README.md:1143-1167（内核构件发布范围）、Jellyfish-Plugins/CHANGELOG.md:104（官方插件不发布到中央仓库）</div>
 
     <h2>能力从哪来：内核只有机制，能力全在插件</h2>
 
@@ -276,7 +276,7 @@ flowchart LR
           <tr>
             <td>Python / Node 脚本插件运行时（把 <code>scripts/&lt;lang&gt;/&lt;id&gt;/</code> 下的脚本目录变成标准插件）</td>
             <td><code>jellyfish-plugin-python</code> / <code>jellyfish-plugin-node</code>（共用库 <code>jellyfish-script</code>）</td>
-            <td>Jellyfish-Plugins/README.md:48-67、:715-742</td>
+            <td>Jellyfish-Plugins/README.md:48-67、:744-771</td>
           </tr>
         </tbody>
       </table>
@@ -500,7 +500,7 @@ flowchart LR
             <td>三者之间的兼容矩阵</td>
             <td><code>【版本对应关系需查阅各自 README】</code></td>
             <td>没有任何文档声明「哪个内核版本配哪个插件 / Starter 版本」</td>
-            <td>Jellyfish-Plugins/README.md:872-873（<code>plugin.requires</code> 是内核兼容约束，而内核不向 PF4J 声明系统版本，写 <code>*</code> 是显式「不限版本」）、13 个官方插件的 <code>plugin.properties</code> 的 <code>plugin.requires=*</code>（其中 4 个带解释性注释：<code>jellyfish-plugin-tools/src/main/resources/plugin.properties:10-12</code>）</td>
+            <td>Jellyfish-Plugins/README.md:891-892（<code>plugin.requires</code> 是内核兼容约束，而内核不向 PF4J 声明系统版本，写 <code>*</code> 是显式「不限版本」）、13 个官方插件的 <code>plugin.properties</code> 的 <code>plugin.requires=*</code>（其中 4 个带解释性注释：<code>jellyfish-plugin-tools/src/main/resources/plugin.properties:10-12</code>）</td>
           </tr>
         </tbody>
       </table>

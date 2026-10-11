@@ -268,7 +268,7 @@
           </tr>
           <tr>
             <td><code>workflow</code></td>
-            <td><code>Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowPlugin.java:46-49</code></td>
+            <td><code>Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowPlugin.java:51-54</code></td>
           </tr>
           <tr>
             <td><code>skills</code></td>
@@ -355,7 +355,7 @@ jellyfish.tags=files,tools</code></pre>
           <tr>
             <td><code>plugin.class</code></td>
             <td>各插件的 <code>XxxPlugin</code> 类</td>
-            <td>PF4J 要实例化的入口类，必须实现 <code>JellyfishPlugin</code>，且有一个<strong>公开无参构造器</strong>（<code>Jellyfish-Plugins/README.md:871</code>）</td>
+            <td>PF4J 要实例化的入口类，必须实现 <code>JellyfishPlugin</code>，且有一个<strong>公开无参构造器</strong>（<code>Jellyfish-Plugins/README.md:890</code>）</td>
           </tr>
           <tr>
             <td><code>plugin.version</code></td>
@@ -488,17 +488,20 @@ flowchart TD
       工具挂到 <code>ToolCallRequest</code> 上，然后向内核要一条<strong>出向端口</strong>来派生子代理。
     </p>
 
-    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowPlugin.java:41-51</div>
+    <div class="src-block">Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowPlugin.java:43-57</div>
 
 <pre><code class="language-java">    public void start(PluginContext context) {
         SubAgentPort port = context.delegations();
+        // 面板与台账共用同一个时钟：耗时文案（「已跑」「已 38s」）必须和记账时刻同源，
+        // 否则注入时钟的单测会在面板上算出「跑了 50 年」这种数字
+        LongSupplier clock = System::currentTimeMillis;
         // 先装配台账与引擎再注册：处理器一旦注册就可能被调用，依赖必须已经就绪
-        WorkflowTracker tracker = new WorkflowTracker(invalidator(context));
+        WorkflowTracker tracker = new WorkflowTracker(invalidator(context), clock);
         WorkflowEngine engine = new WorkflowEngine(port, tracker);
         context.handle(ToolCallRequest.class, WorkflowTool.NAME, WorkflowTool.descriptor(),
                 new WorkflowTool(engine));
         context.contribute(PromptContributionRequest.class, new WorkflowGuidance());
-        context.contribute(PanelContributionRequest.class, new WorkflowPanel(tracker));
+        context.contribute(PanelContributionRequest.class, new WorkflowPanel(tracker, clock));
         LOG.info("编排插件已启动: tool={}", WorkflowTool.NAME);
     }</code></pre>
 
@@ -506,7 +509,7 @@ flowchart TD
       这段代码说明三件事。①「编排」没有引入任何内核新概念：一个工具 + 一个提示词贡献 + 一个面板贡献就够。
       ②子代理来自 <code>context.delegations()</code>，与内核的 <code>task</code> 工具<strong>走同一条代码路径</strong>，
       因此准入、深度、扇出、并发、预算、取消与归档的行为完全一致——插件不自己起线程池、不自己实现并发上限
-      （<code>Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowPlugin.java:23-25</code>）。
+      （<code>Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowPlugin.java:24-26</code>）。
       ③<strong>委派是「端口」而不是扩展点</strong>：方向的本质是「插件请求内核做一件事」，
       而扩展点是「内核回头找插件」，两者不能互换
       （<code>Jellyfish/docs/constraints.md:203-205</code>）。
@@ -887,7 +890,7 @@ cp Jellyfish-Plugins/jellyfish-plugin-node/target/jellyfish-plugin-node-0.1.1.ja
         <strong>表达形式会演化</strong>：编排「spec 长什么样、怎么聚合」会随用法变化，
         放进内核意味着每次调整都要动内核的发布节奏；内核只需要提供稳定的原语。
         <strong>插件缺席时 <code>task</code> 薄工具照旧可用，这正是「卸载即回退」</strong>
-        （<code>Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowPlugin.java:27-29</code>）。
+        （<code>Jellyfish-Plugins/jellyfish-plugin-workflow/src/main/java/zcd/jellyfish/plugin/workflow/WorkflowPlugin.java:29-33</code>）。
       </li>
     </ul>
 
