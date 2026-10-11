@@ -500,7 +500,7 @@ flowchart LR
             <td>三者之间的兼容矩阵</td>
             <td><code>【版本对应关系需查阅各自 README】</code></td>
             <td>没有任何文档声明「哪个内核版本配哪个插件 / Starter 版本」</td>
-            <td>本套文档的写作规范：<code>Jellyfish-Docs/guide/_authoring-spec.md</code></td>
+            <td>Jellyfish-Plugins/README.md:862-863（<code>plugin.requires</code> 是内核兼容约束，而内核不向 PF4J 声明系统版本，写 <code>*</code> 是显式「不限版本」）、13 个官方插件的 <code>plugin.properties</code> 的 <code>plugin.requires=*</code>（其中 4 个带解释性注释：<code>jellyfish-plugin-tools/src/main/resources/plugin.properties:10-12</code>）</td>
           </tr>
         </tbody>
       </table>
