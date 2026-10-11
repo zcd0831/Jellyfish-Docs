@@ -1422,11 +1422,10 @@ public void cancelAsk(@RequestParam String userId, @PathVariable String sid,
         </table>
       </div>
       <p>
-        <strong>上游正文与表格不一致，以表格为准：是 7 条。</strong>README 正文写「下面<strong>六件事</strong>内核都不做」，
-        而同节表格实际列了 <strong>7 行</strong>（会话归属、并发配额、会话数上限、闲置回收、审批归属、提问归属、命令入口）——
-        正文那个「六」是笔误。7 条都有实现：七个 <code>@Bean</code> 集中在
-        <code>JellyfishUserWiringConfiguration</code>（会话归属存储、配额闸门、命令闸门、审批网关、提问网关、多用户门面、闲置回收器），
+        <strong>这 7 条在 starter 里都有对应实现</strong>（会话归属、并发配额、会话数上限、闲置回收、审批归属、提问归属、命令入口）：
+        七个 <code>@Bean</code> 集中在 <code>JellyfishUserWiringConfiguration</code>（会话归属存储、配额闸门、命令闸门、审批网关、提问网关、多用户门面、闲置回收器），
         其中「会话数上限」的检查落在建会话的同锁临界区里（<code>JellyfishUserFacade.createSession</code>）。
+        （README 正文早期版本写「下面<strong>六件事</strong>」，与同节表格的 7 行对不上，<strong>现已改为「七件事」</strong>。）
       </p>
 
       <p><strong>完整示例</strong>：替换 <code>SessionOwnerStore</code>（唯一的可替换点）</p>
@@ -1554,7 +1553,7 @@ public class OwnerStoreConfig {
           （<code>/delete &lt;别人的会话 id&gt;</code> 里的 id 从不经过本层检查）。</li>
       </ul>
     </div>
-    <div class="src-block">Jellyfish-Spring-Boot-Starter/README.md:341-363（多用户护栏的七行对照表与两个告警）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/user/SessionOwnerStore.java（SPI 契约与三条实现要求）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/user/JellyfishUserFacade.java（建会话的锁与懒清理）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/user/IdleSessionReaper.java（<code>shouldReap</code> 的两个条件）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/user/CommandGate.java、Jellyfish-Spring-Boot-Starter/AGENTS.md「关键不变量」（<code>idle-timeout&lt;=0</code> 与 <code>shouldReap</code> 两条）、Jellyfish-Spring-Boot-Starter/README.md:344 与同节表格 :347-355（正文「六件事」vs 表格 7 行）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/JellyfishUserWiringConfiguration.java:54-147（七个 <code>@Bean</code>）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/user/JellyfishUserFacade.java:164（会话数上限的检查点）</div>
+    <div class="src-block">Jellyfish-Spring-Boot-Starter/README.md:341-363（多用户护栏的七行对照表与两个告警）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/user/SessionOwnerStore.java（SPI 契约与三条实现要求）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/user/JellyfishUserFacade.java（建会话的锁与懒清理）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/user/IdleSessionReaper.java（<code>shouldReap</code> 的两个条件）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/user/CommandGate.java、Jellyfish-Spring-Boot-Starter/AGENTS.md「关键不变量」（<code>idle-timeout&lt;=0</code> 与 <code>shouldReap</code> 两条）、Jellyfish-Spring-Boot-Starter/README.md:344 与 Jellyfish-Spring-Boot-Starter/README.md:347-355（七件事与同节的七行对照表）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/JellyfishUserWiringConfiguration.java:54-147（七个 <code>@Bean</code>）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/user/JellyfishUserFacade.java:164（会话数上限的检查点）</div>
 
     <h2>11. 门面 Bean：只暴露「观测面」</h2>
 
