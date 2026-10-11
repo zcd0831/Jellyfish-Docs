@@ -640,7 +640,7 @@ flowchart TD
               <td><code>jellyfish.log.level</code></td>
               <td>系统属性（string）</td>
               <td><span class="tag optional">选填</span></td>
-              <td><code>INFO</code> <span class="tag todo">【需核实】</span></td>
+              <td><code>WARN</code>（两份 log4j2 配置的根 Logger 都读 <code>${sys:jellyfish.log.level:-WARN}</code>：<code>-cli</code> / <code>-server</code> 那份写 stderr，TUI 那份写文件）</td>
               <td>日志级别；<code>--verbose</code> 就是把它降到 <code>DEBUG</code>，两者同义</td>
               <td><code>-Djellyfish.log.level=DEBUG</code></td>
             </tr>
@@ -702,7 +702,7 @@ flowchart TD
           另外确认你读的是 <code>plugins.configurations.&lt;pluginId&gt;</code> 这一层，<code>~</code> 要自己展开（内核只展开配置文件自身的路径段）。</li>
       </ul>
     </div>
-    <div class="src-block">Jellyfish/README.md「参数」（<code>--verbose</code>）、Jellyfish/README.md「TUI 没有 stdout 契约」（<code>jellyfish.log.file</code> / <code>maxSize</code> / <code>maxFiles</code>）、Jellyfish-Plugins/README.md「打包、安装与调试」「常见问题」、Jellyfish-Plugins/AGENTS.md「单元测试规范」、Jellyfish/docs/constraints.md「插件扫描与配置」</div>
+    <div class="src-block">Jellyfish/README.md「参数」（<code>--verbose</code>）、Jellyfish/README.md「TUI 没有 stdout 契约」（<code>jellyfish.log.file</code> / <code>maxSize</code> / <code>maxFiles</code>）、Jellyfish-Plugins/README.md「打包、安装与调试」「常见问题」、Jellyfish-Plugins/AGENTS.md「单元测试规范」、Jellyfish/docs/constraints.md「插件扫描与配置」、Jellyfish/jellyfish-cli/src/main/resources/log4j2.xml:6-12（只写 stderr、根 Logger 读 <code>${sys:jellyfish.log.level:-WARN}</code>）、:22（<code>Console target="SYSTEM_ERR"</code>）、:28（<code>Root level="${logLevel}"</code>）、Jellyfish/jellyfish-cli/src/main/resources/log4j2-tui.xml:21（同一缺省 WARN）、:22-25（日志文件缺省 <code>~/.jellyfish/jellyfish-tui.log</code>、轮换 <code>10 MB</code> × <code>5</code> 档）、:30、:43、Jellyfish/jellyfish-cli/src/main/java/zcd/jellyfish/cli/JellyfishApplication.java:105-116（<code>--verbose</code> 在日志初始化前写 <code>jellyfish.log.level=DEBUG</code>）</div>
 
     <h2>7. 内核升级后要做的检查</h2>
 
@@ -847,7 +847,7 @@ mvn -q -Pscript-it test</code></pre>
               <td><code>events.allow</code></td>
               <td>array&lt;string&gt;</td>
               <td><span class="tag optional">选填</span></td>
-              <td><code>【待确认】</code></td>
+              <td><code>[]</code>（不写即「不收窄」：空清单不做任何事件名过滤）</td>
               <td>可订阅事件的<strong>收窄</strong>清单。只收窄、不扩展——可订阅事件清单硬编码在运行时里，写不存在的事件名不会扩大任何能力</td>
               <td><code>["PluginNotificationEvent"]</code></td>
             </tr>
@@ -965,7 +965,7 @@ def refresh_watch(ctx):
               <td><code>schedules[].name</code></td>
               <td>string</td>
               <td><span class="tag required">必填</span></td>
-              <td><code>【待确认】</code></td>
+              <td>—（没有缺省值：清单解析时缺 <code>name</code> 直接抛错，同名重复也报错）</td>
               <td>周期任务名；桥接按这个名字调用脚本里同名的处理函数</td>
               <td><code>"refresh"</code></td>
             </tr>
@@ -1120,7 +1120,7 @@ def refresh_watch(ctx):
           <code>input_directive</code> 也走 <code>handler</code>，但路由键是<strong>标记本身</strong>（<code>!</code> / <code>@</code>）。</li>
       </ul>
     </div>
-    <div class="src-block">Jellyfish-Plugins/README.md「脚本插件：用 Python / Node 写插件」（三层隔离、能力档、<code>${ENV}</code> 硬失败、热路径点）、Jellyfish-Plugins/README.md「周期任务（<code>schedules</code>）」、Jellyfish-Plugins/jellyfish-script/src/main/resources/script/extension-points.json（三段语义、<code>in</code> 24 项、<code>excluded</code> 4 项与理由原文）、Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/GatewaySettings.java（默认值常量）、Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/CircuitBreakerSettings.java（<code>2</code> / <code>60</code> / <code>3</code>）、Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/ScriptBridgeConfig.java（配置键与「类型不对当场报错」）、Jellyfish-Plugins/AGENTS.md「关键不变量」、Jellyfish-Plugins/examples/scripts/README.md（脚本 API 与 <code>manifest.json</code> 字段表）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md「脚本插件：用 Python / Node 写插件」（三层隔离、能力档、<code>${ENV}</code> 硬失败、热路径点）、Jellyfish-Plugins/README.md「周期任务（<code>schedules</code>）」、Jellyfish-Plugins/jellyfish-script/src/main/resources/script/extension-points.json（三段语义、<code>in</code> 24 项、<code>excluded</code> 4 项与理由原文）、Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/GatewaySettings.java（默认值常量）、Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/CircuitBreakerSettings.java（<code>2</code> / <code>60</code> / <code>3</code>）、Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/ScriptBridgeConfig.java（配置键与「类型不对当场报错」）、Jellyfish-Plugins/AGENTS.md「关键不变量」、Jellyfish-Plugins/examples/scripts/README.md（脚本 API 与 <code>manifest.json</code> 字段表）、Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/ScriptBridgeConfig.java:465-474（<code>events.allow</code> 缺省空清单＝不收窄：<code>raw == null</code> 与 <code>allow == null</code> 都 <code>return Collections.emptyList()</code>；键名见 :70）、Jellyfish-Plugins/jellyfish-plugin-python/src/main/resources/script/gateway.py:605-607 与 Jellyfish-Plugins/jellyfish-plugin-node/src/main/resources/script/gateway.js:424-428（空清单即不过滤事件名）、Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/ScriptManifest.java:79（<code>schedules</code> 合法键只有 <code>name</code> / <code>intervalSeconds</code>）、:573-592（<code>parseSchedules</code>：<code>requireText(element, "name", where)</code> 缺名抛错、同名重复抛错）、:82 与 :85（<code>DEFAULT_INTERVAL_SECONDS = 5</code>、<code>MIN_INTERVAL_SECONDS = 1</code>）</div>
 
     <h2>9. 发布到 <code>Jellyfish-Plugins</code>：三件登记事与 Git 约定</h2>
 
@@ -1133,7 +1133,13 @@ def refresh_watch(ctx):
       </p>
       <p>
         也就是说：<strong>「提交一个插件需要满足哪些质量门禁、由谁评审、什么时候发版」这一整套在仓库里找不到明文</strong>
-        → 记为 <span class="tag todo">【待确认】</span>。<strong>不要</strong>照本页的描述去做实际提交，
+        <strong>已逐一检查并确认「确实不存在」</strong>：检查范围是聚合工作目录根、<code>Jellyfish/</code>、
+        <code>Jellyfish-Plugins/</code>、<code>Jellyfish-Skills/</code>、<code>Jellyfish-Spring-Boot-Starter/</code>、
+        <code>Jellyfish-Spring-Template/</code> 六处的 <code>.github/</code>、<code>CONTRIBUTING*</code>、<code>RELEASE*</code>、
+        <code>docs/</code> 与各自 <code>AGENTS.md</code> 全文：没有任何 PR 模板、评审清单、分支模型或发版步骤；
+        <code>Jellyfish/docs/</code> 下只有 <code>constraints.md</code> 一份，<code>Jellyfish-Skills/</code> 根连 <code>AGENTS.md</code> 都没有；
+        且 <code>Jellyfish-Plugins/CHANGELOG.md:79</code> 写明官方插件<strong>不发布到 Maven Central</strong>，所以也没有「发版步骤」这条路。
+        <strong>不要</strong>照本页的描述去做实际提交，
         请先与仓库维护者确认（仓库地址见 <code>Jellyfish-Plugins/README.md</code> 与 <code>Jellyfish/README.md</code> 的「去哪里找插件」）。
       </p>
     </div>
@@ -1195,7 +1201,7 @@ git commit -m "feat(mytool): 新增 mytool 插件与 /mytool 命令"</code></pre
               <td><span class="tag required">必填</span></td>
               <td>—</td>
               <td>把新插件的 <code>target/*.jar</code> 拷进扫描目录，否则「装了插件」这一步会漏掉它</td>
-              <td><code>【待确认】</code></td>
+              <td><code>cp Jellyfish-Plugins/jellyfish-plugin-mytool/target/jellyfish-plugin-mytool-0.1.1.jar ~/.jellyfish/plugins</code>（工作目录根那份脚本的真实写法：一行一条 <code>cp</code>、带 <code>Jellyfish-Plugins/</code> 前缀、版本号与 <code>pom.xml</code> 一致）</td>
             </tr>
             <tr>
               <td><code>README.md</code>「插件一览」表的一行</td>
@@ -1224,8 +1230,16 @@ git commit -m "feat(mytool): 新增 mytool 插件与 /mytool 命令"</code></pre
       <ul>
         <li><strong><code>cpPlugins.sh</code> 在哪？</strong><code>README.md</code> 与 <code>AGENTS.md</code> 都写着
           <code>./cpPlugins.sh</code>（「把 <code>target/*.jar</code> 拷进扫描目录，缺省 <code>~/.jellyfish/plugins/</code>」），
-          但<strong>本页写作时所用的工作副本里没在仓库根目录见到这个文件</strong> → <span class="tag todo">【待确认】</span>
-          请以你本地检出的仓库为准；没有它时按 <a href="11-plugin-usage.html">11 安装与使用官方插件</a> 里的手工 <code>cp</code> 方式装。</li>
+          但<strong>这是上游文档自身的矛盾，不是「查不到」</strong>：那两处原文是
+          <code>Jellyfish-Plugins/README.md:34</code>（<code>./cpPlugins.sh                  # 把 target/*.jar 拷进扫描目录（缺省 ~/.jellyfish/plugins/）</code>）
+          与 <code>Jellyfish-Plugins/AGENTS.md:25</code>（<code>./cpPlugins.sh                      # 把 target/*.jar 拷进 ~/.jellyfish/plugins/</code>），
+          另 <code>Jellyfish-Plugins/README.md:893</code> 要求「新增插件……往 <code>cpPlugins.sh</code> 加一行」——
+          三处都隐含「在插件仓库根执行」，而 <code>Jellyfish-Plugins/</code> 根目录里<strong>并没有这个文件</strong>。
+          真正存在的是<strong>聚合工作目录根</strong>的 <code>cpPlugins.sh</code>，它每一行都带 <code>Jellyfish-Plugins/</code> 前缀
+          （例如 <code>cp Jellyfish-Plugins/jellyfish-plugin-tools/target/jellyfish-plugin-tools-0.1.1.jar ~/.jellyfish/plugins</code>）。
+          <strong>以工作目录根那份为准</strong>：在聚合目录根跑 <code>./cpPlugins.sh</code>；
+          按插件仓库文档的写法在 <code>Jellyfish-Plugins/</code> 里敲，只会得到 <code>No such file or directory</code>。
+          没有它时按 <a href="11-plugin-usage.html">11 安装与使用官方插件</a> 里的手工 <code>cp</code> 方式装。</li>
         <li><strong>官方插件能像内核一样从中央仓库拿到吗？</strong>不能。官方插件是 PF4J 插件包，
           <strong>不发布到 Maven Central</strong>，靠把 jar 拷进插件目录来安装。</li>
         <li><strong>是不是必须把插件做进官方仓库？</strong>不是。插件只经 <code>jellyfish-api</code> 的 SPI 与内核交互，
@@ -1233,7 +1247,7 @@ git commit -m "feat(mytool): 新增 mytool 插件与 /mytool 命令"</code></pre
           （本地仓库 <code>mvn install</code>，或你们自己的私服）。</li>
       </ul>
     </div>
-    <div class="src-block">Jellyfish-Plugins/AGENTS.md「Git 约定」「行为准则」「技术架构」（一个插件一个子模块）、Jellyfish-Plugins/README.md「<code>pom.xml</code>」第三条（父 <code>pom.xml</code> 与 <code>cpPlugins.sh</code>）、Jellyfish-Plugins/README.md「插件一览」、Jellyfish-Plugins/pom.xml（<code>&lt;modules&gt;</code> 原文）、Jellyfish-Plugins/CHANGELOG.md（官方插件不发布到 Maven Central）</div>
+    <div class="src-block">Jellyfish-Plugins/AGENTS.md「Git 约定」「行为准则」「技术架构」（一个插件一个子模块）、Jellyfish-Plugins/README.md「<code>pom.xml</code>」第三条（父 <code>pom.xml</code> 与 <code>cpPlugins.sh</code>）、Jellyfish-Plugins/README.md「插件一览」、Jellyfish-Plugins/pom.xml（<code>&lt;modules&gt;</code> 原文）、Jellyfish-Plugins/CHANGELOG.md:79（官方插件不发布到 Maven Central）、Jellyfish-Plugins/README.md:34 与 Jellyfish-Plugins/AGENTS.md:25（都写 <code>./cpPlugins.sh</code>，而插件仓库根无此文件——两处原文并列，以工作目录根那份为准）、Jellyfish-Plugins/README.md:893（「新增插件……往 <code>cpPlugins.sh</code> 加一行」）、工作目录根 <code>cpPlugins.sh:1-13</code>（13 行 <code>cp</code> 均带 <code>Jellyfish-Plugins/</code> 前缀）、<code>Jellyfish-Plugins/AGENTS.md:128</code>「Git 约定」与 <code>Jellyfish-Plugins/AGENTS.md:140</code>「行为准则」（唯一的协作规范）、「没有贡献流程文档」的检查范围：聚合工作目录根与 <code>Jellyfish/</code> + <code>Jellyfish-Plugins/</code> + <code>Jellyfish-Skills/</code> + <code>Jellyfish-Spring-Boot-Starter/</code> + <code>Jellyfish-Spring-Template/</code> 的 <code>.github/</code>、<code>CONTRIBUTING*</code>、<code>RELEASE*</code>、<code>docs/</code> 与各自 <code>AGENTS.md</code>（均不存在；<code>Jellyfish/docs/</code> 下只有 <code>constraints.md</code>）</div>
 
     <h2>10. 常见问题</h2>
 
@@ -1311,7 +1325,7 @@ git commit -m "feat(mytool): 新增 mytool 插件与 /mytool 命令"</code></pre
         <li>脚本插件的三层隔离里，熔断<strong>不摘注册</strong>（只是暂时拒绝）；周期任务的间隔语义是「上一次跑完 + 间隔」，
           失败只记日志但<strong>不发</strong>失效事件；能力档分 <code>in</code> / <code>planned</code> / <code>excluded</code> 三段，
           <strong>内核新增扩展点未分档会让插件仓库构建失败</strong>。</li>
-        <li>官方插件仓库<strong>没有</strong>正式的贡献流程 / 评审清单 / 发版步骤文档 <span class="tag todo">【待确认】</span>，
+        <li>官方插件仓库<strong>没有</strong>正式的贡献流程 / 评审清单 / 发版步骤文档（聚合工作目录根与五个仓库的 <code>.github/</code>、<code>CONTRIBUTING*</code>、<code>RELEASE*</code>、<code>docs/</code> 及各 <code>AGENTS.md</code> 都逐一检查过，全都没有——是「确实没有」而不是「没查」），
           只有 <code>AGENTS.md</code> 的 Git 约定；新增插件要做的三件登记事是：父 <code>pom.xml</code> 的
           <code>&lt;modules&gt;</code>、<code>cpPlugins.sh</code>、<code>README.md</code> 的插件一览表。</li>
       </ol>

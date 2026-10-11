@@ -129,8 +129,10 @@
             <td>
               <strong>不改内核。</strong>内核的组件一个都没有在 Spring 里重建；也没有引入 Dagger 生成的组件
               （那会把 Dagger 的运行期依赖带进接入方的技术栈）。
-              <span class="tag todo">【需核实】</span> README 说「内核那 55 个组件」，而 <code>JellyfishKernel</code> 的 javadoc 写「整张对象图（63 个节点）」
-              ——两处数字口径不一致，请以实际代码为准。
+              <strong>两个数字都对，只是口径不同</strong>：<strong>55</strong> 是内核里「带 <code>@Inject</code> 的类」的个数，
+              <strong>63</strong> 是装配完成后对象图上的节点数——两句话出自同一处 javadoc，
+              原文是「整张图（63 个节点）由 <code>JellyfishAssembler</code> 一次装配完成，
+              这里不逐个注册内核的 55 个带 <code>@Inject</code> 的类」。README 那句「内核那 55 个组件」说的是前者。
             </td>
           </tr>
           <tr>
@@ -155,7 +157,7 @@
         所以它给的是「带归属校验的门面」而不是「控制器」。
       </p>
     </div>
-    <div class="src-block">Jellyfish-Spring-Boot-Starter/README.md:1-24（它是什么、不是什么）、Jellyfish-Spring-Boot-Starter/README.md:310-340（用插件扩展能力）、Jellyfish-Spring-Boot-Starter/pom.xml（只依赖 <code>jellyfish-di</code> + <code>spring-boot-starter</code>，刻意不引 <code>spring-boot-starter-web</code>）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/JellyfishKernel.java（「只调一次装配」与 <code>JellyfishAssembler</code>）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/JellyfishRuntimeConfiguration.java（不用 Dagger 组件的理由）</div>
+    <div class="src-block">Jellyfish-Spring-Boot-Starter/README.md:1-24（它是什么、不是什么）、Jellyfish-Spring-Boot-Starter/README.md:310-340（用插件扩展能力）、Jellyfish-Spring-Boot-Starter/pom.xml（只依赖 <code>jellyfish-di</code> + <code>spring-boot-starter</code>，刻意不引 <code>spring-boot-starter-web</code>）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/JellyfishKernel.java（「只调一次装配」与 <code>JellyfishAssembler</code>）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/JellyfishRuntimeConfiguration.java（不用 Dagger 组件的理由）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/JellyfishRuntimeConfiguration.java:16-17（同一句里给出两个口径：整张图 63 个节点 / 55 个带 <code>@Inject</code> 的类）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/JellyfishKernel.java:44（63 个节点）、Jellyfish-Spring-Boot-Starter/README.md:22（55 个组件）</div>
 
     <h2>2. 环境要求与依赖坐标</h2>
 
@@ -1154,7 +1156,7 @@ public List&lt;Map&lt;String, Object&gt;&gt; approvals(@RequestParam String user
               <td><code>permission.approvalTimeoutSeconds</code></td>
               <td>int</td>
               <td><span class="tag optional">选填</span></td>
-              <td><code>120</code>（<code>【需核实】</code>：本页依据 README「最多 120 秒」的说法，未在 <code>jellyfish.json</code> 的字段表里逐字核对默认值）</td>
+              <td><code>120</code></td>
               <td>写在<strong>内核格式</strong>的 <code>jellyfish.json</code> 里。写 <code>0</code> 表示<strong>永不超时</strong>——
                 多租户进程里尤其不要这么配</td>
               <td><code>60</code></td>
@@ -1218,7 +1220,7 @@ public void approve(@RequestParam String userId, @PathVariable String sid,
           拿「我的会话 id + 别人的 requestId」去调 <code>resolve</code>，内核会照办。</li>
       </ul>
     </div>
-    <div class="src-block">Jellyfish-Spring-Boot-Starter/README.md:214-233（审批专节的原文口径与三条做法）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/JellyfishProperties.java（<code>Approval</code> 内部类的全部注释）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/user/ApprovalGateway.java（归属校验 + 只裁决头槽位）、Jellyfish-Spring-Boot-Starter/README.md:416-434（使用限制里关于审批队列上限与超时的两条）</div>
+    <div class="src-block">Jellyfish-Spring-Boot-Starter/README.md:214-233（审批专节的原文口径与三条做法）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/JellyfishProperties.java（<code>Approval</code> 内部类的全部注释）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/user/ApprovalGateway.java（归属校验 + 只裁决头槽位）、Jellyfish-Spring-Boot-Starter/README.md:416-434（使用限制里关于审批队列上限与超时的两条）、Jellyfish/README.md:891（<code>permission</code> 字段表：<code>approvalTimeoutSeconds</code> 缺省 <code>120</code>）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/PermissionApprovalSettings.java:35（<code>DEFAULT_APPROVAL_TIMEOUT_SECONDS = 120</code>）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/JellyfishProperties.java:483（「这 120 秒来自内核配置 <code>permission.approvalTimeoutSeconds</code>」）</div>
 
     <h2>9. 提问：<code>jellyfish.ask.enabled</code></h2>
 
@@ -1257,7 +1259,7 @@ public void approve(@RequestParam String userId, @PathVariable String sid,
               <td><code>ask.timeoutSeconds</code></td>
               <td>int</td>
               <td><span class="tag optional">选填</span></td>
-              <td><code>120</code>（<code>【需核实】</code>：依据 README「最多 120 秒」的说法，未逐字核对默认值）</td>
+              <td><code>120</code></td>
               <td>写在<strong>内核格式</strong>的 <code>jellyfish.json</code> 里。写 <code>0</code> 表示<strong>永不超时</strong>——
                 「还没接好作答接口就打开开关」配上这个值，等于把一条 <code>react</code> 线程一直挂在一次提问上</td>
               <td><code>60</code></td>
@@ -1352,7 +1354,7 @@ public void cancelAsk(@RequestParam String userId, @PathVariable String sid,
           （缺省 120 秒），而 <code>react</code> 池只有 8 条线程。所以「客户端断开就调 <code>cancelAsk</code>」是必须做的一步。</li>
       </ul>
     </div>
-    <div class="src-block">Jellyfish-Spring-Boot-Starter/README.md:234-263（提问专节的原文口径、三个方法与「作答必须走门面」）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/JellyfishProperties.java（<code>Ask</code> 内部类的全部注释）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/user/AskGateway.java（归属校验 + <code>resolve</code>）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/ask/AskRequest.java（<code>getQuestion()</code> / <code>getOptions()</code>）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/ask/AskOption.java</div>
+    <div class="src-block">Jellyfish-Spring-Boot-Starter/README.md:234-263（提问专节的原文口径、三个方法与「作答必须走门面」）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/JellyfishProperties.java（<code>Ask</code> 内部类的全部注释）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/user/AskGateway.java（归属校验 + <code>resolve</code>）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/ask/AskRequest.java（<code>getQuestion()</code> / <code>getOptions()</code>）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/ask/AskOption.java、Jellyfish/README.md:904（<code>ask</code> 字段表：<code>timeoutSeconds</code> 缺省 <code>120</code>）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/AskSettings.java:37（<code>DEFAULT_TIMEOUT_SECONDS = 120</code>）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/JellyfishProperties.java:524（「这 120 秒来自内核配置 <code>ask.timeoutSeconds</code>」）</div>
 
     <h2>10. 多用户护栏：本 starter 的主要价值</h2>
 
@@ -1420,9 +1422,11 @@ public void cancelAsk(@RequestParam String userId, @PathVariable String sid,
         </table>
       </div>
       <p>
-        <span class="tag todo">【需核实】</span> README 的文字说「下面<strong>六件事</strong>内核都不做」，
-        但同一节的表格实际列了 <strong>7 行</strong>（会话归属、并发配额、会话数上限、闲置回收、审批归属、提问归属、命令入口）。
-        本页按表格逐条列出，不替你裁定哪个说法对。
+        <strong>上游正文与表格不一致，以表格为准：是 7 条。</strong>README 正文写「下面<strong>六件事</strong>内核都不做」，
+        而同节表格实际列了 <strong>7 行</strong>（会话归属、并发配额、会话数上限、闲置回收、审批归属、提问归属、命令入口）——
+        正文那个「六」是笔误。7 条都有实现：七个 <code>@Bean</code> 集中在
+        <code>JellyfishUserWiringConfiguration</code>（会话归属存储、配额闸门、命令闸门、审批网关、提问网关、多用户门面、闲置回收器），
+        其中「会话数上限」的检查落在建会话的同锁临界区里（<code>JellyfishUserFacade.createSession</code>）。
       </p>
 
       <p><strong>完整示例</strong>：替换 <code>SessionOwnerStore</code>（唯一的可替换点）</p>
@@ -1550,7 +1554,7 @@ public class OwnerStoreConfig {
           （<code>/delete &lt;别人的会话 id&gt;</code> 里的 id 从不经过本层检查）。</li>
       </ul>
     </div>
-    <div class="src-block">Jellyfish-Spring-Boot-Starter/README.md:341-363（多用户护栏的七行对照表与两个告警）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/user/SessionOwnerStore.java（SPI 契约与三条实现要求）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/user/JellyfishUserFacade.java（建会话的锁与懒清理）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/user/IdleSessionReaper.java（<code>shouldReap</code> 的两个条件）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/user/CommandGate.java、Jellyfish-Spring-Boot-Starter/AGENTS.md「关键不变量」（<code>idle-timeout&lt;=0</code> 与 <code>shouldReap</code> 两条）</div>
+    <div class="src-block">Jellyfish-Spring-Boot-Starter/README.md:341-363（多用户护栏的七行对照表与两个告警）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/user/SessionOwnerStore.java（SPI 契约与三条实现要求）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/user/JellyfishUserFacade.java（建会话的锁与懒清理）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/user/IdleSessionReaper.java（<code>shouldReap</code> 的两个条件）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/user/CommandGate.java、Jellyfish-Spring-Boot-Starter/AGENTS.md「关键不变量」（<code>idle-timeout&lt;=0</code> 与 <code>shouldReap</code> 两条）、Jellyfish-Spring-Boot-Starter/README.md:344 与同节表格 :347-355（正文「六件事」vs 表格 7 行）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/JellyfishUserWiringConfiguration.java:54-147（七个 <code>@Bean</code>）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/user/JellyfishUserFacade.java:164（会话数上限的检查点）</div>
 
     <h2>11. 门面 Bean：只暴露「观测面」</h2>
 
@@ -1666,10 +1670,13 @@ public class OwnerStoreConfig {
           门面 Bean 是视图，所以不能。
         </p>
         <p>
-          <span class="tag todo">【待确认】</span> README 在这一点上写「<code>SessionOwnerStore</code> 与下面的
-          <code>CurrentUser</code> 是仅有的两个例外」，但本页写作时的源码里<strong>找不到</strong> <code>CurrentUser</code>
-          这个类（<code>user/</code> 包里没有），<code>AGENTS.md</code> 的说法是「<code>SessionOwnerStore</code> 是仅有的例外之一」。
-          请以实际代码为准。
+          <strong>本 starter 源码里没有 <code>CurrentUser</code> 这个类</strong>：<code>…/spring/boot/user/</code> 下 15 个文件里没有它，
+          全仓库检索只命中 README 的那一行——那是上游 README 的串味（把示例仓库的东西写进来了）。
+          真正的可替换点只有一个：SPI <code>SessionOwnerStore</code>，它是 <code>JellyfishUserWiringConfiguration</code> 里
+          唯一带 <code>@ConditionalOnMissingBean</code> 的 Bean，本仓库 <code>AGENTS.md</code> 的措辞也据此写成
+          「<code>SessionOwnerStore</code> 是仅有的例外之一」。<code>CurrentUser</code> 确实存在，但在<strong>示例仓库</strong>
+          <code>Jellyfish-Spring-Template</code>（<code>template/CurrentUser.java:16</code> 的接口 + <code>template/CurrentUserConfiguration.java:26</code> 的 <code>@Bean</code>），
+          与本 starter 无关。
         </p>
       </div>
 
@@ -1723,7 +1730,7 @@ public class InspectController {
           设 <code>false</code> 则一个都没有。</li>
       </ul>
     </div>
-    <div class="src-block">Jellyfish-Spring-Boot-Starter/README.md:364-390（门面 Bean 一节的七个 Bean、不进容器的清单与两条理由）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/JellyfishFacadeConfiguration.java（类注释与七个 <code>@Bean</code>）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/JellyfishKernel.java（包私有访问器就是边界本身）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/JellyfishUserWiringConfiguration.java（SPI 的 <code>@ConditionalOnMissingBean</code>）、Jellyfish-Spring-Boot-Starter/AGENTS.md「关键不变量」</div>
+    <div class="src-block">Jellyfish-Spring-Boot-Starter/README.md:364-390（门面 Bean 一节的七个 Bean、不进容器的清单与两条理由）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/JellyfishFacadeConfiguration.java（类注释与七个 <code>@Bean</code>）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/JellyfishKernel.java（包私有访问器就是边界本身）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/JellyfishUserWiringConfiguration.java（SPI 的 <code>@ConditionalOnMissingBean</code>）、Jellyfish-Spring-Boot-Starter/AGENTS.md「关键不变量」（「<code>SessionOwnerStore</code> 是仅有的例外之一」）、Jellyfish-Spring-Template/src/main/java/zcd/jellyfish/template/CurrentUser.java:16 与 Jellyfish-Spring-Template/src/main/java/zcd/jellyfish/template/CurrentUserConfiguration.java:26（<code>CurrentUser</code> 属于示例仓库，不在本 starter 的 <code>user/</code> 包里）</div>
 
     <h2>12. 生命周期：<code>JellyfishLifecycle</code></h2>
 
@@ -1858,9 +1865,14 @@ public class DelayedBootstrapConfig {
           </tr>
           <tr>
             <td>鉴权</td>
-            <td>默认只绑回环，等于「本机可用」；对外暴露要自己在前置层加鉴权
-              <span class="tag todo">【需核实】</span>（README 只写明「默认只绑回环」，未给出鉴权方案）</td>
-            <td>鉴权仍在你的 Web 层；starter 补的是<strong>归属校验</strong>（护栏），不是认证</td>
+            <td><strong>缺省只绑 <code>127.0.0.1</code> 时等于「本机可用」</strong>：没配密钥<strong>就不鉴权</strong>；
+              但<strong>绑非回环却未配密钥会拒绝启动（退 3）</strong>。配了密钥后，除 <code>GET /health</code> 外
+              所有接口都要 <code>Authorization: Bearer &lt;密钥&gt;</code>（否则 401）；写请求
+              （<code>POST</code>/<code>PUT</code>/<code>PATCH</code>/<code>DELETE</code>）还要 <code>Origin</code>
+              （缺席时退到 <code>Referer</code>）与本服务同源，否则 403。密钥来自 <code>--api-key</code> 或
+              环境变量 <code>JELLYFISH_SERVER_API_KEY</code>，<strong>不接受 query 传参</strong></td>
+            <td>鉴权<strong>完全由你自己实现</strong>：starter 不依赖 <code>spring-boot-starter-web</code>、
+              不提供任何接口，因此它<strong>不管认证</strong>；它补的是<strong>归属校验</strong>（护栏）</td>
           </tr>
           <tr>
             <td>多用户</td>
@@ -1896,7 +1908,7 @@ public class DelayedBootstrapConfig {
           而 starter 的多用户护栏<strong>只在 starter 这一侧存在</strong>，不会跟着内核跑到 <code>-server</code> 里去。</li>
       </ul>
     </div>
-    <div class="src-block">Jellyfish-Spring-Boot-Starter/README.md:341-363（「内核的 HTTP 外壳默认只绑回环、<code>GET /sessions</code> 返回全量会话」）、Jellyfish-Spring-Boot-Starter/README.md:416-434（配置改动建议直接重启）、Jellyfish-Spring-Boot-Starter/README.md:17-24（不支持同进程多套内核）、Jellyfish/README.md「三种运行模式」（<code>-server</code> 的定位，详见 <a href="04-modes.html">04 三种运行模式</a>）</div>
+    <div class="src-block">Jellyfish-Spring-Boot-Starter/README.md:341-363（「内核的 HTTP 外壳默认只绑回环、<code>GET /sessions</code> 返回全量会话」）、Jellyfish-Spring-Boot-Starter/README.md:416-434（配置改动建议直接重启）、Jellyfish-Spring-Boot-Starter/README.md:17-24（不支持同进程多套内核）、Jellyfish/README.md「三种运行模式」（<code>-server</code> 的定位，详见 <a href="04-modes.html">04 三种运行模式</a>）、Jellyfish/README.md:999-1015（默认只绑 127.0.0.1 / 没配密钥不鉴权 / 非回环未配密钥退 3 / 除 <code>GET /health</code> 外都要 <code>Authorization: Bearer</code> / 写请求同源）、Jellyfish/docs/constraints.md:1113-1119（鉴权表）、Jellyfish/jellyfish-server/src/main/java/zcd/jellyfish/server/JellyfishServer.java:249-254（拒绝启动的判据）、Jellyfish/jellyfish-server/src/main/java/zcd/jellyfish/server/http/ApiKeyGuard.java:73,80（health 豁免与 401）、Jellyfish/jellyfish-server/src/main/java/zcd/jellyfish/server/http/OriginGuard.java:23-29（来源判据）</div>
 
     <h2>14. Jackson 版本</h2>
 

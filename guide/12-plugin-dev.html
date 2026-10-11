@@ -271,7 +271,7 @@ jellyfish.tags=example</code></pre>
             <td>plugin.provider</td>
             <td>string</td>
             <td><span class="tag optional">选填</span></td>
-            <td>未提供时为 <code>null</code><span class="tag todo">【需核实】</span></td>
+            <td>未提供时为 <code>null</code>（PF4J 把该键的原始值直接塞进描述符，不做任何兜底；内核既不读也不校验它）</td>
             <td>提供者标识，仅展示用</td>
             <td><code>com.example</code></td>
           </tr>
@@ -279,7 +279,7 @@ jellyfish.tags=example</code></pre>
             <td>plugin.description</td>
             <td>string</td>
             <td><span class="tag optional">选填</span></td>
-            <td>未提供时为 <code>null</code><span class="tag todo">【需核实】</span></td>
+            <td>未提供（或写成空串）时为 <code>""</code>：PF4J 对空值<strong>显式写入空串</strong>而不是 <code>null</code>；内核里没有任何 <code>getPluginDescription()</code> 读取点</td>
             <td>一句话说明这个插件做什么，展示用</td>
             <td><code>按名字打招呼</code></td>
           </tr>
@@ -287,7 +287,7 @@ jellyfish.tags=example</code></pre>
             <td>plugin.requires</td>
             <td>string（semver 约束）</td>
             <td><span class="tag optional">选填</span></td>
-            <td>未提供时不校验<span class="tag todo">【需核实】</span>；示例统一写 <code>*</code></td>
+            <td>未提供时不校验（描述符保持 PF4J 初值 <code>*</code>；内核 <code>normalizeRequires</code> 见空白直接返回、连错误都不记）；示例统一写 <code>*</code></td>
             <td>内核兼容约束。<strong>内核目前不声明系统版本</strong>，PF4J 的缺省值 <code>0.0.0</code> 会让这条校验直接跳过，因此写 <code>*</code> 是显式声明「不限版本」；写成非法表达式（如带 <code>-SNAPSHOT</code>）会被预检归一为 <code>*</code> 并记一条描述符错误，插件起不来</td>
             <td><code>*</code></td>
           </tr>
@@ -300,7 +300,9 @@ jellyfish.tags=example</code></pre>
               标签。<strong>语义在仓库里有两种说法</strong>：内核描述符的 javadoc 写「供按标签授权使用」，
               而官方插件的 <code>plugin.properties</code> 注释写「标签仅作诊断与展示；agent 授权只按工具名，不按标签」。
               内核 main 代码里除了解析与测试没有其它读取点，因此<strong>现在它实际只被解析、不被使用</strong>。
-              <span class="tag todo">【待确认】</span>它到底是「诊断用」还是「预留的授权维度」。
+              <strong>已查实：它现在没有任何运行期效果</strong>——<code>getTags()</code> 的全部调用点都在单测里，
+              生产代码里唯一的读写分别是解析器的一行 <code>addTags</code> 与本题的 <code>getTags()</code> 本身，
+              既没有授权判定、也没有任何展示/序列化读取点，因此它是「预留的授权维度」，javadoc 的措辞是意图声明而非现状。
             </td>
             <td><code>example</code></td>
           </tr>
@@ -344,18 +346,20 @@ jellyfish.tags=example</code></pre>
 &lt;/dependencies&gt;</code></pre>
 
     <div class="callout pitfall">
-      <span class="callout-title">这份父 POM 能不能从中央仓库拿到？<span class="tag todo">【待确认】</span></span>
+      <span class="callout-title">这份父 POM 不在中央仓库</span>
       <p>
-        <strong>不能确认。</strong>内核仓库明确说明它发布了父 POM 与 <code>jellyfish-api</code> / <code>-infra</code> / <code>-core</code> / <code>-di</code>
+        <strong>拿不到。</strong>内核仓库明确说明它发布了父 POM 与 <code>jellyfish-api</code> / <code>-infra</code> / <code>-core</code> / <code>-di</code>
         四个构件（坐标 <code>io.github.zcd0831:jellyfish</code>），而 <code>Jellyfish-Plugins</code>
         <strong>没有 <code>release</code> profile</strong>（整份 <code>pom.xml</code> 里没有任何用于发布 Central 的 <code>&lt;profiles&gt;</code>；
         各插件模块自己的 <code>&lt;profiles&gt;</code> 只用来跑端到端测试，如 <code>shell-it</code>、<code>mcp-it</code>、<code>script-it</code>）。
-        因此<strong>无法从仓库材料里确认 <code>io.github.zcd0831:jellyfish-plugins:0.1.1</code> 已在中央仓库</strong>。
+        因此 <code>io.github.zcd0831:jellyfish-plugins:0.1.1</code> <strong>不在中央仓库</strong>——<code>repo1.maven.org</code> 上
+        <code>io/github/zcd0831/</code> 整个路径 404，Central 检索该 <code>groupId</code> 命中 0 条。
       </p>
       <p>
         只在本仓库内部开发时不构成问题（父 POM 就在聚合层级上）；<strong>在仓库之外开发</strong>时请直接用下面那份
-        不依赖父 POM 的等价 POM。若你确实想解析父 POM，先自己核实它在本地 / 远端仓库里的可用性
-        （<span class="tag todo">【需核实】</span>：在空目录里跑一次 <code>mvn dependency:get</code>，或直接试构建）。
+        不依赖父 POM 的等价 POM。要说清楚的第二件事：本机 <code>~/.m2</code> 里那份之所以能用，是因为本仓库
+        <code>mvn install</code> 装过（<code>~/.m2/repository/io/github/zcd0831/jellyfish-plugins/</code> 下只有
+        <code>maven-metadata-local.xml</code>，没有任何从中央仓库下载的痕迹），换一台机器就解析不到——仓库之外开发请直接用下面那份。
       </p>
     </div>
     <div class="src-block">Jellyfish-Plugins/README.md:865-894（README 原文 POM）、Jellyfish-Plugins/pom.xml（无发布 profile）、Jellyfish/README.md:1140-1152（内核发布到中央仓库的五个构件）、Jellyfish-Plugins/jellyfish-plugin-shell/pom.xml（模块级 profile 的用途）</div>
@@ -369,7 +373,7 @@ jellyfish.tags=example</code></pre>
          http://maven.apache.org/xsd/maven-4.0.0.xsd"&gt;
     &lt;modelVersion&gt;4.0.0&lt;/modelVersion&gt;
 
-    &lt;!-- 不再继承 jellyfish-plugins 父 POM：那份父 POM 是否在中央仓库无法确认（见上） --&gt;
+    &lt;!-- 不再继承 jellyfish-plugins 父 POM：那份父 POM 不在中央仓库，仓库之外解析不到（见上） --&gt;
     &lt;groupId&gt;com.example&lt;/groupId&gt;
     &lt;artifactId&gt;my-plugin&lt;/artifactId&gt;
     &lt;version&gt;0.1.0&lt;/version&gt;
@@ -1081,7 +1085,7 @@ java -jar /path/to/jellyfish-cli-0.1.1.jar -cli -p "/hello 世界"</code></pre>
           <tr>
             <td>Server 的 <code>GET /commands</code></td>
             <td>结构化命令清单（含 <code>summary</code> / <code>usage</code> / 别名）</td>
-            <td>只 <code>-server</code> 模式有。它是命令注册表的只读视图，适合脚本化回归。<span class="tag todo">【待确认】</span>：本套文档在三个仓库里<strong>没有找到 <code>-cli</code> / <code>-tui</code> 侧的「列出插件状态」命令</strong>（例如 <code>/plugins</code>），因此插件级状态请以启动日志为准</td>
+            <td>只 <code>-server</code> 模式有。它是命令注册表的只读视图，适合脚本化回归。<strong>已查实：<code>-cli</code> / <code>-tui</code> 侧没有「列出插件状态」的命令。</strong>内核只注册 11 条（<code>help</code> / <code>new</code> / <code>session</code> / <code>resume</code> / <code>model</code> / <code>agent</code> / <code>status</code> / <code>usage</code> / <code>delete</code> / <code>compact</code> / <code>reload</code>），TUI 自有的只有 5 条（<code>/exit</code>（别名 <code>/quit</code>）/ <code>/ui</code> / <code>/thinking</code> / <code>/toolargs</code> / <code>/mouse</code>），插件侧只有各自的功能命令（<code>/todo</code>、<code>/skills</code>、<code>/mcp</code>、<code>/plan</code>、<code>/resmon</code>、<code>/init</code>、<code>/python</code>、<code>/node</code>）——因此插件级状态请以启动日志为准</td>
           </tr>
         </tbody>
       </table>

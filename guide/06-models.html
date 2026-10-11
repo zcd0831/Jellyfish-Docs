@@ -1068,8 +1068,14 @@
           与 <code>https://api.deepseek.com</code>（<code>Jellyfish-Spring-Template/src/main/resources/jellyfish/models.json</code>）。</li>
         <li><strong>各家缺省 <code>baseUrl</code></strong> 都取自各客户端源码里的 <code>DEFAULT_BASE_URL</code>。</li>
         <li><strong>必须你自己填的</strong>：<code>claude</code> 与 <code>gemini</code> 两条的
-          <code>contextLength</code> 我<strong>故意没写</strong> <code>【待确认】</code>——仓库里没有这两家的示例数值，
-          写一个数字就是编造。<strong>不写这一项的后果是「内核不做上下文裁剪」</strong>，请按厂商文档把上下文窗口填上。</li>
+          <code>contextLength</code> 我<strong>故意没写</strong> <code>【待确认】</code>——全仓逐个查过
+          （含 <code>Jellyfish/**/src/test</code> 与各示例配置）：这两家<strong>既无数值也无常量</strong>，写一个数字就是编造。
+          两条可复核的证据：① 两家客户端的常量只有 baseUrl / 协议版本 / 输出上限，不含上下文窗口
+          （<code>grep -rn contextLength Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm</code> → 0 命中）；
+          ② 目录发现对内置类型直接跳过（<code>ModelManager</code> 见 <code>isBuiltinType</code> 为真即原样返回），Gemini 的
+          <code>listModels()</code> 也只解析模型名——跑发现同样拿不到窗口。<strong>这个数只能从厂商文档来</strong>；
+          拿不到就写 <code>0</code>：<code>contextLength</code> 在内核里是原始类型 <code>int</code>，不写即 <code>0</code>（＝未知），
+          后果就是<strong>内核不做上下文裁剪</strong>。</li>
         <li><strong>模型 id</strong>同样以厂商文档为准：<code>claude-3-5-sonnet</code> 与 <code>gemini-1.5-pro</code>
           只是仓库测试里出现的名字，能跑通但随时可能被厂商下线。</li>
       </ul>
@@ -1102,7 +1108,7 @@ java -jar /path/to/jellyfish-cli-0.1.1.jar -cli -p "/model deepseek/deepseek-rea
       模型解析是三级回落：<strong>会话显式 → <code>agent.model</code> → 全局默认</strong>。
     </p>
 
-    <div class="src-block">Jellyfish/README.md:515-549（示例配置与字段语义）、Jellyfish/README.md:72-99（最小示例：gpt-4o / 128000 / 4096）、Jellyfish/README.md:367-387（<code>/model [provider/model]</code> 与离线可用命令）、Jellyfish/README.md:120-139（<code>--model</code> 必须含 <code>/</code>）、Jellyfish/docs/constraints.md:429-434（模型解析三级回落）、Jellyfish-Spring-Template/src/main/resources/jellyfish/models.json（DeepSeek 示例配置）</div>
+    <div class="src-block">Jellyfish/README.md:515-549（示例配置与字段语义）、Jellyfish/README.md:72-99（最小示例：gpt-4o / 128000 / 4096）、Jellyfish/README.md:367-387（<code>/model [provider/model]</code> 与离线可用命令）、Jellyfish/README.md:120-139（<code>--model</code> 必须含 <code>/</code>）、Jellyfish/docs/constraints.md:429-434（模型解析三级回落）、Jellyfish-Spring-Template/src/main/resources/jellyfish/models.json（DeepSeek 示例配置）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/llm/ClaudeLlmClient.java:56-69、GeminiLlmClient.java:28-40（两家客户端的常量清单里只有 baseUrl / 协议版本 / 输出上限，没有上下文窗口）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/model/ModelManager.java:170（内置类型不做目录发现）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/Model.java:93-101（<code>contextLength</code> 是原始类型 <code>int</code>）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/ModelDescriptor.java:39-50（0 ＝未知）</div>
 
     <h2>常见问题</h2>
 

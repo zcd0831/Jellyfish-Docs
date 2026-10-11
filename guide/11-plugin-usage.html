@@ -498,7 +498,7 @@ mvn -q clean package -DskipTests
               <td>sensitivePatterns</td>
               <td>string[]</td>
               <td><span class="tag optional">选填</span></td>
-              <td><code>[]</code>（只追加，不替换内置表）<span class="tag todo">【需核实】</span></td>
+              <td><code>[]</code>（只追加，不替换内置表）</td>
               <td>在<strong>内置剔除模式之外</strong>追加要剔除的环境变量名模式</td>
               <td><code>["*_PWD"]</code></td>
             </tr>
@@ -576,18 +576,17 @@ mvn -q clean package -DskipTests
         <li><strong>为什么不支持「不超时」？</strong>README 明确「不支持」。需要长时间跑就调大 <code>maxTimeoutSeconds</code>，或用 <code>idleTimeoutSeconds</code> 只盯「多久没动静」。</li>
       </ul>
     </div>
-    <div class="src-block">Jellyfish-Plugins/README.md:163-190（工具与 <code>!命令</code>）、Jellyfish-Plugins/README.md:191-204（配置字段表）、Jellyfish-Plugins/README.md:205-253（六道判定与口径）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/PluginConfig.java（键名与解析）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellPlugin.java（注册 <code>InputDirectiveRequest</code> 与 <code>PermissionCheckRequest</code>）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:163-190（工具与 <code>!命令</code>）、Jellyfish-Plugins/README.md:191-204（配置字段表）、Jellyfish-Plugins/README.md:205-253（六道判定与口径）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/PluginConfig.java（键名与解析）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellPlugin.java（注册 <code>InputDirectiveRequest</code> 与 <code>PermissionCheckRequest</code>）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellEnvironment.java:76-84（内置剔除表 + 追加合并）</div>
 
     <div class="callout warn">
       <span class="callout-title">关于「<code>/shell</code> 命令」的一处不一致</span>
       <p>
         内核 <code>README.md</code> 在举「插件带来的命令」的例子时写到了「shell 的 <code>/shell</code>」，
         但 <code>Jellyfish-Plugins</code> 里 shell 插件只注册了 <code>shell</code> 工具与 <code>!</code> 输入指令，
-        <strong>没有注册名为 <code>shell</code> 的命令</strong>。以插件源码为准：<code>/help</code> 里不会有 <code>/shell</code>。
-        <span class="tag todo">【待确认】</span>内核文档这一处示例是否为笔误。
+        <strong>没有注册名为 <code>shell</code> 的命令</strong>。两边原文如下——内核 <code>Jellyfish/README.md:386</code>：「<strong>插件会带来更多命令</strong>（例如待办插件的 <code>/todo</code>、skills 插件的 <code>/skills</code>、shell 的 <code>/shell</code>），装了就出现在 <code>/help</code> 里」；插件侧源码：<code>ShellPlugin.start()</code> 只有三处扩展点声明——<code>shell</code> 工具 <code>ToolCallRequest</code>（<code>ShellPlugin.java:57</code>）、类型级 <code>PermissionCheckRequest</code>（<code>ShellPlugin.java:58</code>）、<code>!</code> 输入指令 <code>InputDirectiveRequest</code>（<code>ShellPlugin.java:59</code>），<strong>没有 <code>CommandRequest</code></strong>，<code>Jellyfish-Plugins</code> 全文也搜不到 <code>/shell</code>。该信插件源码：内核 <code>Jellyfish/README.md:386</code> 这一处示例写错，<code>/help</code> 里不会有 <code>/shell</code>；同句里的 <code>/todo</code>、<code>/skills</code> 确有（<code>TodoPlugin.java:69</code>、<code>SkillsPlugin.java:62</code>）。
       </p>
     </div>
-    <div class="src-block">Jellyfish/README.md:386（「插件会带来更多命令」示例句）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellPlugin.java（<code>start</code> 内的两处注册）</div>
+    <div class="src-block">Jellyfish/README.md:386（「插件会带来更多命令」示例句）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellPlugin.java（<code>start</code> 内的三处扩展点）</div>
 
     <div class="feature">
       <h3>session-file —— 会话持久化</h3>
@@ -941,7 +940,7 @@ mvn -q clean package -DskipTests
               <td>servers[].args</td>
               <td>string[]</td>
               <td><span class="tag optional">选填</span></td>
-              <td><code>[]</code><span class="tag todo">【需核实】</span>（README 与 <code>command</code> / <code>env</code> 合并写成 <code>—</code>）</td>
+              <td><code>[]</code>（README 与 <code>command</code> / <code>env</code> 合并写成 <code>—</code>）</td>
               <td>命令行参数。启动日志里 <code>--token sk-xxx</code> 这类值会被遮蔽成 <code>***</code>（按旗标名识别）</td>
               <td><code>["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]</code></td>
             </tr>
@@ -949,7 +948,7 @@ mvn -q clean package -DskipTests
               <td>servers[].env</td>
               <td>object（string → string）</td>
               <td><span class="tag optional">选填</span></td>
-              <td><code>{}</code><span class="tag todo">【需核实】</span></td>
+              <td><code>{}</code></td>
               <td><strong><code>env</code> 是拿到环境变量的唯一通道</strong>：子进程只继承 <code>PATH</code> / <code>HOME</code> / <code>LANG</code> / <code>LC_*</code> / <code>TMPDIR</code> / <code>TEMP</code> / <code>TMP</code> / <code>USER</code> / <code>LOGNAME</code> / <code>SHELL</code>（Windows 另加 <code>SystemRoot</code> / <code>PATHEXT</code> / <code>ComSpec</code> / <code>windir</code>），宿主 JVM 里那些 provider 密钥不会跟过去</td>
               <td><code>{ "SOME_TOKEN": "${MCP_TOKEN}" }</code></td>
             </tr>
@@ -989,7 +988,7 @@ mvn -q clean package -DskipTests
         </table>
       </div>
 
-      <p><strong>源码里有、README 未收录的键</strong>（字段名与默认值取自源码常量，<span class="tag todo">【需核实】</span>是否属于稳定契约）</p>
+      <p><strong>源码里有、README 未收录的键</strong>（字段名与默认值取自源码常量，<span class="tag todo">【需核实】</span>是否属于稳定契约）——核实方法：把源码常量 <code>McpConfig.java:42-69</code>（<code>toolPrefix</code>=<code>true</code>、<code>toolNameMaxLength</code>=<code>64</code>，边界 <code>16~128</code> 在 <code>McpConfig.java:72-75</code>；<code>maxToolsPerServer</code>=<code>200</code>）与 <code>McpServerConfig.java:33,36</code>（<code>callTimeoutSeconds</code>=<code>60</code>、<code>connectTimeoutSeconds</code>=<code>15</code>）逐条对照 <code>Jellyfish-Plugins/README.md:593-676</code> 的字段表；升级版本后再比一次——常量变了而 README 字段表没变，就说明这些键只跟着源码走、不属于文字契约。另：源码里的 <code>servers[].enabled</code>（<code>McpServerConfig.java:108</code>，缺省 <code>true</code>）同样未收录，但本表未列出。</p>
       <div class="table-scroll field-table">
         <table>
           <thead>
@@ -1255,14 +1254,15 @@ mvn -q clean package -DskipTests
     <div class="callout design">
       <span class="callout-title">脚本桥接还有几个 README 未收录的键</span>
       <p>
-        <code>jellyfish-script</code> 的 <code>ScriptBridgeConfig</code> 里还有 <code>gatewayRoot</code>（网关资源抽取根目录）、
-        <code>pidDirectory</code>（网关 PID 文件目录）、<code>events.allow</code>（可订阅事件白名单，<strong>只收窄、不扩展</strong>，
+        <code>jellyfish-script</code> 的 <code>ScriptBridgeConfig</code> 里还有 <code>gatewayRoot</code>（网关资源抽取根目录，缺省 <code>~/.jellyfish/gateway</code>，<code>ScriptBridgeConfig.java:430-433</code>）、
+        <code>pidDirectory</code>（网关 PID 文件目录，缺省与网关目录<strong>同级</strong>的 <code>pids</code>，<code>ScriptBridgeConfig.java:447-450</code>）、<code>events.allow</code>（可订阅事件白名单，缺省 <code>[]</code> 即不收窄，<code>ScriptBridgeConfig.java:465-474</code>；<strong>只收窄、不扩展</strong>，
         清单硬编码在运行时里）与 <code>circuitBreaker.failuresToOpen</code>（源码默认 <code>2</code>）、
-        <code>circuitBreaker.cooldownSeconds</code>（<code>60</code>）、<code>circuitBreaker.roundsToPermanent</code>（<code>3</code>）。
-        README 未收录这几个键的<strong>默认值与稳定契约</strong>，<span class="tag todo">【待确认】</span>改动前请以源码为准。
+        <code>circuitBreaker.cooldownSeconds</code>（<code>60</code>）、<code>circuitBreaker.roundsToPermanent</code>（<code>3</code>）（<code>CircuitBreakerSettings.java:24,27,30</code>）。
+        收录情况要说准：<code>gatewayRoot</code>、<code>pidDirectory</code>、<code>circuitBreaker.*</code> 在 <code>Jellyfish-Plugins/README.md</code> 里找不到出处（脚本字段表 <code>Jellyfish-Plugins/README.md:770-777</code> 只到 <code>manifestStrict</code> 与 <code>scripts.&lt;id&gt;</code>）；<code>events.allow</code> 只在正文一条要点（<code>Jellyfish-Plugins/README.md:803</code>）里出现，字段表里没有它、也没给缺省。上面这些缺省值因此全部只来自源码。
+        <span class="tag todo">【待确认】</span>它们是否属于稳定契约（README 未收录，升级时可能无声变动）：核实办法是把 <code>ScriptBridgeConfig.java:61-73</code> 的四个键名常量与 <code>CircuitBreakerSettings</code> 的默认值常量，逐条对照 <code>Jellyfish-Plugins/README.md:770-777</code>，常量变了而 README 没变即说明它只是实现细节。
       </p>
     </div>
-    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/ScriptBridgeConfig.java、Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/CircuitBreakerSettings.java</div>
+    <div class="src-block">Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/ScriptBridgeConfig.java、Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/GatewayResources.java:89-90 与 ScriptPidFiles.java:48-52（两项缺省的来源）、Jellyfish-Plugins/README.md:770-777,803（收录范围与 events.allow 的正文出处）、Jellyfish-Plugins/jellyfish-script/src/main/java/zcd/jellyfish/script/CircuitBreakerSettings.java</div>
 
     <h2>该装哪几个</h2>
 
