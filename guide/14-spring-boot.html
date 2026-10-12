@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>14 整合到 Spring Boot · Jellyfish 使用指南</title>
-<meta name="description" content="把 Jellyfish 内核接进已有 Spring Boot 应用的完整教程：它是什么 / 不是什么、依赖坐标、application.yml 全字段表（含多用户护栏 8 项）、自动装配三步链、JellyfishUserFacade 方法一览与四条纪律、把对话与审批暴露成 REST + SSE、审批与提问专节、多用户护栏补的六个缺口、门面 Bean 的边界、生命周期 phase、与原生 -server 的差异、Jackson 版本、生产注意事项与使用限制。">
+<meta name="description" content="把 Jellyfish 内核接进已有 Spring Boot 应用的完整教程：它是什么 / 不是什么、依赖坐标、application.yml 全字段表（含多用户护栏 8 项）、自动装配三步链、JellyfishUserFacade 方法一览与四条纪律、把对话与审批暴露成 REST + SSE、审批与提问专节、多用户护栏补的六个缺口、门面 Bean 的边界、生命周期 phase、与原生 -server 的差异、Jackson 依赖对齐、生产注意事项与使用限制。">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
@@ -86,8 +86,8 @@
     <div class="callout tip">
       <span class="callout-title">读这一页之前需要什么</span>
       <ul>
-        <li>三个仓库的版本都是 <code>0.1.2</code>，但<strong>没有任何文档声明三者之间的版本兼容矩阵</strong>；
-          凡涉及「哪个内核版本配哪个 Starter 版本」，一律按 <code>【版本对应关系需查阅各自 README】</code> 处理。</li>
+        <li>依赖怎么来：starter 依赖的内核（<code>jellyfish-di</code>）由 Maven 直接从中央仓库解析，
+          你只需在自己的 pom 里写本 starter 一个坐标。</li>
         <li>本页假定你已经知道内核的四份配置文件与插件怎么装：没读过的话先看
           <a href="05-config-overview.html">05 配置体系总览</a> 与 <a href="11-plugin-usage.html">11 安装与使用官方插件</a>——
           starter 里的 <code>models.json</code> / <code>agents.json</code> / <code>jellyfish.json</code> 与 CLI 版<strong>完全同一份格式</strong>。</li>
@@ -179,7 +179,7 @@
           </tr>
           <tr>
             <td>内核</td>
-            <td><code>io.github.zcd0831:jellyfish-di:0.1.2</code></td>
+            <td><code>io.github.zcd0831:jellyfish-di</code></td>
             <td><strong>已发布到中央仓库</strong>，依赖由 Maven 直接解析（传递带 <code>jellyfish-api</code> / <code>jellyfish-infra</code> / <code>jellyfish-core</code>）</td>
           </tr>
         </tbody>
@@ -215,8 +215,8 @@
             <td>string</td>
             <td><span class="tag required">必填</span></td>
             <td>—</td>
-            <td>版本号；三个仓库当前都是 <code>0.1.2</code></td>
-            <td><code>0.1.2</code></td>
+            <td>本 starter 的版本，与内核 <code>jellyfish-di</code> 用同一个版本号，由你自己的 pom 属性统一管理</td>
+            <td><code>X.Y.Z</code></td>
           </tr>
         </tbody>
       </table>
@@ -225,7 +225,8 @@
     <pre><code class="language-xml">&lt;dependency&gt;
     &lt;groupId&gt;io.github.zcd0831&lt;/groupId&gt;
     &lt;artifactId&gt;jellyfish-spring-boot-starter&lt;/artifactId&gt;
-    &lt;version&gt;0.1.2&lt;/version&gt;
+    &lt;!-- X.Y.Z：填你在用的那份内核版本，与它 / 你的 starter 保持一致 --&gt;
+    &lt;version&gt;X.Y.Z&lt;/version&gt;
 &lt;/dependency&gt;</code></pre>
 
     <div class="callout tip">
@@ -238,7 +239,7 @@
         忘了它的表现是「内核明明改了，这边编译却看不到」，或更糟——用到的是本地仓库里的旧快照。
       </p>
     </div>
-    <div class="src-block">Jellyfish-Spring-Boot-Starter/README.md:26-40（环境要求与内核已发布中央仓库）、Jellyfish-Spring-Boot-Starter/README.md:42-50（依赖坐标）、Jellyfish-Spring-Boot-Starter/pom.xml（<code>jellyfish.version</code>、<code>java.version</code>、<code>spring-boot-starter-parent</code> 的版本）</div>
+    <div class="src-block">Jellyfish-Spring-Boot-Starter/README.md:26-40（环境要求）、Jellyfish-Spring-Boot-Starter/README.md:42-50（依赖坐标）、Jellyfish-Spring-Boot-Starter/pom.xml（<code>jellyfish.version</code>、<code>java.version</code>、<code>spring-boot-starter-parent</code> 的版本）</div>
 
     <h2>3. <code>application.yml</code>：完整示例与逐字段表</h2>
 
@@ -1425,7 +1426,6 @@ public void cancelAsk(@RequestParam String userId, @PathVariable String sid,
         <strong>这 7 条在 starter 里都有对应实现</strong>（会话归属、并发配额、会话数上限、闲置回收、审批归属、提问归属、命令入口）：
         七个 <code>@Bean</code> 集中在 <code>JellyfishUserWiringConfiguration</code>（会话归属存储、配额闸门、命令闸门、审批网关、提问网关、多用户门面、闲置回收器），
         其中「会话数上限」的检查落在建会话的同锁临界区里（<code>JellyfishUserFacade.createSession</code>）。
-        （README 正文早期版本写「下面<strong>六件事</strong>」，与同节表格的 7 行对不上，<strong>现已改为「七件事」</strong>。）
       </p>
 
       <p><strong>完整示例</strong>：替换 <code>SessionOwnerStore</code>（唯一的可替换点）</p>
@@ -1823,8 +1823,8 @@ public class DelayedBootstrapConfig {
       <ul>
         <li><strong>为什么 phase 不取「比 Web 容器小一点」？</strong>需要保证的只有一条——内核早于 Web 容器就绪、
           晚于它停止（否则请求会打进一个已经关掉的线程池）。但 Web 容器的 phase 是 Boot 的<strong>内部实现</strong>
-          （2.x 是 <code>Integer.MAX_VALUE - 1</code>，较新版本已改成 <code>Integer.MAX_VALUE - 1024</code>），
-          跟着它减一个魔数会在某次升级 Boot 时<strong>静默失效</strong>——而失效的表现是「偶发地打不通」，排查成本极高。
+          （<strong>随版本不同，没有稳定值</strong>），
+          跟着它减魔数会在某次升级后<strong>静默失效</strong>——而失效的表现是「偶发地打不通」，排查成本极高。
           取最小值就与那个数字无关。副作用是内核会在其它 <code>SmartLifecycle</code> 之前启动，这是可接受的：
           <code>start()</code> 发生在所有单例都已实例化之后。</li>
         <li><strong>为什么不注册 JVM shutdown hook？</strong>Spring 关上下文时就会走 <code>SmartLifecycle.stop()</code>；
@@ -1909,21 +1909,21 @@ public class DelayedBootstrapConfig {
     </div>
     <div class="src-block">Jellyfish-Spring-Boot-Starter/README.md:341-363（「内核的 HTTP 外壳默认只绑回环、<code>GET /sessions</code> 返回全量会话」）、Jellyfish-Spring-Boot-Starter/README.md:416-434（配置改动建议直接重启）、Jellyfish-Spring-Boot-Starter/README.md:17-24（不支持同进程多套内核）、Jellyfish/README.md「三种运行模式」（<code>-server</code> 的定位，详见 <a href="04-modes.html">04 三种运行模式</a>）、Jellyfish/README.md:1005-1021（默认只绑 127.0.0.1 / 没配密钥不鉴权 / 非回环未配密钥退 3 / 除 <code>GET /health</code> 外都要 <code>Authorization: Bearer</code> / 写请求同源）、Jellyfish/docs/constraints.md:1120-1126（鉴权表）、Jellyfish/jellyfish-server/src/main/java/zcd/jellyfish/server/JellyfishServer.java:249-254（拒绝启动的判据）、Jellyfish/jellyfish-server/src/main/java/zcd/jellyfish/server/http/ApiKeyGuard.java:73,80（health 豁免与 401）、Jellyfish/jellyfish-server/src/main/java/zcd/jellyfish/server/http/OriginGuard.java:23-29（来源判据）</div>
 
-    <h2>14. Jackson 版本</h2>
+    <h2>14. Jackson 依赖对齐</h2>
 
     <div class="feature">
-      <h3>内核用 2.21.6，Boot 2.7.18 管 2.13.5</h3>
+      <h3>starter 覆盖 <code>jackson-bom.version</code>，只为自己对齐内核</h3>
       <dl>
         <dt>是什么</dt>
         <dd>
-          内核的构建与测试用 <code>jackson-databind 2.21.6</code>，而 Boot <code>2.7.18</code> 管理的是
-          <code>2.13.5</code>——差一个大版本。本 starter 的 pom <strong>覆盖了 Boot 的 <code>jackson-bom.version</code> 属性</strong>，
-          让自己按内核那一份构建。
+          内核的构建与测试用自己那一份 <code>jackson-databind</code>（<code>2.21.6</code>），Boot 的
+          <code>spring-boot-starter-parent</code> 管的则是 <code>2.13.5</code>。本 starter 的 pom
+          <strong>覆盖了 Boot 的 <code>jackson-bom.version</code> 属性</strong>，让自己按内核那一份构建。
         </dd>
         <dt>怎么用</dt>
         <dd>
-          什么都不用做。要注意的是<strong>宿主</strong>的最终 classpath：
-          <strong>由宿主自己的 BOM 决定</strong>——若你的应用把 Jackson 压回 <code>2.13.5</code>，不必担心（实测两个版本都通过）。
+          什么都不用做。要注意的是<strong>宿主</strong>的最终 classpath：<strong>由宿主自己的 BOM 决定</strong>——
+          要让宿主也用内核那一份，在宿主 pom 里覆盖 <code>jackson-bom.version</code> 即可。
         </dd>
       </dl>
 
@@ -1947,9 +1947,9 @@ public class DelayedBootstrapConfig {
               <td><code>jellyfish.version</code></td>
               <td>Maven 属性</td>
               <td><span class="tag optional">选填</span></td>
-              <td><code>0.1.2</code></td>
-              <td>内核模块（<code>jellyfish-di</code> 及其传递依赖）的版本</td>
-              <td><code>&lt;jellyfish.version&gt;0.1.2&lt;/jellyfish.version&gt;</code></td>
+              <td><code>X.Y.Z</code></td>
+              <td>内核模块（<code>jellyfish-di</code> 及其传递依赖）的版本；填你在用的那份内核版本，与它 / 你的 starter 保持一致</td>
+              <td><code>&lt;jellyfish.version&gt;X.Y.Z&lt;/jellyfish.version&gt;</code></td>
             </tr>
           </tbody>
         </table>
@@ -1958,22 +1958,20 @@ public class DelayedBootstrapConfig {
         这两个都是<strong>构建期</strong>属性，改完要重新构建 <span class="tag restart">需重启</span>。
       </p>
 
-      <p><strong>完整示例</strong>：两个版本各跑一遍（仓库里就是这么验的）</p>
-      <pre><code class="language-bash">mvn test                                # 2.21.6（starter 自己的构建）
-mvn test -Djackson-bom.version=2.13.5   # Boot 管理的版本</code></pre>
       <p>
-        实测两个版本下<strong>全部用例</strong>（含真解析 <code>models.json</code> / <code>agents.json</code> 的那条链路）通过。
+        <strong>宿主如何对齐</strong>：让自己也用内核那一份，在<strong>宿主的 pom</strong> 里覆盖同一个属性即可——
+        不覆盖时，宿主最终拿到的是它自己 BOM 管的那个版本。
       </p>
 
       <p><strong>常见问题</strong></p>
       <ul>
-        <li><strong>宿主被压回 2.13.5，会不会有运行时差异？</strong>按仓库给出的实测结论没有。要更保险，就在宿主的 pom 里
-          设同一个属性把版本对齐到内核那一份。</li>
-        <li><strong>starter 为什么要把自己对齐到内核的版本？</strong>否则「内核在 2.21.6 上测过、starter 却在 2.13.5 上跑」
-          这件事<strong>无人知晓</strong>。</li>
+        <li><strong>宿主被压回 <code>2.13.5</code>，会不会有运行时差异？</strong>以宿主最终解析出来的 classpath 为准。
+          要对齐就在宿主的 pom 里覆盖 <code>jackson-bom.version</code>，把版本对齐到内核那一份。</li>
+        <li><strong>starter 为什么要把自己对齐到内核的版本？</strong>让 starter 的构建与测试跑在内核实际使用的那一份 Jackson 上，
+          而不是 Boot 默认管的另一份。</li>
       </ul>
     </div>
-    <div class="src-block">Jellyfish-Spring-Boot-Starter/README.md:401-415（Jackson 版本一节的原文与两条命令）、Jellyfish-Spring-Boot-Starter/pom.xml（<code>jackson-bom.version</code> 覆盖与 <code>jellyfish.version</code> 的注释）、Jellyfish-Spring-Boot-Starter/AGENTS.md（宿主如何覆盖同一个属性）</div>
+    <div class="src-block">Jellyfish-Spring-Boot-Starter/README.md:401-415（Jackson 依赖对齐一节的原文）、Jellyfish-Spring-Boot-Starter/pom.xml（<code>jackson-bom.version</code> 覆盖与 <code>jellyfish.version</code> 的注释）、Jellyfish-Spring-Boot-Starter/AGENTS.md（宿主如何覆盖同一个属性）</div>
 
     <h2>15. 常见冲突与生产注意事项</h2>
 
@@ -1992,7 +1990,7 @@ mvn test -Djackson-bom.version=2.13.5   # Boot 管理的版本</code></pre>
           <tr>
             <td><strong>依赖冲突</strong></td>
             <td>Jackson 版本被宿主 BOM 改写</td>
-            <td>见第 14 节：两个版本都实测通过；要对齐就在宿主 pom 里覆盖 <code>jackson-bom.version</code></td>
+            <td>见第 14 节：以宿主最终解析出的 classpath 为准；要对齐就在宿主 pom 里覆盖 <code>jackson-bom.version</code></td>
           </tr>
           <tr>
             <td><strong>JDK 版本</strong></td>
@@ -2045,7 +2043,7 @@ mvn test -Djackson-bom.version=2.13.5   # Boot 管理的版本</code></pre>
     </div>
     <div class="src-block">Jellyfish-Spring-Boot-Starter/README.md:364-390（门面 Bean 与「第二套内核状态」）、Jellyfish-Spring-Boot-Starter/README.md:401-415（Jackson）、Jellyfish-Spring-Boot-Starter/README.md:416-434（使用限制：react 线程、涉密插件、超时两条）、Jellyfish-Spring-Boot-Starter/README.md:341-363（闲置回收跳过在途回合）、Jellyfish-Spring-Boot-Starter/src/main/java/zcd/jellyfish/spring/boot/JellyfishLifecycle.java（三处 INFO 日志的内容）、Jellyfish-Spring-Boot-Starter/AGENTS.md「关键不变量」</div>
 
-    <h2>16. 使用限制与「发布到 Maven Central」</h2>
+    <h2>16. 使用限制与构件坐标</h2>
 
     <div class="feature">
       <h3>使用限制（六条，如实抄出）</h3>
@@ -2112,22 +2110,21 @@ mvn test -Djackson-bom.version=2.13.5   # Boot 管理的版本</code></pre>
       <p>
         source / javadoc / GPG 签名 / Central 发布四个插件<strong>只在 <code>-P release</code> 时加载</strong>。
         前置与内核仓库一致：<code>~/.m2/settings.xml</code> 里 id 为 <code>central</code> 的 Portal 凭据、
-        <code>io.github.zcd0831</code> 命名空间已验证、本机 GPG 私钥可用且公钥已推到 keyserver。
+        本机 GPG 私钥可用且公钥已推到 keyserver。
         <strong>上传后在 Central Portal 里确认校验结果再点发布</strong>（<code>autoPublish</code> 缺省 <code>false</code>）。
       </p>
 
       <p><strong>常见问题</strong></p>
       <ul>
-        <li><strong>本 starter 依赖的内核从哪来？</strong>中央仓库：
-          <code>io.github.zcd0831:jellyfish-spring-boot-starter:0.1.2</code> 依赖
-          <code>io.github.zcd0831:jellyfish-di</code>，同样来自中央仓库。</li>
+        <li><strong>本 starter 依赖的内核从哪来？</strong>两个构件都在中央仓库；starter 的版本就是你 pom 里写的那个，
+          它会传递引入内核 <code>io.github.zcd0831:jellyfish-di</code>。</li>
         <li><strong>日常构建会被 GPG 挡住吗？</strong>不会，四个插件只在 <code>-P release</code> 时加载。</li>
         <li><strong>官方插件也从中央仓库拿吗？</strong>不。官方插件是 PF4J 插件包，
           不发布到 Maven Central（它们按 <code>cpPlugins.sh</code> 装到内核的插件目录，见
           <a href="11-plugin-usage.html">11 安装与使用官方插件</a>）。</li>
       </ul>
     </div>
-    <div class="src-block">Jellyfish-Spring-Boot-Starter/README.md:416-447（使用限制六条与「发布到 Maven Central」的原文）、Jellyfish-Spring-Boot-Starter/pom.xml（<code>release</code> profile 的四个插件、<code>publishingServerId</code>、<code>autoPublish</code> 缺省 false 的注释、发布所需的 POM 元数据）、Jellyfish-Plugins/CHANGELOG.md（官方插件不发布到 Maven Central）</div>
+    <div class="src-block">Jellyfish-Spring-Boot-Starter/README.md:416-447（使用限制六条与构件发布一节）、Jellyfish-Spring-Boot-Starter/pom.xml（<code>release</code> profile 的四个插件、<code>publishingServerId</code>、<code>autoPublish</code> 缺省 false 的注释、发布所需的 POM 元数据）、Jellyfish-Plugins/CHANGELOG.md（官方插件不发布到 Maven Central）</div>
 
     <h2>17. 常见问题</h2>
 

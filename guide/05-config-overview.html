@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>05 配置体系总览 · Jellyfish 使用指南</title>
-<meta name="description" content="Jellyfish 的配置体系总览：五份配置文件各管什么、config.json 全字段、全局级与项目级的双源合并规则、${VAR} 环境变量插值（含缺失即整份加载失败的硬红线）、路径展开规则、项目级配置的信任闸门与三种授予方式、未知字段在 0.1.1 后的告警范围、哪些改动能 /reload 热生效、哪些必须重启进程，以及五条常见配置任务的完整 JSON。">
+<meta name="description" content="Jellyfish 的配置体系总览：五份配置文件各管什么、config.json 全字段、全局级与项目级的双源合并规则、${VAR} 环境变量插值（含缺失即整份加载失败的硬红线）、路径展开规则、项目级配置的信任闸门与三种授予方式、未知字段的告警范围、哪些改动能 /reload 热生效、哪些必须重启进程，以及五条常见配置任务的完整 JSON。">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
@@ -398,7 +398,7 @@ flowchart TD
           在配置文件的<strong>字符串值</strong>里写占位符，然后导出环境变量：
           <pre><code class="language-bash">export OPENAI_API_KEY=sk-***
 export DEEPSEEK_API_KEY=sk-***
-java -jar /path/to/jellyfish-cli-0.1.2.jar -cli -p "/model"</code></pre>
+jellyfish -cli -p "/model"</code></pre>
         </dd>
       </dl>
 
@@ -543,12 +543,12 @@ java -jar /path/to/jellyfish-cli-0.1.2.jar -cli -p "/model"</code></pre>
         README 把这组情况概括为「静默跳过」，指的是<strong>不中断、不要求确认</strong>。
         这条告警在源码里是明文：<code>RuntimeConfig.read</code>（<code>RuntimeConfig.java:416-421</code>）在
         <code>path</code> 非空白而读到的结果是 <code>null</code> 时发一条 <code>ConfigWarningEvent</code>，
-        消息就是「配置段文件缺失或为空，将按未配置处理」（<code>RuntimeConfig.java:420</code>）；<code>0.1.1</code> 起由
+        消息就是「配置段文件缺失或为空，将按未配置处理」（<code>RuntimeConfig.java:420</code>），再由
         <code>ConfigWarningReporter</code> 渲染成一行 WARN 落到终端与日志文件。
       </p>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:948-963（路径：<code>~</code> 展开、相对进程工作目录、文件不存在视为未配置）、Jellyfish/docs/constraints.md:377-410（插件扫描目录不参与双源、展开行首 <code>~</code>、空列表回退）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/SettingsReader.java（<code>classpath:</code> 与本地文件两条读法、目录报错）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/RuntimeConfig.java:416-421（缺失/为空的告警）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ConfigWarningReporter.java（把 <code>ConfigWarningEvent</code> 渲染成一行 WARN）、Jellyfish/CHANGELOG.md:29-33（<code>0.1.1</code> 新增 <code>ConfigWarningReporter</code>）</div>
+    <div class="src-block">Jellyfish/README.md:948-963（路径：<code>~</code> 展开、相对进程工作目录、文件不存在视为未配置）、Jellyfish/docs/constraints.md:377-410（插件扫描目录不参与双源、展开行首 <code>~</code>、空列表回退）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/SettingsReader.java（<code>classpath:</code> 与本地文件两条读法、目录报错）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/RuntimeConfig.java:416-421（缺失/为空的告警）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ConfigWarningReporter.java（把 <code>ConfigWarningEvent</code> 渲染成一行 WARN）</div>
 
     <h2>项目级配置的信任</h2>
 
@@ -565,10 +565,10 @@ java -jar /path/to/jellyfish-cli-0.1.2.jar -cli -p "/model"</code></pre>
         <dd>
           <code>-cli</code> / <code>-server</code> 加启动参数；<code>-tui</code> 在启动时回答确认框：
           <pre><code class="language-bash"># 命令行：本次进程内信任并加载 ./.jellyfish/*.json（不落盘）
-java -jar /path/to/jellyfish-cli-0.1.2.jar -cli --trust-project-config -p "读一下这个项目"
+jellyfish -cli --trust-project-config -p "读一下这个项目"
 
 # TUI：启动时弹确认框，y = 加载并记住，o = 仅本次加载
-java -jar /path/to/jellyfish-cli-0.1.2.jar -tui</code></pre>
+jellyfish -tui</code></pre>
         </dd>
       </dl>
 
@@ -619,7 +619,7 @@ java -jar /path/to/jellyfish-cli-0.1.2.jar -tui</code></pre>
       <p><strong>完整示例</strong>（项目根建一份只覆盖模型的配置，然后带信任参数启动）</p>
       <pre><code class="language-bash">mkdir -p ./.jellyfish
 # 写入 ./.jellyfish/models.json（内容见 06 页的多厂商示例）
-java -jar /path/to/jellyfish-cli-0.1.2.jar -cli --trust-project-config -p "/model"</code></pre>
+jellyfish -cli --trust-project-config -p "/model"</code></pre>
 
       <p><strong>常见问题</strong></p>
       <ul>
@@ -630,38 +630,29 @@ java -jar /path/to/jellyfish-cli-0.1.2.jar -cli --trust-project-config -p "/mode
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:964-990（项目级配置的信任）、Jellyfish/docs/constraints.md:377-410（项目级默认不加载、三种授予方式、缺省答案与读取失败按不加载、<code>classpath:</code> 不受闸管辖）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ProjectConfigTrust.java（信任仓库位置、SHA-256 指纹、失败按不信任）、Jellyfish/CHANGELOG.md:40-42（<code>--trust-project-config</code> 与 TUI 两种选项）</div>
+    <div class="src-block">Jellyfish/README.md:964-990（项目级配置的信任）、Jellyfish/docs/constraints.md:377-410（项目级默认不加载、三种授予方式、缺省答案与读取失败按不加载、<code>classpath:</code> 不受闸管辖）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ProjectConfigTrust.java（信任仓库位置、SHA-256 指纹、失败按不信任）</div>
 
     <h2>未知字段怎么处理</h2>
 
     <p>
       这一节要分清三件事：<strong>会不会报错</strong>、<strong>会不会有告警</strong>、<strong>写错的字段会不会生效</strong>。
-      答案是：不报错、字段不生效；而「有没有告警」在 <code>0.1.1</code> 起变了。
+      答案是：<strong>不报错、不阻断启动，但字段不生效，而且会留下一条 WARN 告警</strong>。
     </p>
 
     <div class="callout pitfall">
-      <span class="callout-title">两处明文口径不一致，以 CHANGELOG 与源码为准</span>
+      <span class="callout-title">不报错、不阻断启动，字段不生效，但会留一条 WARN</span>
       <ul>
-        <li><strong>README（<code>models.json</code> 一节，<code>Jellyfish/README.md:552</code>）</strong>：本文件关掉了「未知字段」的报错，多写一个键<strong>既不会有提示、也不会有任何效果</strong>；表里没列出的字段就是不支持的。</li>
-        <li><strong>CHANGELOG <code>0.1.1</code>（<code>Jellyfish/CHANGELOG.md:24-28</code>）</strong>：配置里拼错字段名<strong>不再无声</strong>——读取配置时会比对字段名，发现内核不认识的字段就发一条 <code>ConfigWarningEvent</code> 并打出 WARN 行，带上文件路径与字段名；只比字段名、不做类型转换；<strong>自由格式的位置一概不看</strong>（<code>vendorBody</code>、逐插件配置段这类键名由使用方决定），宁可漏报也不报假警。</li>
-      </ul>
-      <p>
-        两句说的不是同一件事，但要一起读：<strong>「不报错、不阻断启动、字段照样不生效」在 <code>0.1.1</code> 前后都成立</strong>，
-        变的只是「完全无声」这一条——<code>0.1.1</code> 起会多一条 WARN。
-      </p>
-      <p>
-        <strong>该信哪个：以 CHANGELOG 为准，源码也站在 CHANGELOG 这一边。</strong>
-        README 那句「既不会有提示」是 <code>0.1.1</code> 之前的措辞（两份文件分头维护，这类旧句子会滞后）。
-        源码里有三处互相印证的事实：
-      </p>
-      <ul>
-        <li>绑定确实<strong>容忍</strong>未知字段：<code>ObjectMapperWrapper.java:43</code> 里
-          <code>FAIL_ON_UNKNOWN_PROPERTIES=false</code>，所以「不报错、不阻断启动」成立；</li>
-        <li>读取这一层另有一条「比对字段名」的流程：<code>ConfigLoader.read(path, type, unknownFieldReport)</code>
-          （<code>ConfigLoader.java:76-84</code>）比对后把每个未知字段名交给调用方；</li>
-        <li><code>RuntimeConfig.read</code>（<code>RuntimeConfig.java:416-421</code>）把它包成
-          <code>ConfigWarningEvent</code> 发出去，消息形如「配置里有内核不认识的字段：&lt;路径.字段名&gt;（拼错了？它会被静默忽略）」
-          （<code>RuntimeConfig.java:417-418</code>），再由 <code>ConfigWarningReporter</code> 渲染成一行 WARN。</li>
+        <li><strong>绑定容忍未知字段</strong>：<code>ObjectMapperWrapper.java:43</code> 里
+          <code>FAIL_ON_UNKNOWN_PROPERTIES=false</code>，所以多写一个键<strong>既不会报错、也不会阻断启动</strong>。</li>
+        <li><strong>但它不生效</strong>：表里没列出的字段就是不支持的，写了也不会有任何效果。</li>
+        <li><strong>会留一条 WARN</strong>：读取配置时另有一条「比对字段名」的流程
+          （<code>ConfigLoader.read(path, type, unknownFieldReport)</code>，<code>ConfigLoader.java:76-84</code>），
+          发现内核不认识的字段就把字段名交给调用方；<code>RuntimeConfig.read</code>（<code>RuntimeConfig.java:416-421</code>）
+          把它包成 <code>ConfigWarningEvent</code>，消息形如「配置里有内核不认识的字段：&lt;路径.字段名&gt;（拼错了？它会被静默忽略）」
+          （<code>RuntimeConfig.java:417-418</code>），再由 <code>ConfigWarningReporter</code> 渲染成一行 WARN。
+          <strong>只比字段名、不做类型转换</strong>。</li>
+        <li><strong>自由格式的位置一概不看</strong>：<code>vendorBody</code>、逐插件配置段这类键名由使用方决定，
+          宁可漏报也不报假警。</li>
       </ul>
       <p>
         <strong>三份内容文件口径一致</strong>：<code>models.json</code>（<code>RuntimeConfig.java:114</code>）、
@@ -673,7 +664,7 @@ java -jar /path/to/jellyfish-cli-0.1.2.jar -cli --trust-project-config -p "/mode
       </p>
     </div>
 
-    <p><strong>拼错字段名时，<code>0.1.1</code> 起到底覆盖到哪</strong>：</p>
+    <p><strong>拼错字段名时，告警到底覆盖到哪</strong>：</p>
 
     <div class="table-scroll">
       <table>
@@ -694,7 +685,7 @@ java -jar /path/to/jellyfish-cli-0.1.2.jar -cli --trust-project-config -p "/mode
           <tr>
             <td><code>vendorBody</code> 内部的键</td>
             <td><strong>没有</strong>（自由格式：键名由使用方决定）</td>
-            <td>CHANGELOG 0.1.1 的「自由格式的位置一概不看」</td>
+            <td>自由格式的位置一概不看（见上文）</td>
           </tr>
           <tr>
             <td><code>plugins.configurations.&lt;pluginId&gt;</code> 内部的键</td>
@@ -726,15 +717,15 @@ java -jar /path/to/jellyfish-cli-0.1.2.jar -cli --trust-project-config -p "/mode
     </div>
 
     <div class="callout tip">
-      <span class="callout-title">这条告警以前没人看得见</span>
+      <span class="callout-title">告警会落到终端与日志文件</span>
       <p>
-        <code>0.1.1</code> 同时补了 <code>ConfigWarningReporter</code>：它把 <code>ConfigWarningEvent</code>
-        渲染成日志行。此前唯一的订阅方是指标计数器，「配置文件缺失」「项目级配置未信任」「未知的 agent 标识」
-        这些提示其实都到不了用户眼前，关停时那句 <code>config.warnings=N</code> 只说数量不说内容。
+        <code>ConfigWarningReporter</code> 订阅 <code>ConfigWarningEvent</code> 并把它渲染成日志行，因此
+        「配置文件缺失」「项目级配置未信任」「未知的 agent 标识」「字段名拼错」这些提示会直接打到你眼前。
+        没有它，这些事件只进指标计数器——关停时那句 <code>config.warnings=N</code> 只说数量不说内容。
       </p>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:521-555（models.json：未知字段不报错、表里没有的就是不支持）、Jellyfish/README.md:552（「多写一个键既不会有提示、也不会有任何效果」——被 <code>0.1.1</code> 的变更条目取代）、Jellyfish/CHANGELOG.md:24-33（0.1.1：拼错字段名不再无声、自由格式不看、<code>ConfigWarningReporter</code>）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ConfigLoader.java:44-46、58-60、76-84（两条读取重载）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/RuntimeConfig.java:114、116、169、416-421（三份内容文件都报未知字段；<code>config.json</code> / <code>default-agent.json</code> 不报）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/BuiltinAgentLoader.java:78、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/support/ObjectMapperWrapper.java:43、172（<code>FAIL_ON_UNKNOWN_PROPERTIES=false</code>、<code>unknownFields</code> 与自由格式判定）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ConfigWarningReporter.java（渲染成一行 WARN）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/SamplingSettings.java（非法值丢弃并告警）</div>
+    <div class="src-block">Jellyfish/README.md:521-555（models.json：未知字段不报错、表里没有的就是不支持）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ConfigLoader.java:44-46、58-60、76-84（两条读取重载）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/RuntimeConfig.java:114、116、169、416-421（三份内容文件都报未知字段；<code>config.json</code> / <code>default-agent.json</code> 不报）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/BuiltinAgentLoader.java:78、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/support/ObjectMapperWrapper.java:43、172（<code>FAIL_ON_UNKNOWN_PROPERTIES=false</code>、<code>unknownFields</code> 与自由格式判定）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/ConfigWarningReporter.java（渲染成一行 WARN）、Jellyfish/jellyfish-infra/src/main/java/zcd/jellyfish/infra/config/SamplingSettings.java（非法值丢弃并告警）</div>
 
     <h2>哪些改动要重启、哪些热生效</h2>
 
@@ -789,7 +780,7 @@ java -jar /path/to/jellyfish-cli-0.1.2.jar -cli --trust-project-config -p "/mode
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:517-520（改完不用重启 vs config.json 不热更新）、Jellyfish/README.md:464-487（插件 jar 增删要重启）、Jellyfish/README.md:919-947（<code>subAgent</code> 各键何时读取）、Jellyfish/docs/constraints.md:418-428（热更新顺序、单飞不回滚、stop+start）、Jellyfish/CHANGELOG.md:356-361（<code>0.1.1</code> Fixed：并发 / 等待区 / 墙钟的读取时机修正）</div>
+    <div class="src-block">Jellyfish/README.md:517-520（改完不用重启 vs config.json 不热更新）、Jellyfish/README.md:464-487（插件 jar 增删要重启）、Jellyfish/README.md:919-947（<code>subAgent</code> 各键何时读取）、Jellyfish/docs/constraints.md:418-428（热更新顺序、单飞不回滚、stop+start）</div>
 
     <h2>常见配置任务</h2>
 
@@ -806,7 +797,7 @@ java -jar /path/to/jellyfish-cli-0.1.2.jar -cli --trust-project-config -p "/mode
     }
   }
 }</code></pre>
-    <p>写完之后确认生效：<code>java -jar /path/to/jellyfish-cli-0.1.2.jar -cli -p "/model"</code>（<code>/model</code> 离线可用，不需要模型也能看出当前选的是哪个）。</p>
+    <p>写完之后确认生效：<code>jellyfish -cli -p "/model"</code>（<code>/model</code> 离线可用，不需要模型也能看出当前选的是哪个）。</p>
 
     <h3>2. 只给某个项目换模型</h3>
     <p>
@@ -881,7 +872,7 @@ java -jar /path/to/jellyfish-cli-0.1.2.jar -cli --trust-project-config -p "/mode
         <li>双源合并有四种单位，别混：<strong>同名 provider / agent / 插件段整对象覆盖</strong>、<strong>默认模型非空才覆盖</strong>、<strong>段级「写了才覆盖」</strong>、<strong>启禁名单整体替换（写 <code>[]</code> 即清空）</strong>。</li>
         <li><code>${VAR}</code> 缺失会让<strong>整份配置加载失败</strong>（不退化成空值），要容错就写 <code>${VAR:-默认值}</code>；密钥一律走环境变量，不进配置文件。</li>
         <li>项目级配置默认不加载，信任单位是「文件绝对路径 + 内容指纹」，内容一变即失效；<code>classpath:</code> 形式的项目级路径不受这道闸管辖。</li>
-        <li>未列出的字段永远不会生效；<code>0.1.1</code> 起拼错字段名会多一条 WARN + <code>ConfigWarningEvent</code>，但 <code>vendorBody</code> 与逐插件配置段这些自由格式位置不看。</li>
+        <li>未列出的字段永远不会生效；拼错字段名会多一条 WARN + <code>ConfigWarningEvent</code>，但 <code>vendorBody</code> 与逐插件配置段这些自由格式位置不看。</li>
         <li>生效方式只有两种：内容类改完敲 <code>/reload</code>；<code>config.json</code>、插件 jar 增删、项目级信任、<code>subAgent</code> 的三个并发键要重启进程。</li>
       </ol>
     </div>

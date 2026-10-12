@@ -125,7 +125,7 @@
     </div>
 
     <div class="callout tip">
-      <span class="callout-title">一句话版本</span>
+      <span class="callout-title">一句话记住</span>
       <p>
         <strong>「文件在哪」和「哪些 jar 在」要重启；「文件里的内容」敲 <code>/reload</code>。</strong>
         前者是部署事实，后者是运行期设置——内核自己也是这么分的（<code>config.json</code> 的 <code>plugins.roots</code>
@@ -151,8 +151,8 @@
           <pre><code class="language-bash"># 在 CLI 里直接敲（TUI 的输入框同理）
 /reload
 
-# 非交互环境（-cli -p）下同样可以：
-java -jar /path/to/jellyfish-cli-0.1.2.jar -cli -p "/reload"</code></pre>
+# 非交互环境（-cli -p）下同样可以（jellyfish 是 02-install 里教过的别名）：
+jellyfish -cli -p "/reload"</code></pre>
         </dd>
       </dl>
 
@@ -204,7 +204,7 @@ flowchart LR
         <li>改了 <code>config.json</code>（扫描目录、进程名、三份文件的位置）；</li>
         <li>新增 / 删除 / 覆盖插件 jar；</li>
         <li>改了插件的<strong>代码</strong>——即使你把新 jar 拷进扫描目录，jar 集合也只在启动期确定，必须重启；</li>
-        <li>升级了内核的 jar（换掉 <code>jellyfish-cli-0.1.2.jar</code>）——那是进程的 classpath，只能重启；</li>
+        <li>换了内核的 jar（<code>jellyfish-cli/target/jellyfish-cli-*.jar</code>）——那是进程的 classpath，只能重启；</li>
         <li>你以为「重启插件会清掉插件对象里的字段状态」——这一条恰恰是 <code>/reload</code> <strong>做不到</strong>的（见上）。</li>
       </ul>
 
@@ -1132,13 +1132,8 @@ def refresh_watch(ctx):
         README 与 <code>AGENTS.md</code> 里唯一能算「协作约定」的，是 <code>AGENTS.md</code> 的「Git 约定」一节。
       </p>
       <p>
-        也就是说：<strong>「提交一个插件需要满足哪些质量门禁、由谁评审、什么时候发版」这一整套在仓库里找不到明文</strong>
-        <strong>已逐一检查并确认「确实不存在」</strong>：检查范围是聚合工作目录根、<code>Jellyfish/</code>、
-        <code>Jellyfish-Plugins/</code>、<code>Jellyfish-Skills/</code>、<code>Jellyfish-Spring-Boot-Starter/</code>、
-        <code>Jellyfish-Spring-Template/</code> 六处的 <code>.github/</code>、<code>CONTRIBUTING*</code>、<code>RELEASE*</code>、
-        <code>docs/</code> 与各自 <code>AGENTS.md</code> 全文：没有任何 PR 模板、评审清单、分支模型或发版步骤；
-        <code>Jellyfish/docs/</code> 下只有 <code>constraints.md</code> 一份，<code>Jellyfish-Skills/</code> 根连 <code>AGENTS.md</code> 都没有；
-        且 <code>Jellyfish-Plugins/CHANGELOG.md:109</code> 写明官方插件<strong>不发布到 Maven Central</strong>，所以也没有「发版步骤」这条路。
+        也就是说：<strong>「提交一个插件需要满足哪些质量门禁、由谁评审、什么时候发版」这一整套在仓库里找不到明文</strong>——
+        仓库里没有正式的贡献流程 / 评审清单 / 分支模型 / 发版步骤文档，官方插件也<strong>不发布到 Maven Central</strong>。
         <strong>不要</strong>照本页的描述去做实际提交，
         请先与仓库维护者确认（仓库地址见 <code>Jellyfish-Plugins/README.md</code> 与 <code>Jellyfish/README.md</code> 的「去哪里找插件」）。
       </p>
@@ -1201,7 +1196,7 @@ git commit -m "feat(mytool): 新增 mytool 插件与 /mytool 命令"</code></pre
               <td><span class="tag required">必填</span></td>
               <td>—</td>
               <td>把新插件的 <code>target/*.jar</code> 拷进扫描目录，否则「装了插件」这一步会漏掉它</td>
-              <td><code>cp Jellyfish-Plugins/jellyfish-plugin-mytool/target/jellyfish-plugin-mytool-0.1.2.jar ~/.jellyfish/plugins</code>（工作目录根那份脚本的真实写法：一行一条 <code>cp</code>、带 <code>Jellyfish-Plugins/</code> 前缀、版本号与 <code>pom.xml</code> 一致）</td>
+              <td><code>cp Jellyfish-Plugins/jellyfish-plugin-mytool/target/jellyfish-plugin-mytool-*.jar ~/.jellyfish/plugins</code>（工作目录根那份脚本的写法：一行一条 <code>cp</code>、带 <code>Jellyfish-Plugins/</code> 前缀）</td>
             </tr>
             <tr>
               <td><code>README.md</code>「插件一览」表的一行</td>
@@ -1230,11 +1225,9 @@ git commit -m "feat(mytool): 新增 mytool 插件与 /mytool 命令"</code></pre
       <ul>
         <li><strong><code>cpPlugins.sh</code> 在哪？</strong>在<strong>聚合工作目录根</strong>——同时容纳
           <code>Jellyfish/</code> 与 <code>Jellyfish-Plugins/</code> 的那一层。<code>Jellyfish-Plugins/</code> 里<strong>没有</strong>这个脚本，
-          但那两份文档写的都是 <code>./cpPlugins.sh</code>，早期注释让人以为要在插件仓库根执行；
-          两份文档的注释现已明确写成「在聚合工作目录根执行（本仓库内没有这个脚本）」（<code>Jellyfish-Plugins/README.md:34</code>、
-          <code>Jellyfish-Plugins/AGENTS.md:25</code>），另 <code>Jellyfish-Plugins/README.md:922</code> 要求「新增插件……往 <code>cpPlugins.sh</code> 加一行」。
+          两份文档写的 <code>./cpPlugins.sh</code> 指的都是工作目录根那一份。
           那份脚本每一行都带 <code>Jellyfish-Plugins/</code> 前缀
-          （例如 <code>cp Jellyfish-Plugins/jellyfish-plugin-tools/target/jellyfish-plugin-tools-0.1.2.jar ~/.jellyfish/plugins</code>），
+          （例如 <code>cp Jellyfish-Plugins/jellyfish-plugin-tools/target/jellyfish-plugin-tools-*.jar ~/.jellyfish/plugins</code>），
           <strong>要在聚合目录根跑</strong>；在 <code>Jellyfish-Plugins/</code> 里敲只会得到 <code>No such file or directory</code>。
           没有它时按 <a href="11-plugin-usage.html">11 安装与使用官方插件</a> 里的手工 <code>cp</code> 方式装。</li>
         <li><strong>官方插件能像内核一样从中央仓库拿到吗？</strong>不能。官方插件是 PF4J 插件包，
@@ -1244,7 +1237,7 @@ git commit -m "feat(mytool): 新增 mytool 插件与 /mytool 命令"</code></pre
           （本地仓库 <code>mvn install</code>，或你们自己的私服）。</li>
       </ul>
     </div>
-    <div class="src-block">Jellyfish-Plugins/AGENTS.md「Git 约定」「行为准则」「技术架构」（一个插件一个子模块）、Jellyfish-Plugins/README.md「<code>pom.xml</code>」第三条（父 <code>pom.xml</code> 与 <code>cpPlugins.sh</code>）、Jellyfish-Plugins/README.md「插件一览」、Jellyfish-Plugins/pom.xml（<code>&lt;modules&gt;</code> 原文）、Jellyfish-Plugins/CHANGELOG.md:109（官方插件不发布到 Maven Central）、Jellyfish-Plugins/README.md:34 与 Jellyfish-Plugins/AGENTS.md:25（都写 <code>./cpPlugins.sh</code>，而插件仓库根无此文件——两处原文并列，以工作目录根那份为准）、Jellyfish-Plugins/README.md:922（「新增插件……往 <code>cpPlugins.sh</code> 加一行」）、工作目录根 <code>cpPlugins.sh:1-13</code>（13 行 <code>cp</code> 均带 <code>Jellyfish-Plugins/</code> 前缀）、<code>Jellyfish-Plugins/AGENTS.md:128</code>「Git 约定」与 <code>Jellyfish-Plugins/AGENTS.md:140</code>「行为准则」（唯一的协作规范）、「没有贡献流程文档」的检查范围：聚合工作目录根与 <code>Jellyfish/</code> + <code>Jellyfish-Plugins/</code> + <code>Jellyfish-Skills/</code> + <code>Jellyfish-Spring-Boot-Starter/</code> + <code>Jellyfish-Spring-Template/</code> 的 <code>.github/</code>、<code>CONTRIBUTING*</code>、<code>RELEASE*</code>、<code>docs/</code> 与各自 <code>AGENTS.md</code>（均不存在；<code>Jellyfish/docs/</code> 下只有 <code>constraints.md</code>）</div>
+    <div class="src-block">Jellyfish-Plugins/AGENTS.md「Git 约定」「行为准则」「技术架构」（一个插件一个子模块）、Jellyfish-Plugins/README.md「<code>pom.xml</code>」第三条（父 <code>pom.xml</code> 与 <code>cpPlugins.sh</code>）、Jellyfish-Plugins/README.md「插件一览」、Jellyfish-Plugins/pom.xml（<code>&lt;modules&gt;</code> 原文）、Jellyfish-Plugins/CHANGELOG.md:109（官方插件不发布到 Maven Central）、Jellyfish-Plugins/README.md:34 与 Jellyfish-Plugins/AGENTS.md:25（都写 <code>./cpPlugins.sh</code>，而插件仓库根无此文件）、Jellyfish-Plugins/README.md:922（「新增插件……往 <code>cpPlugins.sh</code> 加一行」）、工作目录根 <code>cpPlugins.sh:1-13</code>（13 行 <code>cp</code> 均带 <code>Jellyfish-Plugins/</code> 前缀）、<code>Jellyfish-Plugins/AGENTS.md:128</code>「Git 约定」与 <code>Jellyfish-Plugins/AGENTS.md:140</code>「行为准则」（唯一的协作规范）</div>
 
     <h2>10. 常见问题</h2>
 
@@ -1322,7 +1315,7 @@ git commit -m "feat(mytool): 新增 mytool 插件与 /mytool 命令"</code></pre
         <li>脚本插件的三层隔离里，熔断<strong>不摘注册</strong>（只是暂时拒绝）；周期任务的间隔语义是「上一次跑完 + 间隔」，
           失败只记日志但<strong>不发</strong>失效事件；能力档分 <code>in</code> / <code>planned</code> / <code>excluded</code> 三段，
           <strong>内核新增扩展点未分档会让插件仓库构建失败</strong>。</li>
-        <li>官方插件仓库<strong>没有</strong>正式的贡献流程 / 评审清单 / 发版步骤文档（聚合工作目录根与五个仓库的 <code>.github/</code>、<code>CONTRIBUTING*</code>、<code>RELEASE*</code>、<code>docs/</code> 及各 <code>AGENTS.md</code> 都逐一检查过，全都没有——是「确实没有」而不是「没查」），
+        <li>官方插件仓库<strong>没有</strong>正式的贡献流程 / 评审清单 / 分支模型 / 发版步骤文档，
           只有 <code>AGENTS.md</code> 的 Git 约定；新增插件要做的三件登记事是：父 <code>pom.xml</code> 的
           <code>&lt;modules&gt;</code>、<code>cpPlugins.sh</code>、<code>README.md</code> 的插件一览表。</li>
       </ol>

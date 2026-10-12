@@ -193,10 +193,8 @@ flowchart TD
         <code>shell</code>（<code>ShellTool.TOOL_NAME = "shell"</code>，由 <code>ShellPlugin</code> 用它注册该工具），
         <code>Jellyfish-Plugins/README.md:53</code> 的插件一览也写作 <code>shell</code>；
         <code>Jellyfish-Plugins</code> 的源码里不存在名为 <code>bash</code> 的工具（<code>bash</code> 只是它用 <code>/bin/sh -c</code> 执行命令这件事的俗称）。
-        <strong>内核文档早期版本在示例与审批框样张里误写成了 <code>bash</code>，现已改回 <code>shell</code></strong>
-        （<code>Jellyfish/README.md:707</code> 与 <code>Jellyfish/README.md:281</code> 两处）。如果你手上是旧版文档，照抄会写成一个
-        <strong>命中不了任何工具</strong>的名字——效果是「不限制任何工具」而不是「每次跑命令都要批准」，务必手改成
-        <code>"askTools": ["shell"]</code>。
+        写成 <code>bash</code> 或别的名字都会<strong>命中不了任何工具</strong>——效果是「不限制任何工具」而不是「每次跑命令都要批准」，
+        务必写成 <code>"askTools": ["shell"]</code>。
       </p>
     </div>
 
@@ -485,7 +483,7 @@ flowchart TD
 /a coder          # 别名
 
 # 只在 -cli：启动即把新建会话绑到某个 agent
-java -jar /path/to/jellyfish-cli-0.1.2.jar -cli --agent coder -p "看下这个报错"</code></pre>
+jellyfish -cli --agent coder -p "看下这个报错"</code></pre>
         </dd>
       </dl>
 
@@ -523,7 +521,7 @@ java -jar /path/to/jellyfish-cli-0.1.2.jar -cli --agent coder -p "看下这个�
 /agent coder
 
 # 2) 单次模式：启动就绑 coder，问一句就走
-java -jar /path/to/jellyfish-cli-0.1.2.jar -cli --agent coder -p "帮我看看这个失败的单测"</code></pre>
+jellyfish -cli --agent coder -p "帮我看看这个失败的单测"</code></pre>
 
       <p><strong>常见问题</strong></p>
       <ul>
@@ -773,7 +771,7 @@ java -jar /path/to/jellyfish-cli-0.1.2.jar -cli --agent coder -p "帮我看看�
     <h3>这几个键什么时候读：哪些是「第一次提交 run 时定型」</h3>
 
     <p>
-      这张表按源码逐个键核过（不再是「README 只点名了前几个」的状态）：<strong>只有执行资源那一档要重启</strong>，
+      这张表按源码逐个键核过：<strong>只有执行资源那一档要重启</strong>，
       其余都是现读现用。注意 README 把 <code>maxDepth</code> 与并发项并列写成「需重启」——那一句只对<strong>池上界</strong>成立。
     </p>
 

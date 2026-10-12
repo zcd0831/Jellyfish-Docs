@@ -217,9 +217,9 @@
 
     <h3>Q10　配置字段写错了会怎样？</h3>
     <p>
-      <code>models.json</code> 的规则是「<strong>表里没列出的字段就是不支持的</strong>」：多写一个键既没有提示、也没有任何效果。
-      0.1.1 起会好一些：读取配置时<strong>比对字段名</strong>，发现内核不认识的字段就发一条 <code>ConfigWarningEvent</code> 并打 WARN
-      （带文件路径与字段名）；<code>react</code> 段、<code>react.toolOutput</code>、每个 provider 的 <code>sampling</code> 段的非法值也会进这个事件面，
+      <code>models.json</code> 的规则是「<strong>表里没列出的字段就是不支持的</strong>」：多写一个键不会生效。
+      读取配置时会<strong>比对字段名</strong>：内核不认识的字段会发一条 <code>ConfigWarningEvent</code> 并打 WARN
+      （带文件路径与字段名）；<code>react</code> 段、<code>react.toolOutput</code>、每个 provider 的 <code>sampling</code> 段的非法值同样进这个事件面，
       并说明「哪个键、原值多少、为什么非法、按什么处理」。
       但有一类<strong>永远不参与比对</strong>：<code>vendorBody</code> 与逐插件配置段这类自由格式的键名由使用方决定，宁可漏报也不报假警。
       所以厂商私有键名拼错仍然只能靠 DEBUG 日志里那行「实际下发的键名」发现。
@@ -289,7 +289,7 @@
       不落盘、不进 <code>/session</code> 列表。run 的归档另有 <code>subAgent.archiveKeepFiles</code>（缺省 200）与
       <code>archiveMaxBytes</code>（缺省 100 MiB）两道配额，与工具输出分开算。
     </p>
-    <div class="src-block">Jellyfish/README.md:523-596（providers / models 字段）、Jellyfish/README.md:623-696（vendorBody 与六条坑）、Jellyfish/README.md:848-890（react / toolOutput / cache 字段表）、Jellyfish/README.md:919-956（subAgent 字段表）、Jellyfish/README.md:959-997（双源合并、项目级信任、常见配置任务）、Jellyfish/README.md:1087-1138（常见问题）、Jellyfish/README.md:1005-1011（Server 密钥）、Jellyfish/CHANGELOG.md（0.1.1：配置字段名与数值的告警）</div>
+    <div class="src-block">Jellyfish/README.md:523-596（providers / models 字段）、Jellyfish/README.md:623-696（vendorBody 与六条坑）、Jellyfish/README.md:848-890（react / toolOutput / cache 字段表）、Jellyfish/README.md:919-956（subAgent 字段表）、Jellyfish/README.md:959-997（双源合并、项目级信任、常见配置任务）、Jellyfish/README.md:1087-1138（常见问题）、Jellyfish/README.md:1005-1011（Server 密钥）</div>
 
     <h2 id="faq-3">三、使用与权限</h2>
 
@@ -365,7 +365,7 @@
       <code>rm -rf /</code> 依旧被拒。要「允许跑但每次都要我批准」，就只配白名单、不配可信表。
       不想一条条维护名单时，两个表都可以写<strong>整条 <code>*</code></strong>（匹配全部命令；写作 <code>git *</code> 没有这个效果）。
     </p>
-    <div class="src-block">Jellyfish/README.md:140-168（退出码与兜底）、Jellyfish/README.md:825-834（Unreleased：重试 1 次与截断提示）、Jellyfish/README.md:861-871（react 字段表）、Jellyfish/README.md:1098-1111（-cli 下工具被拒）、Jellyfish/README.md:451-462（子代理不继承模型、token 计入父会话）、Jellyfish/docs/constraints.md:495-521（ask_user 与审批的差别）、Jellyfish/docs/constraints.md:1148-1217（边界与明确不做：UI 深度、子代理、压缩）、Jellyfish-Plugins/README.md:196-252（白名单与可信表）、Jellyfish-Plugins/README.md:244-252（Windows 未验证）、Jellyfish-Plugins/README.md:253（非 POSIX 平台映射成 <code>cmd.exe /c</code>）、Jellyfish-Plugins/README.md:652（MCP 子进程环境白名单：Windows 另加四个变量）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommonsExecShellProcessLauncher.java:28（Windows 未验证的源码说明）、Jellyfish-Plugins/jellyfish-plugin-session-file/src/main/java/zcd/jellyfish/plugin/sessionfile/SessionStore.java:220（不支持 POSIX 权限位的平台跳过权限设置）、Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/Utf8Files.java:82（同样跳过 POSIX 权限位）、Jellyfish-Plugins/CHANGELOG.md:230（同上，行为变更记录）、Jellyfish/docs/constraints.md:1232（UI 深度明确不做：主题与自定义颜色）、Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiApp.java:287（<code>jellyfish.tui.pluginPanels</code>）、Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiApp.java:312（<code>jellyfish.tui.mouseCapture</code>）、Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiTerminal.java:33（<code>jellyfish.tui.skipTerminalCheck</code>）、Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/UiRender.java:22（颜色语义收在一个类里：插件换不了主题）、Jellyfish-Plugins/jellyfish-plugin-resmon/src/main/java/zcd/jellyfish/plugin/resmon/ResmonPanel.java:65（阈值决定面板配色档位）</div>
+    <div class="src-block">Jellyfish/README.md:140-168（退出码与兜底）、Jellyfish/README.md:825-834（重试 1 次与截断提示）、Jellyfish/README.md:861-871（react 字段表）、Jellyfish/README.md:1098-1111（-cli 下工具被拒）、Jellyfish/README.md:451-462（子代理不继承模型、token 计入父会话）、Jellyfish/docs/constraints.md:495-521（ask_user 与审批的差别）、Jellyfish/docs/constraints.md:1148-1217（边界与明确不做：UI 深度、子代理、压缩）、Jellyfish-Plugins/README.md:196-252（白名单与可信表）、Jellyfish-Plugins/README.md:244-252（Windows 未验证）、Jellyfish-Plugins/README.md:253（非 POSIX 平台映射成 <code>cmd.exe /c</code>）、Jellyfish-Plugins/README.md:652（MCP 子进程环境白名单：Windows 另加四个变量）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/CommonsExecShellProcessLauncher.java:28（Windows 未验证的源码说明）、Jellyfish-Plugins/jellyfish-plugin-session-file/src/main/java/zcd/jellyfish/plugin/sessionfile/SessionStore.java:220（不支持 POSIX 权限位的平台跳过权限设置）、Jellyfish-Plugins/jellyfish-plugin-tools/src/main/java/zcd/jellyfish/plugin/tools/Utf8Files.java:82（同样跳过 POSIX 权限位）、Jellyfish-Plugins/CHANGELOG.md:230（同上，行为变更记录）、Jellyfish/docs/constraints.md:1232（UI 深度明确不做：主题与自定义颜色）、Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiApp.java:287（<code>jellyfish.tui.pluginPanels</code>）、Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiApp.java:312（<code>jellyfish.tui.mouseCapture</code>）、Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/TuiTerminal.java:33（<code>jellyfish.tui.skipTerminalCheck</code>）、Jellyfish/jellyfish-tui/src/main/java/zcd/jellyfish/tui/UiRender.java:22（颜色语义收在一个类里：插件换不了主题）、Jellyfish-Plugins/jellyfish-plugin-resmon/src/main/java/zcd/jellyfish/plugin/resmon/ResmonPanel.java:65（阈值决定面板配色档位）</div>
 
     <h2 id="faq-4">四、插件与集成</h2>
 
@@ -401,8 +401,8 @@
     <p>
       <strong>会</strong>。<code>~/.jellyfish/sessions</code> 是整套运行时里<strong>唯一没有自我约束的增长点</strong>：
       工具输出有 50 MiB / 200 文件上限、子代理归档有 100 MiB 上限、MCP 落盘的文件在进程退出时删掉，
-      而会话文件连同目录里那个 <code>git</code> 仓库（每次落盘一次提交、从不 <code>gc</code>）只会越写越多——
-      在它自己报出来的 79 M 里，54 M 是 git 历史。用 <code>/resmon</code> 观察占用，
+      而会话文件连同目录里那个 <code>git</code> 仓库（每次落盘一次提交、从不 <code>gc</code>）只会越写越多，
+      磁盘占用也跟着 git 历史一起长。用 <code>/resmon</code> 观察占用，
       它<strong>只报告、不清理</strong>（删除文件涉及用户的真实数据，得由你和模型决定）。详见 <a href="11-plugin-usage.html">11 安装与使用官方插件</a>。
     </p>
 
@@ -428,7 +428,8 @@
 
     <h3>Q32　怎么把内核接进已有的 Spring Boot 应用？</h3>
     <p>
-      加依赖 <code>io.github.zcd0831:jellyfish-spring-boot-starter:0.1.2</code>（它依赖内核 <code>jellyfish-di</code>），
+      加依赖 <code>io.github.zcd0831:jellyfish-spring-boot-starter</code>（版本与内核保持一致；它传递依赖内核
+      <code>jellyfish-di</code>，两者都在中央仓库），
       用 <code>application.yml</code> 指定<strong>四份配置文件在哪</strong>与插件扫描目录，<strong>内容仍是内核的 JSON 格式</strong>
       （starter 刻意不把 JSON 翻译成 yml）；然后交互一律走 <code>JellyfishUserFacade</code>。
       三条最容易踩的：审批与提问通道缺省<strong>关闭</strong>（接好接口再打开）、不要重复注册内核组件的第二个视图、
@@ -677,7 +678,7 @@
           </tr>
           <tr>
             <td><code>Jellyfish/CHANGELOG.md</code></td>
-            <td>某个行为是什么时候变的、依赖为什么升级（含安全公告与升级依据）、破坏性变更的迁移办法</td>
+            <td>改内核代码时的行为变更记录与依赖升级依据</td>
             <td>当前行为的完整说明</td>
           </tr>
           <tr>
@@ -690,9 +691,8 @@
     </div>
 
     <p>
-      三个仓库的版本都是 <code>0.1.2</code>，但<strong>没有任何文档声明三者之间的版本兼容矩阵</strong>——
-      涉及「哪个内核版本配哪个插件 / Starter 版本」时请写
-      <code>【版本对应关系需查阅各自 README】</code>，不要凭版本号相等去推断。
+      三个仓库各自独立发版：插件对 <code>jellyfish-api</code> 是 <code>provided</code>、Starter 依赖 <code>jellyfish-di</code>。
+      搭版本时按各自 README 的依赖与构建一节对齐，不要用「版本号相等」推断兼容。
     </p>
 
     <h2>这几类问题为什么不在这里回答</h2>
@@ -715,9 +715,7 @@
       <dl>
         <dt>原因</dt>
         <dd>三个仓库<strong>没有压测数据，也没有「每秒能跑多少请求 / 最多支持多少会话」这类容量指标</strong>；
-          文档里唯一的真实测量值来自 <code>resmon</code> 插件对 <code>~/.jellyfish</code> 的磁盘统计——
-          会话目录 <code>79M</code> / 37 个文件，其中 <code>54M</code> 是 git 历史（那是「会话目录为什么比看上去大」的证据，
-          与吞吐、并发能力无关）。
+          会话目录会随 git 历史一起长（<code>resmon</code> 面板能看磁盘占用），这与吞吐、并发能力无关。
           能确定的只有结构性的数字：<code>react</code> 池 8 条线程（= 并发顶层回合上限）、队列 128、空闲回收 60 秒；
           子代理并发由 <code>subAgent.maxConcurrentRuns</code> 门控；Server 侧同会话同时只允许一个回合。
         </dd>
@@ -727,20 +725,7 @@
     </div>
 
     <div class="feature">
-      <h3>3. 三个仓库之间的版本兼容矩阵</h3>
-      <dl>
-        <dt>原因</dt>
-        <dd>三个仓库都停在 <code>0.1.2</code>，但<strong>没有任何文档声明兼容矩阵</strong>。插件对 <code>jellyfish-api</code> 是
-          <code>provided</code>、Starter 依赖 <code>jellyfish-di</code>，因此「同一版本号」不等于「互相兼容」。
-        </dd>
-        <dt>去哪找</dt>
-        <dd>各自 README 的依赖与构建一节；升级前按 <code>Jellyfish-Plugins/README.md</code> 的
-          「内核升级后要做的检查」跑一遍（含三个 <code>-P*-it</code> profile）。</dd>
-      </dl>
-    </div>
-
-    <div class="feature">
-      <h3>4. 能不能商用 / 能不能进内网 / 合规怎么算</h3>
+      <h3>3. 能不能商用 / 能不能进内网 / 合规怎么算</h3>
       <dl>
         <dt>原因</dt>
         <dd>这是法律与合规判断，本指南<strong>不替代专业意见</strong>。仓库里能查到的只是许可证文件本身
@@ -752,7 +737,7 @@
     </div>
 
     <div class="feature">
-      <h3>5. Jellyfish 与其它 Agent 工具的选型对比</h3>
+      <h3>4. Jellyfish 与其它 Agent 工具的选型对比</h3>
       <dl>
         <dt>原因</dt>
         <dd>三个代码仓库<strong>未提供对比材料</strong>（检索词与唯一命中见 <a href="#faq-1">Q2</a>）。
@@ -764,14 +749,13 @@
     </div>
 
     <div class="callout tip">
-      <span class="callout-title">三种「查不到」的含义，别混用</span>
+      <span class="callout-title">两种「查不到」标记的含义，别混用</span>
       <ul>
         <li><code>【待确认】</code>：在三个仓库的 README / 示例配置 / 源码 / 文档里<strong>找不到出处</strong>。本套文档宁可标出来，也不编造。</li>
         <li><code>【需核实】</code>：属于合理推断、仓库有相邻明文但没有正面写，需要你在自己环境里验证一次（例如 Windows 上的 <code>shell</code>）。</li>
-        <li><code>【版本对应关系需查阅各自 README】</code>：涉及跨仓库版本搭配时一律用这句，因为它确实没有被声明。</li>
       </ul>
     </div>
-    <div class="src-block">Jellyfish/docs/constraints.md:1148-1257（边界与明确不做）、Jellyfish/README.md:1-22（三个仓库与角色）、Jellyfish-Plugins/README.md:1063-1077（内核升级后的检查清单）、Jellyfish-Plugins/README.md:353（resmon 面板样例里的 sessions 读数）、Jellyfish-Plugins/README.md:392（实测 79M 里 54M 是 .git）、Jellyfish/CHANGELOG.md（行为变更与依赖升级依据；无压测数据）、三个仓库的 AGENTS.md（各仓库的开发约定与分工）</div>
+    <div class="src-block">Jellyfish/docs/constraints.md:1148-1257（边界与明确不做）、Jellyfish/README.md:1-22（三个仓库与角色）、Jellyfish-Plugins/README.md:1063-1077（内核升级后的检查清单）、三个仓库的 AGENTS.md（各仓库的开发约定与分工）</div>
 
     <div class="conclusion">
       <h2>关键结论</h2>

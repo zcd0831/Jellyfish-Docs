@@ -322,10 +322,10 @@
         <dt>怎么用</dt>
         <dd>
           <pre><code class="language-bash"># 回答进 answer.txt，诊断进 diag.txt
-java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli -p "总结这个项目" &gt; answer.txt 2&gt; diag.txt
+jellyfish -cli -p "总结这个项目" &gt; answer.txt 2&gt; diag.txt
 
 # 不写 -p 时从 stdin 读到 EOF，管道可用
-echo "/help" | java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli</code></pre>
+echo "/help" | jellyfish -cli</code></pre>
           <p>回答是<strong>按轮缓冲、收敛时整体写出</strong>的，所以不会出现「写了一半的 JSON」这种中间态。</p>
         </dd>
       </dl>
@@ -362,8 +362,8 @@ echo "/help" | java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli</code
         </dd>
         <dt>怎么用</dt>
         <dd>
-          <pre><code class="language-bash">java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli -p "跑一下单测并总结失败原因"
-java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli --show-tool-args -p "跑一下单测并总结失败原因"</code></pre>
+          <pre><code class="language-bash">jellyfish -cli -p "跑一下单测并总结失败原因"
+jellyfish -cli --show-tool-args -p "跑一下单测并总结失败原因"</code></pre>
           <p>默认两行的形状（README 的原例）：</p>
           <pre><code class="language-text">→ shell
 ← shell 完成（N 字符）</code></pre>
@@ -396,7 +396,7 @@ java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli --show-tool-args -p 
       <strong>立刻报错并退出 <code>3</code></strong>，不会挂住。
     </p>
 
-    <pre><code class="language-bash">java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -tui</code></pre>
+    <pre><code class="language-bash">jellyfish -tui</code></pre>
 
     <div class="feature">
       <h3>界面结构</h3>
@@ -714,7 +714,7 @@ java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli --show-tool-args -p 
         </p>
         <pre><code class="language-bash">mvn -o package -DskipTests
 java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005 \
-     -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -tui</code></pre>
+     -jar jellyfish-cli/target/jellyfish-cli-*.jar -tui</code></pre>
         <p>
           然后 <code>Run → Edit Configurations → + → Remote JVM Debug</code>（默认就是 5005）→ 点 Debug。
           想在启动阶段（DI 装配、<code>bootstrap</code>）下断点就把 <code>suspend=n</code> 改成 <code>suspend=y</code>。
@@ -738,10 +738,10 @@ java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005 \
         <dt>怎么用</dt>
         <dd>
           <pre><code class="language-bash"># 只在本机可用（缺省行为）
-java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -server 9096
+jellyfish -server 9096
 
 # 对外暴露：必须同时配密钥
-JELLYFISH_SERVER_API_KEY=$(openssl rand -hex 32) java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -server --host 0.0.0.0</code></pre>
+JELLYFISH_SERVER_API_KEY=$(openssl rand -hex 32) jellyfish -server --host 0.0.0.0</code></pre>
         </dd>
       </dl>
 
@@ -772,7 +772,7 @@ JELLYFISH_SERVER_API_KEY=$(openssl rand -hex 32) java -jar jellyfish-cli/target/
               <td><span class="tag optional">选填</span>（但绑非回环时必配，否则拒绝启动）</td>
               <td>无（缺省不鉴权）</td>
               <td>服务端 API key，<strong>推荐用法</strong>：不会出现在 <code>ps</code> 输出里</td>
-              <td><code>JELLYFISH_SERVER_API_KEY=$(openssl rand -hex 32) java -jar ... -server --host 0.0.0.0</code></td>
+              <td><code>JELLYFISH_SERVER_API_KEY=$(openssl rand -hex 32) jellyfish -server --host 0.0.0.0</code></td>
             </tr>
             <tr>
               <td>--api-key</td>

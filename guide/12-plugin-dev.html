@@ -214,7 +214,7 @@
 ├── pom.xml                      ← 父 POM：新增模块要在 &lt;modules&gt; 里登记
 ├── cpPlugins.sh                 ← 新增插件要在这里加一行 cp
 └── my-plugin/
-    ├── pom.xml                  ← &lt;parent&gt; 指向 io.github.zcd0831:jellyfish-plugins:0.1.2
+    ├── pom.xml                  ← &lt;parent&gt; 指向本仓库的聚合 POM io.github.zcd0831:jellyfish-plugins（版本＝仓库根 pom.xml 的版本）
     └── src/
         ├── main/java/com/example/myplugin/MyPlugin.java
         ├── main/resources/plugin.properties
@@ -330,7 +330,8 @@ jellyfish.tags=example</code></pre>
     <pre><code class="language-xml">&lt;parent&gt;
     &lt;groupId&gt;io.github.zcd0831&lt;/groupId&gt;
     &lt;artifactId&gt;jellyfish-plugins&lt;/artifactId&gt;
-    &lt;version&gt;0.1.2&lt;/version&gt;
+    &lt;!-- 填仓库根 pom.xml 的版本（你 clone 下来的那份插件仓库是什么版本就写什么） --&gt;
+    &lt;version&gt;X.Y.Z&lt;/version&gt;
 &lt;/parent&gt;
 
 &lt;artifactId&gt;my-plugin&lt;/artifactId&gt;
@@ -348,21 +349,19 @@ jellyfish.tags=example</code></pre>
     <div class="callout pitfall">
       <span class="callout-title">这份父 POM 不在中央仓库</span>
       <p>
-        <strong>拿不到。</strong>内核仓库明确说明它发布了父 POM 与 <code>jellyfish-api</code> / <code>-infra</code> / <code>-core</code> / <code>-di</code>
-        四个构件（坐标 <code>io.github.zcd0831:jellyfish</code>），而 <code>Jellyfish-Plugins</code>
-        <strong>没有 <code>release</code> profile</strong>（整份 <code>pom.xml</code> 里没有任何用于发布 Central 的 <code>&lt;profiles&gt;</code>；
+        <strong>拿不到。</strong><code>Jellyfish-Plugins</code> 没有发布 Central 的 profile
+        （整份 <code>pom.xml</code> 里没有任何用于发布 Central 的 <code>&lt;profiles&gt;</code>；
         各插件模块自己的 <code>&lt;profiles&gt;</code> 只用来跑端到端测试，如 <code>shell-it</code>、<code>mcp-it</code>、<code>script-it</code>）。
-        因此 <code>io.github.zcd0831:jellyfish-plugins:0.1.2</code> <strong>不在中央仓库</strong>——<code>repo1.maven.org</code> 上
-        <code>io/github/zcd0831/</code> 整个路径 404，Central 检索该 <code>groupId</code> 命中 0 条。
+        因此 <code>io.github.zcd0831:jellyfish-plugins</code> <strong>不在中央仓库</strong>——
+        中央仓库上 <code>io.github.zcd0831</code> 这个 groupId 下只有内核与 Starter 的构件，没有插件聚合 POM。
       </p>
       <p>
         只在本仓库内部开发时不构成问题（父 POM 就在聚合层级上）；<strong>在仓库之外开发</strong>时请直接用下面那份
-        不依赖父 POM 的等价 POM。要说清楚的第二件事：本机 <code>~/.m2</code> 里那份之所以能用，是因为本仓库
-        <code>mvn install</code> 装过（<code>~/.m2/repository/io/github/zcd0831/jellyfish-plugins/</code> 下只有
-        <code>maven-metadata-local.xml</code>，没有任何从中央仓库下载的痕迹），换一台机器就解析不到——仓库之外开发请直接用下面那份。
+        不依赖父 POM 的等价 POM。原因是它只存在于本机：父 POM 靠 <code>mvn install</code> 装进本地仓库，
+        换一台机器就解析不到。
       </p>
     </div>
-    <div class="src-block">Jellyfish-Plugins/README.md:894-923（README 原文 POM）、Jellyfish-Plugins/pom.xml（无发布 profile）、Jellyfish/README.md:1146-1158（内核发布到中央仓库的五个构件）、Jellyfish-Plugins/jellyfish-plugin-shell/pom.xml（模块级 profile 的用途）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:894-923（README 原文 POM）、Jellyfish-Plugins/pom.xml（无发布 profile）、Jellyfish-Plugins/jellyfish-plugin-shell/pom.xml（模块级 profile 的用途）</div>
 
     <p><strong>替代方案：不依赖父 POM、可直接用的等价 POM</strong>（<code>&lt;parent&gt;</code> 换成 <code>jellyfish-api</code> 坐标）：</p>
 
@@ -381,8 +380,8 @@ jellyfish.tags=example</code></pre>
     &lt;name&gt;My Jellyfish Plugin&lt;/name&gt;
 
     &lt;properties&gt;
-        &lt;!-- 内核契约的版本：与你要装的那个内核一致（本套文档写的是 0.1.2） --&gt;
-        &lt;jellyfish.version&gt;0.1.2&lt;/jellyfish.version&gt;
+        &lt;!-- 内核契约的版本：填你在用的那份内核版本（与你手上那个 jellyfish-cli jar 同版本） --&gt;
+        &lt;jellyfish.version&gt;X.Y.Z&lt;/jellyfish.version&gt;
         &lt;java.version&gt;1.8&lt;/java.version&gt;
         &lt;maven.compiler.source&gt;${java.version}&lt;/maven.compiler.source&gt;
         &lt;maven.compiler.target&gt;${java.version}&lt;/maven.compiler.target&gt;
@@ -929,17 +928,17 @@ public final class MyPlugin implements JellyfishPlugin {
     </div>
 
     <div class="callout warn">
-      <span class="callout-title">一处「照抄 README 会编译不过」的地方（上游已修）</span>
+      <span class="callout-title">两处容易照抄错的签名细节</span>
       <ul>
-        <li><strong>内核文档早期版本</strong>的示例写的是
-          <code>new ToolDescriptor("hello", "按名字打招呼", /* parametersSchema */ ..., /* order */ 0)</code>——
-          <strong>源码里没有带 <code>order</code> 的四参构造器</strong>，第三参是 <code>parameters</code>、第四参是 <code>required</code>。
-          该示例<strong>现已改正</strong>（<code>Jellyfish-Plugins/README.md:939-940</code>）；本页代码用的是真实签名。</li>
-        <li><code>ToolDescriptor</code> 里<strong>没有「是否只读」字段</strong>（它曾经有，现已移除）。想要「某个模式下只准用只读工具」，
+        <li><code>ToolDescriptor</code> 的构造器是
+          <code>(name, description, parameters, required)</code>——第四参是 <code>required</code>，
+          <strong>没有 <code>order</code> 参数</strong>。写描述符前照
+          <code>ToolDescriptor.java</code> 的签名核对一遍。</li>
+        <li><code>ToolDescriptor</code> 里<strong>没有「是否只读」字段</strong>。想要「某个模式下只准用只读工具」，
           得由那个模式的插件按用户写的名单决定，工具自己无法自称只读。</li>
       </ul>
     </div>
-    <div class="src-block">Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/ToolDescriptor.java（两个构造器与「没有只读字段」的说明）、ToolCallRequest.java、ToolCallResult.java、CommandDescriptor.java、CommandResult.java、CommandRequest.java、CommandArguments.java、ExtensionHandler.java（<code>handle(C) throws Exception</code>）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/plugin/PluginContext.java（<code>handle</code> 重载）、Jellyfish-Plugins/README.md:924-956（README 示例，含那处 <code>order</code> 写法）</div>
+    <div class="src-block">Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/extension/ToolDescriptor.java（两个构造器与「没有只读字段」的说明）、ToolCallRequest.java、ToolCallResult.java、CommandDescriptor.java、CommandResult.java、CommandRequest.java、CommandArguments.java、ExtensionHandler.java（<code>handle(C) throws Exception</code>）、Jellyfish/jellyfish-api/src/main/java/zcd/jellyfish/api/plugin/PluginContext.java（<code>handle</code> 重载）、Jellyfish-Plugins/README.md:924-956（README 的工具 / 命令描述符示例）</div>
 
     <h2>读自己的配置</h2>
 
@@ -1061,8 +1060,8 @@ cp my-plugin/target/my-plugin-*.jar ~/.jellyfish/plugins/
 
 # 2) 重启 jellyfish —— 新增 / 删除插件 jar 只在启动期确定
 # 3) 验证：看启动日志、看 /help、跑一条命令
-java -jar /path/to/jellyfish-cli-0.1.2.jar -cli -p "/help"
-java -jar /path/to/jellyfish-cli-0.1.2.jar -cli -p "/hello 世界"</code></pre>
+jellyfish -cli -p "/help"
+jellyfish -cli -p "/hello 世界"</code></pre>
 
     <p>三种验证方法，从「最省事」到「最直接」：</p>
 

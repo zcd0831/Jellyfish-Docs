@@ -129,20 +129,20 @@ flowchart TD
           <tr>
             <td><code>Jellyfish</code></td>
             <td>内核：三种外壳 + 装配 + 扩展点与插件运行时 + 插件 SPI。工具、命令、权限模式等能力<strong>都不在内核里</strong></td>
-            <td>必然要。它产出唯一的可执行入口 <code>jellyfish-cli-0.1.2.jar</code></td>
-            <td>父 POM 与 <code>jellyfish-api</code> / <code>-infra</code> / <code>-core</code> / <code>-di</code> 发中央仓库，坐标 <code>io.github.zcd0831:jellyfish:0.1.2</code></td>
+            <td>必然要。它产出唯一的可执行入口：<code>jellyfish-cli/target/jellyfish-cli-*.jar</code></td>
+            <td>Maven 坐标 <code>io.github.zcd0831:jellyfish</code>，含 <code>jellyfish-api</code> / <code>-infra</code> / <code>-core</code> / <code>-di</code> 四个构件，发布在中央仓库、可直接依赖</td>
           </tr>
           <tr>
             <td><code>Jellyfish-Plugins</code></td>
             <td>官方插件集 + 插件开发教程。每个插件是独立打包的 PF4J jar</td>
             <td>想读文件 / 跑命令 / 存会话就必须装，否则内核近乎空转</td>
-            <td>独立 Maven reactor，聚合坐标 <code>io.github.zcd0831:jellyfish-plugins:0.1.2</code></td>
+            <td>独立 Maven reactor；插件以 PF4J jar 交付，不通过 Maven 坐标分发，按 <code>cpPlugins.sh</code> 拷进内核的插件目录</td>
           </tr>
           <tr>
             <td><code>Jellyfish-Spring-Boot-Starter</code></td>
             <td>把内核搬进已有的 Spring Boot 容器，并补上内核没有的「用户」维度</td>
             <td>只有当你要在自己的 Java 服务里用 agent 才需要</td>
-            <td><code>io.github.zcd0831:jellyfish-spring-boot-starter:0.1.2</code></td>
+            <td><code>io.github.zcd0831:jellyfish-spring-boot-starter</code>，发布在中央仓库、加依赖即可</td>
           </tr>
         </tbody>
       </table>
@@ -153,7 +153,7 @@ flowchart TD
       <span class="callout-title">三条容易误解的事</span>
       <ul>
         <li><strong>插件不在内核仓库里</strong>：内核只保留插件机制与 SPI。拿到 jar 直接跑，你会发现除了系统命令什么都干不了——文件工具、shell、会话持久化全在插件仓库。</li>
-        <li><strong>插件与内核没有编译期依赖</strong>：插件对 <code>jellyfish-api</code> 是 <code>provided</code>，因此能独立构建、独立发版。<span class="tag todo">注意</span> 插件 POM 示例里的父 POM（<code>jellyfish-plugins</code>）<strong>未见发布到中央仓库</strong>（该仓库没有 <code>release</code> profile），站外开发时请按 <a href="12-plugin-dev.html">12 插件开发</a> 一节的说明直接用 <code>jellyfish-api</code> 坐标。</li>
+        <li><strong>插件与内核没有编译期依赖</strong>：插件对 <code>jellyfish-api</code> 是 <code>provided</code>，因此能独立构建、独立发版。<span class="tag todo">注意</span> 插件 POM 示例里的父 POM（<code>jellyfish-plugins</code>）<strong>不在中央仓库</strong>（该仓库没有发布 Central 的 profile），站外开发时请按 <a href="12-plugin-dev.html">12 插件开发</a> 一节的说明直接用 <code>jellyfish-api</code> 坐标。</li>
         <li><strong>Starter 只是另一种装配方式</strong>，它不改内核、也不提供 HTTP 接口；它交付的是编程式 API，接口由你自己写。</li>
       </ul>
     </div>
@@ -435,9 +435,8 @@ flowchart LR
 
 <footer class="footer">
   <div class="doc-meta">
-    Jellyfish 使用指南 · 依据仓库 <code>Jellyfish</code>（<code>io.github.zcd0831:jellyfish:0.1.2</code>）、
-    <code>Jellyfish-Plugins</code>（<code>io.github.zcd0831:jellyfish-plugins:0.1.2</code>）、
-    <code>Jellyfish-Spring-Boot-Starter</code>（<code>io.github.zcd0831:jellyfish-spring-boot-starter:0.1.2</code>）整理。
+    Jellyfish 使用指南 · 依据 <code>Jellyfish</code>、<code>Jellyfish-Plugins</code>、
+    <code>Jellyfish-Spring-Boot-Starter</code> 三个仓库的源码与文档整理。
     示例中的密钥、token 一律以占位符表示；<code>【待确认】</code>表示该结论在仓库中未找到出处，请以实际代码为准。
   </div>
 </footer>

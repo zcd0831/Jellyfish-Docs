@@ -191,17 +191,18 @@
       <h3>方法一：全量装（<code>cpPlugins.sh</code>）</h3>
       <dl>
         <dt>是什么</dt>
-        <dd>仓库根目录的脚本把 13 个插件的 <code>target/*.jar</code> 一次性拷进 <code>~/.jellyfish/plugins</code>，并把几个示例脚本拷进 <code>~/.jellyfish/scripts/</code>。</dd>
+        <dd>聚合工作目录根的脚本把官方插件的 <code>target/*.jar</code> 一次性拷进 <code>~/.jellyfish/plugins</code>，并把几个示例脚本拷进 <code>~/.jellyfish/scripts/</code>。</dd>
         <dt>怎么用</dt>
         <dd>
-          <pre><code class="language-bash">cd /path/to/Jellyfish-Plugins
+          <pre><code class="language-bash">cd Jellyfish-Plugins            # 聚合工作目录下辖的插件仓库
 mvn -q package -DskipTests      # 打包全部插件
+cd ..                           # 回到聚合工作目录根（脚本在这里）
 ./cpPlugins.sh                  # 拷进 ~/.jellyfish/plugins/</code></pre>
         </dd>
       </dl>
       <p><strong>完整示例</strong>：脚本里对每个 jar 就是一行 <code>cp</code>（下面是节选，不是全文）</p>
-      <pre><code class="language-bash">cp Jellyfish-Plugins/jellyfish-plugin-compact/target/jellyfish-plugin-compact-0.1.2.jar ~/.jellyfish/plugins
-cp Jellyfish-Plugins/jellyfish-plugin-tools/target/jellyfish-plugin-tools-0.1.2.jar ~/.jellyfish/plugins
+      <pre><code class="language-bash">cp Jellyfish-Plugins/jellyfish-plugin-compact/target/jellyfish-plugin-compact-*.jar ~/.jellyfish/plugins
+cp Jellyfish-Plugins/jellyfish-plugin-tools/target/jellyfish-plugin-tools-*.jar ~/.jellyfish/plugins
 # …13 个 jar 各一行…
 rm -rf ~/.jellyfish/scripts/python/web
 cp -r Jellyfish-Plugins/examples/scripts/python/web ~/.jellyfish/scripts/python/web</code></pre>
@@ -584,7 +585,7 @@ mvn -q clean package -DskipTests
       <p>
         内核 <code>README.md</code> 在举「插件带来的命令」的例子时写到了「shell 的 <code>/shell</code>」，
         但 <code>Jellyfish-Plugins</code> 里 shell 插件只注册了 <code>shell</code> 工具与 <code>!</code> 输入指令，
-        <strong>没有注册名为 <code>shell</code> 的命令</strong>。插件侧源码：<code>ShellPlugin.start()</code> 只有三处扩展点声明——<code>shell</code> 工具 <code>ToolCallRequest</code>（<code>ShellPlugin.java:57</code>）、类型级 <code>PermissionCheckRequest</code>（<code>ShellPlugin.java:58</code>）、<code>!</code> 输入指令 <code>InputDirectiveRequest</code>（<code>ShellPlugin.java:59</code>），<strong>没有 <code>CommandRequest</code></strong>，<code>Jellyfish-Plugins</code> 全文也搜不到 <code>/shell</code>——因此 <code>/help</code> 里不会有 <code>/shell</code>。（内核 <code>Jellyfish/README.md:391</code> 早期版本举例时写过 <code>shell 的 /shell</code>，<strong>现已改为 <code>项目约定插件的 /init</code></strong>；同句里的 <code>/todo</code>、<code>/skills</code> 确有，见 <code>TodoPlugin.java:69</code>、<code>SkillsPlugin.java:62</code>。）
+        <strong>没有注册名为 <code>shell</code> 的命令</strong>。插件侧源码：<code>ShellPlugin.start()</code> 只有三处扩展点声明——<code>shell</code> 工具 <code>ToolCallRequest</code>（<code>ShellPlugin.java:57</code>）、类型级 <code>PermissionCheckRequest</code>（<code>ShellPlugin.java:58</code>）、<code>!</code> 输入指令 <code>InputDirectiveRequest</code>（<code>ShellPlugin.java:59</code>），<strong>没有 <code>CommandRequest</code></strong>，<code>Jellyfish-Plugins</code> 全文也搜不到 <code>/shell</code>——因此 <code>/help</code> 里不会有 <code>/shell</code>。（同句里的 <code>/todo</code>、<code>/skills</code> 确有，见 <code>TodoPlugin.java:69</code>、<code>SkillsPlugin.java:62</code>。）
       </p>
     </div>
     <div class="src-block">Jellyfish/README.md:391（「插件会带来更多命令」示例句）、Jellyfish-Plugins/jellyfish-plugin-shell/src/main/java/zcd/jellyfish/plugin/shell/ShellPlugin.java（<code>start</code> 内的三处扩展点）</div>
@@ -641,7 +642,7 @@ mvn -q clean package -DskipTests
 }</code></pre>
       <p><strong>常见问题</strong></p>
       <ul>
-        <li><strong>会话目录为什么会越用越大？</strong>因为它同时是一个 git 仓库，且从不 <code>gc</code>。resmon 插件报出的实测口径是「79M 里 54M 是 <code>.git</code>」，它是整套运行时里唯一没有自我约束的增长点，用 <code>/resmon disk</code> 看现状。</li>
+        <li><strong>会话目录为什么会越用越大？</strong>因为它同时是一个 git 仓库，且从不 <code>gc</code>——体积大头在 <code>.git</code>。它是整套运行时里唯一没有自我约束的增长点，用 <code>/resmon disk</code> 看现状。</li>
         <li><strong>git 出错会让会话丢吗？</strong>不会：落盘失败会上抛（那一刻起「状态已变」与「状态已落盘」同生共死），而 git 出错与坏文件只告警。</li>
       </ul>
     </div>
@@ -989,7 +990,7 @@ mvn -q clean package -DskipTests
         </table>
       </div>
 
-      <p><strong>源码里有、README 未收录的键</strong>（字段名与默认值取自源码常量，<span class="tag todo">【需核实】</span>是否属于稳定契约）——核实方法：把源码常量 <code>McpConfig.java:42-69</code>（<code>toolPrefix</code>=<code>true</code>、<code>toolNameMaxLength</code>=<code>64</code>，边界 <code>16~128</code> 在 <code>McpConfig.java:72-75</code>；<code>maxToolsPerServer</code>=<code>200</code>）与 <code>McpServerConfig.java:33,36</code>（<code>callTimeoutSeconds</code>=<code>60</code>、<code>connectTimeoutSeconds</code>=<code>15</code>）逐条对照 <code>Jellyfish-Plugins/README.md:622-705</code> 的字段表；升级版本后再比一次——常量变了而 README 字段表没变，就说明这些键只跟着源码走、不属于文字契约。另：源码里的 <code>servers[].enabled</code>（<code>McpServerConfig.java:108</code>，缺省 <code>true</code>）同样未收录，但本表未列出。</p>
+      <p><strong>源码里有、README 未收录的键</strong>（字段名与默认值取自源码常量，<span class="tag todo">【需核实】</span>是否属于稳定契约）——核实方法：把源码常量 <code>McpConfig.java:42-69</code>（<code>toolPrefix</code>=<code>true</code>、<code>toolNameMaxLength</code>=<code>64</code>，边界 <code>16~128</code> 在 <code>McpConfig.java:72-75</code>；<code>maxToolsPerServer</code>=<code>200</code>）与 <code>McpServerConfig.java:33,36</code>（<code>callTimeoutSeconds</code>=<code>60</code>、<code>connectTimeoutSeconds</code>=<code>15</code>）逐条对照 <code>Jellyfish-Plugins/README.md:622-705</code> 的字段表；内核升级后再比一次——常量变了而 README 字段表没变，就说明这些键只跟着源码走、不属于文字契约。另：源码里的 <code>servers[].enabled</code>（<code>McpServerConfig.java:108</code>，缺省 <code>true</code>）同样未收录，但本表未列出。</p>
       <div class="table-scroll field-table">
         <table>
           <thead>
@@ -1183,7 +1184,7 @@ mvn -q clean package -DskipTests
       <ul>
         <li><strong>数据挪到别处就统计不到了？</strong>是。它只扫 <code>baseDir</code> 的一级子项，把数据挪到 <code>baseDir</code> 之外（例如把 <code>react.toolOutput.dir</code> 指到别的盘）就看不到了——这是「本插件监控的是这个根目录」这条边界的自然结果。</li>
         <li><strong>为什么不把它报出来的大目录自动清掉？</strong>因为它<strong>不做清理</strong>：删除文件涉及用户的真实数据，而「哪些能删」要结合会话是否还要用来判断。把输出交给模型，让它给建议，你再自己动手。</li>
-        <li><strong>「体积」和「文件数」为什么口径不同？</strong>体积<strong>含版本库内部</strong>（<code>.git</code> 等），文件数<strong>不含</strong>。少算 git 历史会让合计与分区已用空间对不上；把 git 对象算进文件数又会报出「769 个文件」而用户只聊过 37 次天。</li>
+        <li><strong>「体积」和「文件数」为什么口径不同？</strong>体积<strong>含版本库内部</strong>（<code>.git</code> 等），文件数<strong>不含</strong>。少算 git 历史会让合计与分区已用空间对不上；把 git 对象算进文件数又会报出一大串用户从没聊过的文件。</li>
         <li><strong>它监视内核内部计数器吗？</strong>不。事件通道队列长度、<code>react</code> 池深度、在途子代理许可只有内核知道，本插件不去猜。</li>
       </ul>
     </div>

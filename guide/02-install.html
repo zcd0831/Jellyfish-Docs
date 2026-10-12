@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>02 安装与环境准备 · Jellyfish 使用指南</title>
-<meta name="description" content="把 Jellyfish 装起来的完整路径：环境要求、从源码构建出 jellyfish-cli-0.1.2.jar、常用构建命令、官方插件的两种安装方式与 plugins.roots、独立 reactor 的坑、用不需要模型的命令验证安装、IDEA 远程调试，以及一份安装检查清单。">
+<meta name="description" content="把 Jellyfish 装起来的完整路径：环境要求、从源码构建可执行 fat jar、常用构建命令、官方插件的两种安装方式与 plugins.roots、独立 reactor 的坑、用不需要模型的命令验证安装、IDEA 远程调试，以及一份安装检查清单。">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
@@ -65,7 +65,7 @@
 
     <h1>02 安装与环境准备</h1>
     <p class="page-sub">
-      这一页的目标只有一个：<strong>你的机器上出现一个能跑的 <code>jellyfish-cli-0.1.2.jar</code>，
+      这一页的目标只有一个：<strong>你的机器上出现一个能跑的 <code>jellyfish-cli</code> fat jar，
       旁边放好插件，而且你亲手验证过它能起来</strong>——验证用的是不需要模型、不需要密钥的命令，
       所以整个安装过程跟「有没有 API key」无关。
     </p>
@@ -142,7 +142,7 @@
       <span class="callout-title">插件仓库与 Starter 的要求与内核一致</span>
       <ul>
         <li><strong>插件仓库</strong>：JDK 8（与内核一致，不要用 Java 9+ 的 API 或语法）、Maven 3.2.5 以上，另外要求<strong>内核已 <code>mvn install</code> 到本地仓库</strong>。</li>
-        <li><strong>Spring Boot Starter</strong>：JDK 8、Spring Boot 2.7（已在 2.7.18 上验过）、内核 <code>io.github.zcd0831:jellyfish-di:0.1.2</code>（来自中央仓库）。</li>
+        <li><strong>Spring Boot Starter</strong>：JDK 8、Spring Boot 2.7（已在 2.7.18 上验过）、内核 <code>io.github.zcd0831:jellyfish-di</code>（来自中央仓库）。</li>
       </ul>
     </div>
 
@@ -151,7 +151,7 @@
     <h2>从源码构建</h2>
 
     <div class="feature">
-      <h3>构建内核 fat jar（<code>jellyfish-cli-0.1.2.jar</code>）</h3>
+      <h3>构建内核 fat jar</h3>
       <dl>
         <dt>是什么</dt>
         <dd>
@@ -164,10 +164,15 @@
           克隆、构建两步。README 给的原始命令如下（注意 <code>-o</code> 是离线模式）：
           <pre><code class="language-bash">git clone https://github.com/zcd0831/Jellyfish.git &amp;&amp; cd Jellyfish
 mvn -o clean package              # 全量构建 + 单测；-DskipTests 可跳测</code></pre>
-          产物路径固定为：
-          <pre><code class="language-text">jellyfish-cli/target/jellyfish-cli-0.1.2.jar</code></pre>
-          嫌路径长就设个别名：
-          <pre><code class="language-bash">alias jellyfish='java -jar /绝对路径/jellyfish-cli/target/jellyfish-cli-0.1.2.jar'</code></pre>
+          产物是一个可执行 fat jar，落在固定目录下；文件名带版本号，下文一律写成
+          <code>jellyfish-cli-*.jar</code>：
+          <pre><code class="language-text">jellyfish-cli/target/jellyfish-cli-*.jar</code></pre>
+          嫌路径长就设个别名——<strong>本指南后面所有示例都假设你设了它</strong>，命令一律简写成 <code>jellyfish</code>：
+          <pre><code class="language-bash">alias jellyfish='java -jar /绝对路径/jellyfish-cli/target/jellyfish-cli-*.jar'</code></pre>
+          三种模式都靠这个入口启动：
+          <pre><code class="language-bash">jellyfish -cli -p "总结这个项目"    # 单次问答
+jellyfish -tui                     # 交互界面（一个参数都不带也是它）
+jellyfish -server 9096             # HTTP 服务</code></pre>
         </dd>
       </dl>
 
@@ -214,35 +219,33 @@ git clone https://github.com/zcd0831/Jellyfish.git &amp;&amp; cd Jellyfish
 mvn -o package -DskipTests
 
 # 3. 确认产物就位
-ls jellyfish-cli/target/jellyfish-cli-0.1.2.jar
+ls jellyfish-cli/target/jellyfish-cli-*.jar
 
 # 4. 设个别名，后面就不用敲长路径
-alias jellyfish='java -jar /path/to/Jellyfish/jellyfish-cli/target/jellyfish-cli-0.1.2.jar'
+alias jellyfish='java -jar /path/to/Jellyfish/jellyfish-cli/target/jellyfish-cli-*.jar'
 
 # 5. 用不需要模型的方式验证它能启动
-java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli -p "/help"</code></pre>
+jellyfish -cli -p "/help"</code></pre>
 
       <p><strong>常见问题</strong></p>
       <ul>
         <li><strong>构建报「找不到依赖」？</strong>README 给的命令带 <code>-o</code>（离线），依赖必须已在本机 <code>~/.m2</code> 里；先去掉 <code>-o</code> 跑一次联网构建。<strong>文档之间的差别也在这里</strong>：<code>AGENTS.md</code> 的「常用命令」全都不带 <code>-o</code>，可见它不是必须的。</li>
-        <li><strong>构建成功后 jar 在哪？</strong>只在 <code>jellyfish-cli/target/</code> 下，文件名带版本号 <code>0.1.2</code>——它同时也是启动时的版本号来源。</li>
+        <li><strong>构建成功后 jar 在哪？</strong>只在 <code>jellyfish-cli/target/</code> 下——就是这个目录里那个 <code>jellyfish-cli-*.jar</code>（文件名带版本号；目录里另有 shade 留下的 <code>original-*.jar</code>，别拿错）。</li>
         <li><strong><code>mvn package</code> 与 <code>mvn test</code> 有什么区别？</strong><code>package</code> 会顺带跑单测（除非 <code>-DskipTests</code>）；但两者都<strong>不跑 <code>*IT</code> 端到端</strong>，Server 端到端要单独用 <code>-Pserver-it</code>。</li>
         <li><strong>改了代码要重新装到本地仓库吗？</strong>只有<strong>插件仓库或 Starter</strong> 需要你这么做，见下文「插件仓库是独立的 reactor」。</li>
       </ul>
     </div>
 
     <div class="callout warn">
-      <span class="callout-title">工作目录里已经有一份 jar？先确认它是不是你要的</span>
+      <span class="callout-title">改完代码打完包，记得把新 jar 换成你正在用的那一份</span>
       <p>
-        当前工作目录（三个仓库的聚合目录）下存在一个 <code>jellyfish-cli-0.1.1.jar</code>（16,401,469 字节，约 16.4 MB）。
-        能核实的两点：它的<strong>文件名与版本号跟 0.1.1 那一次的打包配置一致</strong>（产物名由 <code>jellyfish-cli/pom.xml</code> 的 shade 配置决定），而且它<strong>与 GitHub Releases 上 <code>v0.1.1</code> 的资产同名</strong>（该 release 发表于 2026-10-11）；
-        但它<strong>是不是那个资产本身、由谁在什么状态下构建并拷进来，仓库文档里没有任何记载</strong>，<code>【需核实】</code>。
-        <strong>它不是本套文档对应版本（0.1.2）的产物</strong>——当前构建产出的是 <code>jellyfish-cli/target/jellyfish-cli-0.1.2.jar</code>，两者版本号不同，不能直接比对。
-        核实方法：<code>unzip -p jellyfish-cli-0.1.1.jar META-INF/MANIFEST.MF</code> 看里面的 <code>Implementation-Version</code>，要当前版本就用 <code>mvn -q package -DskipTests</code> 自己重新构建。只想要一个能跑的 jar 可以先用它验证；但凡涉及「我改的代码有没有生效」，请按上面的步骤自己<strong>从源码构建</strong>。
+        <code>mvn package</code> 只把新产物写进 <code>jellyfish-cli/target/</code>，<strong>不会动你正在用的那个 jar</strong>。
+        如果你把它拷到别处、或按它的路径设了别名 / 启动脚本，请把新产物覆盖过去再启动——
+        否则跑的还是旧代码，表现是「我明明改了，运行起来却没变化」。
+        想确认当前跑的是哪一份，用 <code>jellyfish -V</code>（输出版本号），或直接比对文件时间戳（<code>ls -l</code>）。
       </p>
     </div>
-
-    <div class="src-block">Jellyfish/README.md:32-58（安装与构建、产物路径、alias、常用构建命令）、Jellyfish/README.md:36 与 :359（带 <code>-o</code> 的两处原文）、Jellyfish/AGENTS.md:21-28（「常用命令」整段：均不带 <code>-o</code>）、Jellyfish/pom.xml:8-11 与 :34-42（版本号与模块）、Jellyfish/jellyfish-cli/pom.xml:11 与 :92-113（<code>jellyfish-cli</code> 的版本号与 shade 可执行 jar 配置，产物名即 <code>jellyfish-cli-0.1.2.jar</code>）、工作目录根的 <code>jellyfish-cli-0.1.1.jar</code>（16,401,469 字节；与 <code>releases/tag/v0.1.1</code> 的资产同名）</div>
+    <div class="src-block">Jellyfish/README.md:32-58（安装与构建、产物路径、alias、常用构建命令）、Jellyfish/README.md:36 与 :359（带 <code>-o</code> 的两处原文）、Jellyfish/AGENTS.md:21-28（「常用命令」整段：均不带 <code>-o</code>）、Jellyfish/jellyfish-cli/pom.xml:92-113（<code>jellyfish-cli</code> 的 shade 可执行 jar 配置，产物名即 <code>jellyfish-cli-&lt;版本&gt;.jar</code>）</div>
 
     <h2>常用构建命令</h2>
 
@@ -265,7 +268,7 @@ java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli -p "/help"</code></p
           <tr>
             <td><code>mvn -q package -DskipTests</code></td>
             <td>只打包</td>
-            <td>产出 <code>jellyfish-cli/target/jellyfish-cli-0.1.2.jar</code>；跳过单测</td>
+            <td>产出 <code>jellyfish-cli/target/jellyfish-cli-*.jar</code>；跳过单测</td>
           </tr>
           <tr>
             <td><code>mvn -q package</code></td>
@@ -401,23 +404,22 @@ cp jellyfish-plugin-tools/target/jellyfish-plugin-tools-*.jar ~/.jellyfish/plugi
     <div class="callout warn">
       <span class="callout-title">关于工作目录下的 <code>cpPlugins.sh</code>：路径前缀不一样</span>
       <ul>
-        <li>插件仓库 README 与 AGENTS.md 写的都是 <code>./cpPlugins.sh</code>（在插件仓库根执行），
-          但当前工作目录的 <code>Jellyfish-Plugins/</code> 里<strong>没有</strong>这个文件。</li>
+        <li>插件仓库 README 与 AGENTS.md 写的都是 <code>./cpPlugins.sh</code>，指的是聚合工作目录根那一份，
+          而当前工作目录的 <code>Jellyfish-Plugins/</code> 里<strong>没有</strong>这个文件。</li>
         <li>工作目录根上的 <code>cpPlugins.sh</code> 每一行都带 <code>Jellyfish-Plugins/</code> 前缀
-          （例如 <code>cp Jellyfish-Plugins/jellyfish-plugin-tools/target/jellyfish-plugin-tools-0.1.2.jar ~/.jellyfish/plugins</code>），
+          （例如 <code>cp Jellyfish-Plugins/jellyfish-plugin-tools/target/jellyfish-plugin-tools-*.jar ~/.jellyfish/plugins</code>），
           所以它应当<strong>在聚合工作目录根执行</strong>。</li>
         <li>该脚本做的事有两类：拷 13 个官方插件 jar 到 <code>~/.jellyfish/plugins</code>；
           并把 <code>examples/scripts/python/</code> 下的 <code>web</code> / <code>stock</code> / <code>stockpanel</code>
           拷到 <code>~/.jellyfish/scripts/python/</code>（拷前会先 <code>rm -rf</code> 目标目录）。</li>
-        <li><strong>那两处的注释一度会让人误解</strong>：<code>Jellyfish-Plugins/README.md:34</code> 与 <code>Jellyfish-Plugins/AGENTS.md:25</code> 都写 <code>./cpPlugins.sh</code>，
-          早期版本的注释让人以为「在插件仓库根执行」，而插件仓库根<strong>并没有这个文件</strong>。两份文档的注释现已明确写成
-          <strong>「在聚合工作目录根执行（本仓库内没有这个脚本）」</strong>；真正存在的那份在<strong>聚合工作目录根</strong>，
-          且每行都带 <code>Jellyfish-Plugins/</code> 前缀——<strong>以工作目录根那份为准</strong>（在聚合目录根跑 <code>./cpPlugins.sh</code>）；
-          按老文档的写法在 <code>Jellyfish-Plugins/</code> 里敲，只会得到 <code>No such file or directory</code>。</li>
+        <li><strong>要在聚合工作目录根执行</strong>：<code>Jellyfish-Plugins/README.md</code> 与
+          <code>Jellyfish-Plugins/AGENTS.md</code> 里写的 <code>./cpPlugins.sh</code>，指的是<strong>聚合工作目录根</strong>那一份；
+          插件仓库根并没有这个文件，在那里敲只会得到 <code>No such file or directory</code>。
+          脚本每一行都带 <code>Jellyfish-Plugins/</code> 前缀，这也是它必须在聚合工作目录根执行的原因。</li>
       </ul>
     </div>
 
-    <div class="src-block">Jellyfish-Plugins/README.md:30-46（构建与安装、只装几个）、Jellyfish-Plugins/README.md:1046-1060（打包、安装与调试）、Jellyfish/README.md:464-487（插件一节：扫描目录、重启、<code>plugins.roots</code>）、Jellyfish/README.md:501-520（<code>config.json</code> 与 <code>plugins.roots</code> 语义）、Jellyfish/README.md:821-826（<code>plugins.enabled</code> / <code>plugins.disabled</code> / <code>plugins.configurations</code>）、Jellyfish/README.md:991-998（临时禁用某个插件）、Jellyfish/jellyfish-cli/src/main/resources/config.json、工作目录根的 cpPlugins.sh（13 行 <code>cp</code> 均带 <code>Jellyfish-Plugins/</code> 前缀）、Jellyfish-Plugins/README.md:34 与 Jellyfish-Plugins/AGENTS.md:25（两份文档的注释现已明确「在聚合工作目录根执行」，因为插件仓库根无此文件）</div>
+    <div class="src-block">Jellyfish-Plugins/README.md:30-46（构建与安装、只装几个）、Jellyfish-Plugins/README.md:1046-1060（打包、安装与调试）、Jellyfish/README.md:464-487（插件一节：扫描目录、重启、<code>plugins.roots</code>）、Jellyfish/README.md:501-520（<code>config.json</code> 与 <code>plugins.roots</code> 语义）、Jellyfish/README.md:821-826（<code>plugins.enabled</code> / <code>plugins.disabled</code> / <code>plugins.configurations</code>）、Jellyfish/README.md:991-998（临时禁用某个插件）、Jellyfish/jellyfish-cli/src/main/resources/config.json、工作目录根的 cpPlugins.sh（13 行 <code>cp</code> 均带 <code>Jellyfish-Plugins/</code> 前缀）、Jellyfish-Plugins/README.md:34 与 Jellyfish-Plugins/AGENTS.md:25（两处都写明「在聚合工作目录根执行（本仓库内没有这个脚本）」）</div>
 
     <h2>插件仓库是独立的 reactor：改插件前先装内核</h2>
 
@@ -439,7 +441,7 @@ cp jellyfish-plugin-tools/target/jellyfish-plugin-tools-*.jar ~/.jellyfish/plugi
         <li><strong>做法：</strong>内核升级后的检查顺序是
           <code>(cd ../Jellyfish &amp;&amp; mvn -q install -DskipTests)</code> →
           <code>mvn -q clean package</code> → 三个 <code>-P*-it</code> 端到端，<strong>只有全绿才算真的没问题</strong>。</li>
-        <li><strong>Starter 同理</strong>：它平时从中央仓库解析 <code>jellyfish-di:0.1.2</code>，
+        <li><strong>Starter 同理</strong>：它平时从中央仓库解析 <code>jellyfish-di</code>，
           只有你在本地改了内核时才需要先 <code>mvn install</code>；忘了这一步的表现是「内核明明改了，这边编译却看不到」，
           或更糟——用到的是本地仓库里的旧快照。</li>
       </ul>
@@ -466,7 +468,7 @@ mvn -q -Pscript-it test</code></pre>
         </dd>
         <dt>怎么用</dt>
         <dd>
-          <pre><code class="language-bash">java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli -p "/help"</code></pre>
+          <pre><code class="language-bash">jellyfish -cli -p "/help"</code></pre>
           <strong>看到命令清单就说明装好了。</strong>输入以 <code>/</code> 开头即走命令域，三条外壳命令一致。
         </dd>
       </dl>
@@ -476,8 +478,8 @@ mvn -q -Pscript-it test</code></pre>
         这一步<strong>没有配置项</strong>：它刻意绕开 <code>models.json</code>。唯一相关的约定是
         <strong>回答与命令结果走 stdout，诊断、工具进度与日志走 stderr</strong>，因此重定向是安全的：
       </p>
-      <pre><code class="language-bash">java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli -p "总结这个项目" &gt; answer.txt 2&gt; diag.txt
-echo "/help" | java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli</code></pre>
+      <pre><code class="language-bash">jellyfish -cli -p "总结这个项目" &gt; answer.txt 2&gt; diag.txt
+echo "/help" | jellyfish -cli</code></pre>
 
       <p><strong>完整示例（离线可用的命令清单）</strong></p>
       <div class="table-scroll">
@@ -522,27 +524,34 @@ echo "/help" | java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli</code
 
     <div class="src-block">Jellyfish/README.md:60-70（先离线验证安装）、Jellyfish/README.md:140-168（输出与退出码）、Jellyfish/README.md:372-408（常用命令清单、TUI 五个外壳命令、离线可用）、Jellyfish/README.md:1087-1099（没配模型会怎样、裸跑、TUI 退 3）</div>
 
-    <h2>发行包：仓库提供什么、不提供什么</h2>
+    <h2>拿到可执行 jar：两条路</h2>
 
-    <div class="callout warn">
-      <span class="callout-title">官方发过 0.1.0 与 0.1.1 的现成 jar；本套文档对应的 0.1.2 只有源码构建</span>
+    <div class="callout tip">
+      <span class="callout-title">下载现成的，或自己构建</span>
       <ul>
-        <li><strong>Maven Central 上目前还没有 <code>io.github.zcd0831</code> 的任何构件</strong>：计划发布的是内核父 POM 与 <code>jellyfish-api</code> / <code>jellyfish-infra</code> /
-          <code>jellyfish-core</code> / <code>jellyfish-di</code> 五个；<code>jellyfish-tui</code> / <code>jellyfish-server</code> /
-          <code>jellyfish-cli</code> <strong>不发</strong>——tui 依赖 <code>dev.tamboui</code> 的 SNAPSHOT（Central 拒收），
-          cli 是打好包的 fat jar。</li>
-        <li><strong>官方插件也不发布到中央仓库</strong>：它们是 PF4J 插件包，按 <code>cpPlugins.sh</code> 装到内核的插件目录。</li>
-        <li><strong>Starter 的坐标是 <code>io.github.zcd0831:jellyfish-spring-boot-starter</code></strong>，它依赖的 <code>jellyfish-di</code> 同样来自中央仓库；
-          两者目前都还没发布上去，发布之后这一条才成立。</li>
-        <li><strong>确有官方二进制发行包，但只到 <code>0.1.1</code></strong>：GitHub Releases 上有 <code>v0.1.1</code>（2026-10-11，资产 <code>jellyfish-cli-0.1.1.jar</code>）与更早的 <code>v0.1.0</code>（2026-10-07，资产 <code>jellyfish-cli-0.1.0.jar</code>，15.6 MB，附 <code>sha256:fecab7625ef140f9585480f3ea8dd6c0279cd50f7e8f6610e2a788f1f4af9373</code>）；而<strong>本套文档对应的 <code>0.1.2</code> 还没有发布</strong>。</li>
+        <li><strong>下载现成的</strong>：GitHub Releases 上挂着打好包的可执行 jar（资产名形如
+          <code>jellyfish-cli-&lt;版本&gt;.jar</code>），下下来 <code>java -jar</code> 就能跑，适合「先看看它长什么样」。</li>
+        <li><strong>从源码构建</strong>：就是上一节的两条命令，适合要改代码、要跟最新提交的场景。
+          本指南的示例都按「你手里有源码目录」写，所以推荐走这条。</li>
+        <li><strong>插件另外拿</strong>：官方插件不随上面任何一个包交付，仍然要把插件仓库的 jar 拷进扫描目录
+          （见上文「安装官方插件」）。</li>
       </ul>
-      <p>
-        结论：<strong>对 0.1.2 而言，可核实的获取路径只有源码构建</strong>——即本页「从源码构建」一节；
-        Releases 上那两份现成 jar 分别是 0.1.1 与 0.1.0，比本套文档对应的版本低，只适合「先跑起来看看」。
-      </p>
     </div>
 
-    <div class="src-block">Jellyfish/README.md:1144-1168（发布到 Maven Central：发哪些、不发哪些）、Jellyfish-Plugins/CHANGELOG.md:109（官方插件不发布到 Central）、Jellyfish-Spring-Boot-Starter/README.md:435-441（Starter 发布坐标与内核依赖）、Jellyfish/CHANGELOG.md:425-428（<code>[Unreleased]</code> / <code>[0.1.2]</code> / <code>[0.1.1]</code> / <code>[0.1.0]</code> 的 compare 与 <code>releases/tag</code> 链接）、https://github.com/zcd0831/Jellyfish/releases/tag/v0.1.0（资产 <code>jellyfish-cli-0.1.0.jar</code>，15.6 MB，<code>sha256:fecab762…</code>）、<code>releases/tag/v0.1.1</code>（2026-10-11 发布，资产 <code>jellyfish-cli-0.1.1.jar</code>）、<code>repo1.maven.org/maven2/io/github/zcd0831/</code>（本次复核仍为 404，即尚无构件上架）</div>
+    <div class="callout design">
+      <span class="callout-title">哪些构件能从 Maven Central 直接依赖</span>
+      <ul>
+        <li><strong>内核与 Starter 的构件都在中央仓库</strong>（<code>io.github.zcd0831</code>）：父 POM <code>jellyfish</code>
+          与 <code>jellyfish-api</code> / <code>jellyfish-infra</code> / <code>jellyfish-core</code> / <code>jellyfish-di</code>，
+          以及 <code>jellyfish-spring-boot-starter</code>。写插件、接 Starter 直接写依赖坐标即可解析到——
+          只有当你在本地改了内核，才需要自己 <code>mvn install</code> 一份到本地仓库。</li>
+        <li><strong>不发的是这三个</strong>：<code>jellyfish-tui</code> / <code>jellyfish-server</code> / <code>jellyfish-cli</code>
+          ——前两个不给别人依赖，<code>cli</code> 是打好包的 fat jar（就是上面 Releases 里那一份）。</li>
+        <li><strong>官方插件不在其中</strong>：它们是 PF4J 插件包，按 <code>cpPlugins.sh</code> 装到内核的插件目录。</li>
+      </ul>
+    </div>
+
+    <div class="src-block">Jellyfish/README.md:1144-1168（发布到 Maven Central：发哪些、不发哪些）、Jellyfish-Plugins/CHANGELOG.md（官方插件不发布到 Central）、Jellyfish-Spring-Boot-Starter/README.md:26-50（发布坐标与内核依赖）、https://github.com/zcd0831/Jellyfish/releases</div>
 
     <h2>在 IDEA 里调试</h2>
 
@@ -558,7 +567,7 @@ echo "/help" | java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli</code
         <dd>
           <pre><code class="language-bash">mvn -o package -DskipTests
 java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005 \
-     -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -tui</code></pre>
+     -jar jellyfish-cli/target/jellyfish-cli-*.jar -tui</code></pre>
           然后 <code>Run → Edit Configurations → + → Remote JVM Debug</code>（默认就是 5005）→ 点 Debug。
         </dd>
       </dl>
@@ -604,7 +613,7 @@ mvn -o package -DskipTests
 
 # 2. 在真实终端里启动，并开放 5005 调试端口；想在装配阶段下断点就把 suspend 改成 y
 java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005 \
-     -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -tui
+     -jar jellyfish-cli/target/jellyfish-cli-*.jar -tui
 
 # 3. IDEA：Run → Edit Configurations → + → Remote JVM Debug（缺省 5005）→ Debug
 
@@ -654,13 +663,13 @@ java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005 \
           <tr>
             <td>4</td>
             <td>fat jar 产出</td>
-            <td>构建后看 <code>jellyfish-cli/target/jellyfish-cli-0.1.2.jar</code></td>
-            <td>文件存在、文件名版本号是 <code>0.1.2</code></td>
+            <td>构建后看 <code>jellyfish-cli/target/jellyfish-cli-*.jar</code></td>
+            <td>文件存在、且是刚构建出来的那个 fat jar</td>
           </tr>
           <tr>
             <td>5</td>
             <td>jar 能起、命令域能跑</td>
-            <td><code>java -jar jellyfish-cli/target/jellyfish-cli-0.1.2.jar -cli -p "/help"</code></td>
+            <td><code>jellyfish -cli -p "/help"</code></td>
             <td>打印命令清单，退出码 <code>0</code>（这一步不需要模型）</td>
           </tr>
           <tr>
@@ -696,11 +705,11 @@ java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005 \
       <h2>关键结论</h2>
       <ol>
         <li>四项环境要求里，<strong>JDK 8</strong> 与 <strong>Maven 3.2.5+</strong> 是硬要求；<code>-tui</code> 额外需要可交互终端；模型是唯一可选项（没它也能跑命令）。</li>
-        <li>内核唯一交付的可执行入口是 <strong><code>jellyfish-cli/target/jellyfish-cli-0.1.2.jar</code></strong>，三种模式都用它启动；README 给的构建命令带 <code>-o</code>（离线），首次构建若失败先去掉 <code>-o</code> 重试。</li>
+        <li>内核唯一交付的可执行入口是 <strong><code>jellyfish-cli/target/jellyfish-cli-*.jar</code></strong>，三种模式都用它启动（本指南统一用别名 <code>jellyfish</code> 指它）；README 给的构建命令带 <code>-o</code>（离线），首次构建若失败先去掉 <code>-o</code> 重试。</li>
         <li>插件安装＝<strong>把 jar 放进扫描目录（缺省 <code>~/.jellyfish/plugins/</code>，由 <code>config.json</code> 的 <code>plugins.roots</code> 决定）＋重启进程</strong>；启用 / 禁用名单与逐插件配置段写在 <code>jellyfish.json</code>，改它们 <code>/reload</code> 就够。</li>
         <li><code>Jellyfish-Plugins</code> 是独立 reactor，<code>jellyfish-api</code> 来自本地仓库：改插件前先 <code>(cd ../Jellyfish &amp;&amp; mvn -q install -DskipTests)</code>，并且<strong>必须 <code>clean</code></strong>，否则编译问题会被伪装成运行期问题。</li>
         <li>验证安装用的是<strong>不需要模型的命令</strong>：<code>-cli -p "/help"</code> 看到命令清单即成功；<code>/help</code> <code>/session</code> <code>/status</code> <code>/model</code> <code>/compact preview</code> 都属离线可用。</li>
-        <li>现成的官方二进制发行包只到 <code>0.1.1</code>（GitHub Releases 上的 <code>jellyfish-cli-0.1.1.jar</code>，更早还有 <code>0.1.0</code>）——<strong>本套文档对应的 0.1.2 可核实的获取路径只有源码构建</strong>；中央仓库目前还没有 <code>io.github.zcd0831</code> 的任何构件，计划发布内核五个构件与 Starter，插件按 <code>cpPlugins.sh</code> 装。</li>
+        <li>jar 有两条来路：GitHub Releases 上挂着打好包的可执行 jar，或按本页从源码构建。内核与 Starter 的构件（<code>io.github.zcd0831</code>）都在 Maven Central，写插件 / 接 Starter 直接写坐标即可；官方插件不在其中，按 <code>cpPlugins.sh</code> 装。</li>
         <li>在 IDEA 里调 <code>-tui</code> 用远程调试（<code>-agentlib:jdwp=…,suspend=n,address=5005</code>）；想在 <code>bootstrap</code> 阶段下断点改成 <code>suspend=y</code>。</li>
       </ol>
     </div>

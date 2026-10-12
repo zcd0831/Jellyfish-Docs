@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>01 Jellyfish 是什么 · Jellyfish 使用指南</title>
-<meta name="description" content="一页说清 Jellyfish 的定位：三种形态（-cli / -tui / -server）共享同一个内核、三个仓库各负责什么、能力为什么全在插件里、技术栈与版本号，以及四条「不该用它」的红线。所有结论均标注仓库出处。">
+<meta name="description" content="一页说清 Jellyfish 的定位：三种形态（-cli / -tui / -server）共享同一个内核、三个仓库各负责什么、能力为什么全在插件里、技术栈选型，以及四条「不该用它」的红线。所有结论均标注仓库出处。">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
@@ -76,7 +76,7 @@
         <li>说清三个仓库各自负责什么，以及依赖方向为什么是单向的；</li>
         <li>判断「我需要装哪些插件」——并知道不装插件会具体缺什么；</li>
         <li>在 <code>-cli</code> / <code>-tui</code> / <code>-server</code> 之间按使用场景选出合适的那个；</li>
-        <li>说出内核与集成分支的技术栈选型与版本号，并知道去哪一行核对；</li>
+        <li>说出内核与集成分支的技术栈选型，并知道去哪一行核对；</li>
         <li>认清内核的四条边界（单主体、无 GUI、无沙箱、Windows 未验证），知道哪种场景该换方案。</li>
       </ul>
     </section>
@@ -125,7 +125,7 @@
     <div class="diagram">
       <div class="mermaid">
 flowchart TD
-  ENTRY["同一个入口：jellyfish-cli-0.1.2.jar<br/>装配出同一个 JellyfishRuntime"]
+  ENTRY["同一个入口：jellyfish-cli 的 fat jar<br/>装配出同一个 JellyfishRuntime"]
   ENTRY --> CLI["-cli<br/>进一个输入，出一次结果后退出"]
   ENTRY --> TUI["-tui<br/>TamboUI 终端界面"]
   ENTRY --> SRV["-server<br/>Undertow 上的 REST + SSE"]
@@ -164,20 +164,20 @@ flowchart TD
           <tr>
             <td><code>Jellyfish</code></td>
             <td>内核：三种外壳（<code>-cli</code> / <code>-tui</code> / <code>-server</code>）、装配、扩展点与插件运行时、插件 SPI。工具、命令、权限模式等能力<strong>都不在内核里</strong></td>
-            <td>必然要。它产出唯一的可执行入口 <code>jellyfish-cli-0.1.2.jar</code></td>
-            <td>父 POM 与 <code>jellyfish-api</code> / <code>-infra</code> / <code>-core</code> / <code>-di</code> 发中央仓库，坐标 <code>io.github.zcd0831:jellyfish:0.1.2</code></td>
+            <td>必然要。它产出唯一的可执行入口：<code>jellyfish-cli/target/jellyfish-cli-*.jar</code></td>
+            <td>Maven 坐标 <code>io.github.zcd0831:jellyfish</code>，含 <code>jellyfish-api</code> / <code>-infra</code> / <code>-core</code> / <code>-di</code> 四个构件，发布在中央仓库、可直接依赖</td>
           </tr>
           <tr>
             <td><code>Jellyfish-Plugins</code></td>
             <td>官方插件集（13 个：11 个 Java 插件 + 2 个脚本桥接插件）+ 插件开发教程。每个插件是独立打包的 PF4J jar</td>
             <td>想读文件 / 跑命令 / 存会话就必须装，否则内核近乎空转</td>
-            <td>独立 Maven reactor；插件本身<strong>不发布到中央仓库</strong>，按 <code>cpPlugins.sh</code> 装进内核的插件目录</td>
+            <td>独立 Maven reactor；插件是 PF4J 插件包，不通过 Maven 坐标分发，按 <code>cpPlugins.sh</code> 拷进内核的插件目录</td>
           </tr>
           <tr>
             <td><code>Jellyfish-Spring-Boot-Starter</code></td>
             <td>把内核搬进已有的 Spring Boot 容器，并补上内核没有的「用户」维度（带归属校验的多用户门面）</td>
             <td>只有当你要在自己的 Java 服务里用 agent 才需要</td>
-            <td><code>io.github.zcd0831:jellyfish-spring-boot-starter:0.1.2</code>，依赖内核装配模块 <code>jellyfish-di:0.1.2</code></td>
+            <td><code>io.github.zcd0831:jellyfish-spring-boot-starter</code>（发布在中央仓库），依赖内核装配模块 <code>jellyfish-di</code></td>
           </tr>
         </tbody>
       </table>
@@ -207,16 +207,7 @@ flowchart LR
       </ul>
     </div>
 
-    <div class="callout warn">
-      <span class="callout-title">版本号都是 0.1.2，但没有兼容矩阵</span>
-      <p>
-        三个仓库当前都停在 <code>0.1.2</code>，但<strong>没有任何文档声明三者之间的版本兼容矩阵</strong>。
-        凡涉及「哪个内核版本配哪个插件 / Starter 版本」，一律按 <code>【版本对应关系需查阅各自 README】</code> 处理，
-        本套文档不做推测。
-      </p>
-    </div>
-
-    <div class="src-block">Jellyfish/README.md:13-22（姊妹仓库表）、Jellyfish/pom.xml:8-11 与 :34-42（坐标与 7 个模块）、Jellyfish/AGENTS.md「技术架构」（模块职责与依赖方向）、Jellyfish-Spring-Boot-Starter/README.md:15-23（它不是什么）、Jellyfish/README.md:1144-1168（内核构件发布范围）、Jellyfish-Plugins/CHANGELOG.md:109（官方插件不发布到中央仓库）</div>
+    <div class="src-block">Jellyfish/README.md:13-22（姊妹仓库表）、Jellyfish/pom.xml:8-11 与 :34-42（坐标与 7 个模块）、Jellyfish/AGENTS.md「技术架构」（模块职责与依赖方向）、Jellyfish-Spring-Boot-Starter/README.md:15-23（它不是什么）、Jellyfish-Plugins/AGENTS.md（一个插件一个子模块）</div>
 
     <h2>能力从哪来：内核只有机制，能力全在插件</h2>
 
@@ -423,7 +414,7 @@ flowchart LR
 
     <div class="src-block">Jellyfish/README.md:108-118（模式与默认）、Jellyfish/README.md:120-138（参数表）、Jellyfish/README.md:140-168（输出与退出码）、Jellyfish/README.md:696-751（三种外壳下的审批行为）、Jellyfish/README.md:999-1080（Server 模式）、Jellyfish/README.md:1087-1098（常见问题：TUI 退 3、cli 下工具被拒、cli 下 <code>ask_user</code>）</div>
 
-    <h2>技术栈与版本</h2>
+    <h2>技术栈</h2>
 
     <p>
       下表每一行都给了出处，方便你在升级前自己去那一行核对。统一的前提是：
@@ -463,7 +454,7 @@ flowchart LR
           <tr>
             <td>TUI</td>
             <td><code>dev.tamboui:tamboui-toolkit:0.5.0-SNAPSHOT</code></td>
-            <td>TamboUI 界面；版本写在 <code>jellyfish-tui</code> 自己的 POM（父 POM 不再 import 它的 BOM）；该 SNAPSHOT 是 <code>jellyfish-tui</code><strong>不发布到中央仓库</strong>的原因</td>
+            <td>TamboUI 界面；它只发 SNAPSHOT，因此版本号与解析它所需的快照仓库都写在 <code>jellyfish-tui</code> 自己的 POM 里（父 POM 不 import 它的 BOM）</td>
             <td>jellyfish-tui/pom.xml:23、:61-65、Jellyfish/README.md:1144-1151</td>
           </tr>
           <tr>
@@ -489,18 +480,6 @@ flowchart LR
             <td>Spring Boot <code>2.7</code>（已在 <code>2.7.18</code> 上验过）</td>
             <td>starter <strong>不依赖</strong> <code>spring-boot-starter-web</code>，不会替你决定 Web 技术选型</td>
             <td>Jellyfish-Spring-Boot-Starter/README.md:15-23、:38-45</td>
-          </tr>
-          <tr>
-            <td>三个仓库的版本号</td>
-            <td>都是 <code>0.1.2</code></td>
-            <td>产物名里的版本号也带它，例如 <code>jellyfish-cli-0.1.2.jar</code></td>
-            <td>Jellyfish/pom.xml:8-11、Jellyfish-Spring-Boot-Starter/README.md:44-46、cpPlugins.sh 各行 jar 文件名</td>
-          </tr>
-          <tr>
-            <td>三者之间的兼容矩阵</td>
-            <td><code>【版本对应关系需查阅各自 README】</code></td>
-            <td>没有任何文档声明「哪个内核版本配哪个插件 / Starter 版本」</td>
-            <td>Jellyfish-Plugins/README.md:891-892（<code>plugin.requires</code> 是内核兼容约束，而内核不向 PF4J 声明系统版本，写 <code>*</code> 是显式「不限版本」）、13 个官方插件的 <code>plugin.properties</code> 的 <code>plugin.requires=*</code>（其中 4 个带解释性注释：<code>jellyfish-plugin-tools/src/main/resources/plugin.properties:10-12</code>）</td>
           </tr>
         </tbody>
       </table>
@@ -622,6 +601,55 @@ flowchart LR
 
     <div class="src-block">Jellyfish/docs/constraints.md:1132-1140（服务端单主体模型与命令域同权）、Jellyfish/README.md:1069-1073（服务端是单主体模型）、Jellyfish-Spring-Boot-Starter/README.md:341-350 与 :420-431（多用户护栏与使用限制：<code>Session</code> 无 owner 字段、涉密能力不要装进多租户进程）、Jellyfish-Plugins/README.md:159-162 与 :163-166、:238-245（路径闸门不是沙箱、shell 无沙箱、不做目录围栏、Windows 未验证）、Jellyfish/README.md:23-27 与 :1082-1093（终端要求与 TUI 退 3）、Jellyfish/pom.xml:34-42（模块列表）</div>
 
+    <h2>本版新增了什么</h2>
+
+    <p>
+      下面这份清单是当前版本（<code>0.1.2</code>，含与它同批发布的那一版）带来的<strong>用户可见变化</strong>，
+      一句话一条；每条的细节与代价在对应页面里展开。只想「用起来」的话，不看这份清单也不影响。
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>变化</th><th>一句话</th><th>细节在哪</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>配置写错的可见性</td>
+            <td>读取配置时比对字段名与数值：内核认不出的字段、非法的数值都发一条 <code>ConfigWarningEvent</code> 并打一行 WARN（带文件路径与字段名）；<code>vendorBody</code> 与逐插件配置段是自由格式，不参与比对</td>
+            <td><a href="05-config-overview.html">05 配置体系总览</a></td>
+          </tr>
+          <tr>
+            <td>项目级配置的信任</td>
+            <td>新增 <code>--trust-project-config</code> 启动参数：信任并加载 <code>./.jellyfish/*.json</code>，仅本次进程有效、不落盘；<code>-tui</code> 下改由启动确认框询问，可选「加载并记住」</td>
+            <td><a href="05-config-overview.html">05 配置体系总览</a></td>
+          </tr>
+          <tr>
+            <td>审批与提问可以永不超时</td>
+            <td><code>permission.approvalTimeoutSeconds</code> / <code>ask.timeoutSeconds</code> 写 <code>0</code> = 一直等到有人裁决（代价是占住一条 <code>react</code> 线程）；负数按非法回退 120 秒并告警</td>
+            <td><a href="10-permissions.html">10 权限与审批</a></td>
+          </tr>
+          <tr>
+            <td>子代理可以排队等许可</td>
+            <td>新增 <code>subAgent.maxQueuedRuns</code>：并发满员时多出来的 run 排队等许可，而不是当场以失败落终态</td>
+            <td><a href="07-agents.html">07 agents.json</a></td>
+          </tr>
+          <tr>
+            <td>取消能穿过等待区</td>
+            <td><code>Esc</code> 取消一个还在排队的 run 会当场落「已取消」，子代理面板分开显示「已等待」与「已运行」</td>
+            <td><a href="04-modes.html">04 三种运行模式</a></td>
+          </tr>
+          <tr>
+            <td>插件侧多出来的接口</td>
+            <td><code>PluginContext</code> 增加 <code>configScope()</code> / <code>globalConfiguration()</code> / <code>ownerSessionId()</code> / <code>parentSessionId()</code>；命令可以只声明一段接力文本（<code>CommandResult.handoff</code>）；编排方在 <code>spawn</code> 之前就能问出本回合还剩几个派发额度</td>
+            <td><a href="12-plugin-dev.html">12 插件开发</a></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="src-block">Jellyfish/CHANGELOG.md（最新两节的 Added / Changed 条目）、Jellyfish/README.md（<code>--trust-project-config</code> 与两处超时键）</div>
+
     <div class="conclusion">
       <h2>关键结论</h2>
       <ol>
@@ -629,7 +657,7 @@ flowchart LR
         <li>三个仓库是单向依赖：插件对 <code>jellyfish-api</code> 是 <code>provided</code>（可独立构建发版），Starter 只依赖 <code>jellyfish-di</code>（复用内核装配，不在 Spring 里重建组件）。</li>
         <li><strong>内核只有机制，能力全在插件</strong>：内核自带的工具只有 <code>task</code>（还需 <code>delegatable: true</code> 的 agent 才用得上），文件工具、<code>shell</code>、会话持久化、压缩策略全在 <code>Jellyfish-Plugins</code>；不装插件不是故障，是设计。</li>
         <li>选形态看「有没有人在场」：<code>-cli</code> 无审批者（<code>askTools</code> 一律按拒绝处理），<code>-tui</code> 需要真终端，<code>-server</code> 给自己写客户端用。</li>
-        <li>技术栈的硬前提是 <strong>JDK 1.8</strong>（不要用 Java 9+ 的 API 或语法），插件运行时 PF4J 3.14.1，TUI 是 TamboUI SNAPSHOT，HTTP 外壳是 undertow-core 2.2.40.Final，三个仓库版本号都是 0.1.2——但<strong>没有兼容矩阵</strong>，涉版本问题一律 <code>【版本对应关系需查阅各自 README】</code>。</li>
+        <li>技术栈的硬前提是 <strong>JDK 1.8</strong>（不要用 Java 9+ 的 API 或语法），插件运行时 PF4J，TUI 是 TamboUI 的 SNAPSHOT，HTTP 外壳是 undertow-core。</li>
         <li>四条边界要记住：<strong>单主体</strong>（一个 key 一个信任域、<code>Session</code> 无 owner 字段，别做多租户）、<strong>shell 无沙箱</strong>、<strong>Windows 未验证</strong>、<strong>无 GUI</strong>（只有终端与 HTTP 两种呈现）。</li>
         <li>本页所有命令、字段、类名都标了 <code>文件:行号</code> 出处；查不到的会写成 <code>【待确认】</code>，读到时请先去仓库核对再动手。</li>
       </ol>
