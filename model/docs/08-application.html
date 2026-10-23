@@ -32,7 +32,7 @@
       <tbody>
         <tr><td>本层对象</td><td>6 个用例服务 + 12 个应用内组件</td></tr>
         <tr><td>本层依赖</td><td>领域层（聚合方法、领域服务、领域策略）——只读调用，不实现规则；21 个端口（只认接口）</td></tr>
-        <tr><td>谁依赖本层</td><td>外壳（TUI / CLI / Server）只调用例服务</td></tr>
+        <tr><td>谁依赖本层</td><td>外壳（本期只做 TUI；端口契约不变）只调用例服务</td></tr>
         <tr><td>本层<strong>不</strong>负责</td><td>状态机与不变量（领域层）、文件与网络与终端（基础设施层）</td></tr>
       </tbody>
     </table>
@@ -251,7 +251,7 @@ flowchart LR
       <thead><tr><th>组件</th><th>职责</th><th>关键协作</th></tr></thead>
       <tbody>
         <tr><td><code>ExecutionLoop</code></td><td>外循环 do-while：算上下文 → 取 step → 跑一次内循环 → 三条出口（继续 / 结束 / 挂起）。<strong>唯一有权推进计划状态机的地方</strong></td><td><code>ContextWindowService</code>、<code>ReActLoop</code>、<code>VerificationRunner</code>、经验三件套、<code>CommitScope</code></td></tr>
-        <tr><td><code>ReActLoop</code></td><td>内循环：组装上下文 → 调模型 → 执行工具 → 落流水 → 判定收敛与提交</td><td><code>ToolExecutor</code>、<code>BudgetService</code>、<code>HumanInteractionPort</code>、<code>SubagentLauncher</code></td></tr>
+        <tr><td><code>ReActLoop</code></td><td>内循环：组装上下文 → 调模型（可流式，chunk 交给外壳）→ 执行工具 → 落流水 → 判定收敛与提交</td><td><code>ToolExecutor</code>、<code>BudgetService</code>、<code>HumanInteractionPort</code>、<code>SubagentLauncher</code></td></tr>
         <tr><td><code>ContextWindowService</code></td><td>计量 → 算有效上限 → 超限则折叠（调模型生成摘要）→ 追加 <code>SUMMARY</code></td><td><code>ModelInvocationPort</code>、<code>RecordStore</code>、<code>TokenCounter</code></td></tr>
         <tr><td><code>ToolExecutor</code></td><td>工具执行唯一入口：合法性校验 → 放行审批 → 按来源分发 → 截断归档</td><td><code>ExternalToolPort</code>、<code>SkillSopProvider</code>、<code>HumanInteractionPort</code>、<code>ArtifactStore</code></td></tr>
         <tr><td><code>VerificationRunner</code></td><td>执行 <code>VerificationChain</code> 给出的有序层</td><td><code>VerificationChain</code>（领域）、<code>ModelInvocationPort</code>、<code>HumanInteractionPort</code></td></tr>
@@ -280,7 +280,7 @@ flowchart LR
         <tr><td><code>PolicyRepository</code></td><td>单例策略</td><td><code>load</code> / <code>save</code></td><td>基础设施</td></tr>
         <tr><td><code>CatalogRepository</code></td><td>工具 / 代理 / 供应商 / 模型 / 技能</td><td><code>tools</code> / <code>agents</code> / <code>providers</code> / <code>models</code> / <code>skills</code> / <code>save</code></td><td>基础设施</td></tr>
         <tr><td><code>ArtifactStore</code></td><td>工具结果全文</td><td><code>put</code> / <code>deleteSession</code></td><td>基础设施</td></tr>
-        <tr><td><code>ModelInvocationPort</code></td><td>选模型、降级、调用、计量</td><td><code>invoke</code> / <code>describe</code></td><td>基础设施</td></tr>
+        <tr><td><code>ModelInvocationPort</code></td><td>选模型、降级、调用、计量（流式与非流式双方法）</td><td><code>invoke</code> / <code>invokeStreaming(request, ChunkSink)</code> / <code>describe</code></td><td>基础设施</td></tr>
         <tr><td><code>ExternalToolPort</code></td><td>REST / MCP / NATIVE 出站调用</td><td><code>invoke(tool, args)</code></td><td>基础设施</td></tr>
         <tr><td><code>SkillSopProvider</code></td><td>按 id 读并渲染 SOP</td><td><code>sop(skillId)</code></td><td>基础设施</td></tr>
         <tr><td><code>HumanInteractionPort</code></td><td><strong>阻塞式</strong>提问（单队列、标来源、可取消）</td><td><code>ask(question) → answer</code></td><td>终端 / Server</td></tr>
@@ -292,6 +292,11 @@ flowchart LR
         <tr><td><code>SchemaMigrator</code></td><td>读 <code>schema.version</code> 并顺序迁移</td><td><code>migrate</code></td><td>基础设施</td></tr>
       </tbody>
     </table>
+
+    <div class="callout">
+      <div class="ct">流式回调</div>
+      <p><code>ChunkSink</code> 是 <code>application.shared</code> 下的一个小接口（外壳实现，把 chunk 转给 <code>ProgressPort</code>），不作为端口登记。</p>
+    </div>
 
     <div class="callout key">
       <div class="ct">相对早期设计的两处收缩</div>
@@ -325,6 +330,7 @@ flowchart LR
         <tr><td>T10</td><td>经验反馈</td><td><code>experience/*.json</code></td><td>—</td></tr>
         <tr><td>T11</td><td>经验沉淀</td><td><code>experience/*.json</code>（新建/合并）</td><td>读轨迹 + 归纳子代理</td></tr>
         <tr><td>T12</td><td>会话状态</td><td><code>meta.json</code>（归档/取消/<code>ModelSwitched</code>）</td><td>—</td></tr>
+        <tr><td>TA</td><td>追加模型回复</td><td><code>RecordStore</code> +1 条 <code>ASSISTANT</code></td><td>模型调用（流式或非流式）<strong>结束后</strong></td></tr>
       </tbody>
     </table>
 
@@ -506,12 +512,13 @@ sequenceDiagram
       </tbody>
     </table>
     <p>技术残留（<code>*.tmp</code>、写了一半的行、未释放的锁）由基础设施层的启动清理处理，不在这里重复。</p>
+    <p>错误码、<code>Result</code> 与用户文案的组织方式见《技术决策》D11：应用层返回 <code>Result&lt;T, UseCaseError&gt;</code>，<code>Cancel</code> 是独立分支，文案由外壳按 <code>code</code> 查表。</p>
 
     <h2><span class="sec">8.11</span>并发模型</h2>
     <table>
       <thead><tr><th>并发点</th><th>机制</th><th>约束</th></tr></thead>
       <tbody>
-        <tr><td>用例执行</td><td>外壳单线程调用；同一 <code>sessionId</code> 同时只有一个 <code>RunSession</code></td><td>应用层用 <code>sessionId</code> 做内存互斥，不依赖文件锁</td></tr>
+        <tr><td>用例执行</td><td>外壳（TUI）单线程调用；同一 <code>sessionId</code> 同时只有一个 <code>RunSession</code></td><td>应用层用 <code>sessionId</code> 做内存互斥，不依赖文件锁</td></tr>
         <tr><td>内循环与工具</td><td><strong>工具严格串行</strong>（多个工具调用逐个执行、各自成败）</td><td>无并发工具调用</td></tr>
         <tr><td>子代理</td><td><code>SubagentLauncher</code> 内部并行；各自独立超时；join-all</td><td>子代理不得再开子代理</td></tr>
         <tr><td>人机交互</td><td><code>HumanInteractionPort</code> 单队列，所有来源排队逐个呈现</td><td>必须显示来源；<code>cancellation</code> 可唤醒</td></tr>

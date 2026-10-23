@@ -1012,7 +1012,7 @@ flowchart LR
     <h2><span class="sec">3.11</span>分层视图与端口全景</h2>
     <pre class="mermaid">
 flowchart TD
-    SHELL["外壳&lt;br/>TUI / CLI / Server"] --> APP["应用层&lt;br/>6 用例 + 12 组件"]
+    SHELL["外壳&lt;br/>本期 TUI"] --> APP["应用层&lt;br/>6 用例 + 12 组件"]
     APP --> DOM["领域层&lt;br/>12 聚合 + 领域服务 + 领域策略"]
     APP --> PORTS["21 个端口"]
     PORTS --> INF["基础设施层&lt;br/>22 个适配器"]
@@ -1024,7 +1024,7 @@ flowchart TD
       <thead><tr><th>组</th><th>端口</th></tr></thead>
       <tbody>
         <tr><td>持久化</td><td><code>CommitScope</code>、<code>SessionRepository</code>、<code>RecordStore</code>、<code>PlanRepository</code>、<code>VerificationReportRepository</code>、<code>ReflectionRepository</code>、<code>ExperienceRepository</code>、<code>BudgetRepository</code>、<code>PolicyRepository</code>、<code>CatalogRepository</code>、<code>ArtifactStore</code></td></tr>
-        <tr><td>模型与外部</td><td><code>ModelInvocationPort</code>、<code>ExternalToolPort</code>、<code>SkillSopProvider</code></td></tr>
+        <tr><td>模型与外部</td><td><code>ModelInvocationPort</code>（<code>invoke</code> / <code>invokeStreaming</code>）、<code>ExternalToolPort</code>、<code>SkillSopProvider</code></td></tr>
         <tr><td>人机与进度</td><td><code>HumanInteractionPort</code>、<code>ProgressPort</code>、<code>DomainEventPublisher</code></td></tr>
         <tr><td>时间与生命周期</td><td><code>Clock</code>、<code>TokenCounter</code>、<code>InstanceLock</code>、<code>SchemaMigrator</code></td></tr>
       </tbody>
