@@ -16,9 +16,6 @@
 # 本地阅读时的临时文件（例如用浏览器「另存为」整页时产生的伴随目录）
 *_files/
 
-# 第三方前端库的构建产物：别人编译好的 minified 文件，不入版本库，只在本地按需放置。
-# 缺失时文档仍可读（assets/app.js 自动回退 CDN + 缺库降级），因此无需入库。
-# 想彻底离线就把两个文件放进 learning/assets/vendor/，版本需与 app.js 里 CDN 兜底的一致
-# （highlight.js 11.9.0 的 @highlightjs/cdn-assets 浏览器 bundle、mermaid 10.9.1）。
-learning/assets/vendor/highlight.min.js
-learning/assets/vendor/mermaid.min.js
+# 第三方前端库的构建产物：不入版本库，只在本地按需放置。
+# 缺失时文档仍可读（Mermaid 走 CDN，缺网时图退化为源码文本）。
+model/docs/assets/mermaid.min.js
