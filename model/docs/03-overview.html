@@ -20,10 +20,12 @@
 
     <h2><span class="sec">3.1</span>数字速览</h2>
     <div class="cards">
-      <div class="card"><div class="k">模块</div><div class="t">4 个</div><div class="d">感知 / 行动 / 规划 / 记忆</div></div>
+      <div class="card"><div class="k">领域模块</div><div class="t">4 个</div><div class="d">感知 / 行动 / 规划 / 记忆</div></div>
+      <div class="card"><div class="k">分层</div><div class="t">2 层</div><div class="d">应用层 / 基础设施层</div></div>
       <div class="card"><div class="k">聚合</div><div class="t">12 个</div><div class="d">每个聚合都有自己的不变量（红线）</div></div>
-      <div class="card"><div class="k">领域服务</div><div class="t">15 个</div><div class="d">跨对象编排的"动作"</div></div>
-      <div class="card"><div class="k">端口</div><div class="t">3 个</div><div class="d">用于切断模块间反向依赖</div></div>
+      <div class="card"><div class="k">领域服务</div><div class="t">3 个</div><div class="d">纯规则：装配、计划校验、验证链</div></div>
+      <div class="card"><div class="k">应用用例 / 组件</div><div class="t">6 / 12</div><div class="d">用例编排与执行循环</div></div>
+      <div class="card"><div class="k">端口</div><div class="t">21 个</div><div class="d">应用层定义，基础设施实现</div></div>
       <div class="card"><div class="k">领域事件</div><div class="t">15 个</div><div class="d">由聚合根发出，代表状态真的变了</div></div>
       <div class="card"><div class="k">应用事件</div><div class="t">2 个</div><div class="d">过程通知，不对应状态变化</div></div>
     </div>
@@ -145,8 +147,8 @@ classDiagram
             TOOL_RESULT
             SUMMARY
         }
-        class SessionFactory {
-            &lt;&lt;DomainService&gt;&gt;
+        class StartSessionUseCase {
+            &lt;&lt;ApplicationService&gt;&gt;
             +start(AgentId, ModelId, String) Session
             +startSubSession(SessionId, AgentId, ModelId, String) Session
         }
@@ -430,16 +432,16 @@ classDiagram
             -String submittedSummary
             -int attemptNo
         }
-        class OuterLoopService {
-            &lt;&lt;DomainService&gt;&gt;
+        class ExecutionLoop {
+            &lt;&lt;ApplicationService&gt;&gt;
             +run(Session)
         }
-        class InnerLoopService {
-            &lt;&lt;DomainService&gt;&gt;
+        class ReActLoop {
+            &lt;&lt;ApplicationService&gt;&gt;
             +runIteration(Session, PlanStep) IterationResult
         }
-        class VerificationService {
-            &lt;&lt;DomainService&gt;&gt;
+        class VerificationRunner {
+            &lt;&lt;ApplicationService&gt;&gt;
             +verify(PlanStep, Attempt) VerificationReport
         }
         class PlanFactory {
@@ -541,21 +543,21 @@ classDiagram
             -List~ExperienceId~ suggestedExperienceIds
         }
         class ExperienceRetriever {
-            &lt;&lt;DomainService&gt;&gt;
+            &lt;&lt;ApplicationService&gt;&gt;
             +retrieveAndAssign(RetrievalInput) Map
         }
         class ExperienceDistillationService {
-            &lt;&lt;DomainService&gt;&gt;
+            &lt;&lt;ApplicationService&gt;&gt;
             +distill(DistillationInput)
         }
         class ExperienceFeedbackService {
-            &lt;&lt;DomainService&gt;&gt;
+            &lt;&lt;ApplicationService&gt;&gt;
             +onStepSucceeded(FeedbackInput)
             +onStepFailed(FeedbackInput)
         }
-        class SkillLoader {
-            &lt;&lt;DomainService&gt;&gt;
-            +load(String skillName) String
+        class SkillSopProvider {
+            &lt;&lt;InfrastructureAdapter&gt;&gt;
+            +sop(String skillId) String
         }
     }
 
@@ -570,14 +572,13 @@ classDiagram
             -int maxInputTokens
             -int maxOutputTokens
         }
-        class InternalToolHandler {
+        class ExternalToolPort {
             &lt;&lt;Port&gt;&gt;
-            +supports(ToolId) boolean
-            +handle(Map) String
+            +invoke(ToolDefinition, Map) String
         }
-        class SubagentRunnerPort {
+        class HumanInteractionPort {
             &lt;&lt;Port&gt;&gt;
-            +run(AgentId, String task) String
+            +ask(Question) Answer
         }
     }
 
@@ -687,7 +688,7 @@ classDiagram
     <pre class="mermaid">
 flowchart LR
     subgraph 感知
-        SF[SessionFactory]
+        SF[StartSessionUseCase]
         TG[SessionTitleGenerator]
         SA[SystemPromptAssembler]
         CW[ContextWindowService]
@@ -705,9 +706,9 @@ flowchart LR
         BU[(Budget)]
     end
     subgraph 规划
-        OL[OuterLoopService]
-        IL[InnerLoopService]
-        VS[VerificationService]
+        OL[ExecutionLoop]
+        IL[ReActLoop]
+        VS[VerificationRunner]
         PF[PlanFactory]
         P[(Plan)]
         VR[(VerificationReport)]
@@ -716,14 +717,14 @@ flowchart LR
         R[ExperienceRetriever]
         DS[ExperienceDistillationService]
         FB[ExperienceFeedbackService]
-        SL[SkillLoader]
+        SL[SkillSopProvider]
         E[(Experience)]
         RF[(Reflection)]
         SK[(SkillDefinition)]
     end
     P1[[ModelInvocationPort]]
-    P2[[InternalToolHandler]]
-    P3[[SubagentRunnerPort]]
+    P2[[SkillSopProvider]]
+    P3[[HumanInteractionPort]]
 
     OL --> CW
     OL --> IL
@@ -736,9 +737,11 @@ flowchart LR
     IL --> TE
     IL --> MI
     IL --> BS
+    IL --> P3
     VS --> VR
     VS --> RP
     VS --> TE
+    VS --> P3
     PF --> P
     SF --> S
     SF --> BU
@@ -753,59 +756,72 @@ flowchart LR
     TE --> RP
     TE --> BU
     TE --> P2
+    TE --> P3
     MI -.实现.-> P1
     MI --> MD
     MI --> PV
-    MI --> BS
+    MI -.返回 usage.-> BS
     BS --> BU
     SL -.实现.-> P2
     SL --> SK
     R --> E
-    R --> P3
     DS --> E
     DS --> RF
     DS --> S
-    DS --> P3
     FB --> E
     </pre>
     <p class="diagram-note">图 3-2　十五个领域服务与三个端口的协作关系</p>
 
-    <h2><span class="sec">3.4</span>模块归属表</h2>
+        <h2><span class="sec">3.4</span>模块与分层归属表</h2>
     <table>
-      <thead><tr><th>模块</th><th>定位</th><th>聚合</th><th>领域服务</th><th>端口</th></tr></thead>
+      <thead><tr><th>归属</th><th>定位</th><th>聚合</th><th>服务 / 组件</th><th>端口</th></tr></thead>
       <tbody>
         <tr>
           <td><strong>感知</strong></td>
           <td>模型此刻能看到什么：上下文流水 + 快照 + 窗口折叠 + 运行环境策略</td>
           <td><code>Session</code>、<code>RuntimePolicy</code></td>
-          <td><code>SessionFactory</code>、<code>SessionTitleGenerator</code>、<code>SystemPromptAssembler</code>、<code>ContextWindowService</code></td>
+          <td><code>SystemPromptAssembler</code>（领域）；<code>StartSessionUseCase</code>、<code>ContextWindowService</code>、<code>SessionTitleGenerator</code>（应用）</td>
           <td>声明 <code>ModelInvocationPort</code></td>
         </tr>
         <tr>
           <td><strong>行动</strong></td>
           <td>能做什么 / 用什么做 / 花多少钱：工具、模型、代理、预算</td>
           <td><code>ToolDefinition</code>、<code>Provider</code>、<code>Model</code>、<code>AgentDefinition</code>、<code>Budget</code></td>
-          <td><code>ToolExecutor</code>、<code>ModelInvoker</code>、<code>BudgetService</code></td>
-          <td>实现 <code>ModelInvocationPort</code> / <code>SubagentRunnerPort</code>；声明 <code>InternalToolHandler</code></td>
+          <td><code>ToolExecutor</code>、<code>BudgetService</code>（应用）；<code>ModelInvoker</code>、<code>SkillSopProvider</code>（基础设施）</td>
+          <td><code>ExternalToolPort</code></td>
         </tr>
         <tr>
           <td><strong>规划</strong></td>
           <td>想怎么做 / 做到哪 / 算不算做成</td>
           <td><code>Plan</code>、<code>VerificationReport</code></td>
-          <td><code>OuterLoopService</code>、<code>InnerLoopService</code>、<code>VerificationService</code>、<code>PlanFactory</code></td>
+          <td><code>PlanFactory</code>、<code>VerificationChain</code>（领域）；<code>ExecutionLoop</code>、<code>ReActLoop</code>、<code>VerificationRunner</code>（应用）</td>
           <td>—</td>
         </tr>
         <tr>
           <td><strong>记忆</strong></td>
           <td>学到的东西如何留存与复用</td>
           <td><code>Experience</code>、<code>Reflection</code>、<code>SkillDefinition</code></td>
-          <td><code>ExperienceRetriever</code>、<code>ExperienceDistillationService</code>、<code>ExperienceFeedbackService</code>、<code>SkillLoader</code></td>
-          <td>实现 <code>InternalToolHandler</code>；声明 <code>SubagentRunnerPort</code></td>
+          <td><code>ExperienceRetriever</code>、<code>ExperienceDistillationService</code>、<code>ExperienceFeedbackService</code>（应用）</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td><strong>应用层</strong></td>
+          <td>用例编排、事务与提交顺序、端口契约、并发</td>
+          <td>—（只编排，不持有聚合）</td>
+          <td>6 个用例 + 12 个组件（见 <a href="08-application.html">第 8 章</a>）</td>
+          <td>定义并被基础设施实现</td>
+        </tr>
+        <tr>
+          <td><strong>基础设施层</strong></td>
+          <td>端口背后：文件、模型、终端、时钟</td>
+          <td>—</td>
+          <td>22 个适配器（见 <a href="09-infrastructure.html">第 9 章</a>）</td>
+          <td>实现全部 21 个端口</td>
         </tr>
       </tbody>
     </table>
 
-    <h2><span class="sec">3.5</span>依赖方向与三条纪律</h2>
+<h2><span class="sec">3.5</span>依赖方向与三条纪律</h2>
     <pre class="mermaid">
 flowchart LR
     规划 --> 感知
@@ -823,7 +839,7 @@ flowchart LR
         <li><strong>需要别人的内容 → 让调用方取好，用值对象传进来。</strong>
           例：<code>ContextWindowPolicy</code>、<code>AgentSnapshotInput</code>、<code>DistillationInput</code>、<code>RetrievalInput</code>、<code>FeedbackInput</code>、<code>ModelInvocationRequest</code>。</li>
         <li><strong>需要别人的动作 → 走端口。</strong>
-          例：<code>ModelInvocationPort</code>（感知声明 / 行动实现）、<code>InternalToolHandler</code>（行动声明 / 规划+记忆实现）、<code>SubagentRunnerPort</code>（记忆声明 / 行动实现）。</li>
+          例：<code>ModelInvocationPort</code>（应用层声明 / 基础设施实现）、<code>ExternalToolPort</code>、<code>SkillSopProvider</code>、<code>HumanInteractionPort</code>。</li>
         <li><strong>只读别人的聚合不算依赖。</strong>
           例：记忆按 <code>RecordRange</code> 只读 <code>Session.Record</code>；<strong>但绝不追写</strong>。</li>
       </ol>
@@ -854,11 +870,11 @@ flowchart LR
     </table>
 
     <h2><span class="sec">3.7</span>驱动：外循环就是 do-while</h2>
-    <pre><code>OuterLoopService.run(session):
+    <pre><code>ExecutionLoop.run(session):
     loop:
         ContextWindowService.ensureWithinLimit(session)       // 阻塞；算窗口、必要时折叠
         step = session.hasExecutablePlan() ? plan.getCurrentStep() : null
-        iter = InnerLoopService.runIteration(session, step)    // 内循环只在"模型不再调工具"时返回
+        iter = ReActLoop.runIteration(session, step)    // 内循环只在"模型不再调工具"时返回
 
         if !iter.isConverged:                                  // 撞 maxReActRounds
             plan.markAttemptFailed(step, iter.attemptNo)
@@ -872,7 +888,7 @@ flowchart LR
         if step.requiredVerifications.isEmpty():
             plan.markStepSucceeded(step, iter.submittedSummary, null)   // 不验证即完成
         else:
-            report = VerificationService.verify(step, iter.attempt)
+            report = VerificationRunner.verify(step, iter.attempt)
             advance(step, report)                              // 通过 → 推进；失败 → 重试/反思/重划</code></pre>
 
     <p><strong>四条伴随规则</strong>：</p>
@@ -908,6 +924,17 @@ flowchart LR
         <tr><td>请求超限</td><td>强制折叠一次后重试；不耗重试；仍超限按模型不可用处理</td></tr>
       </tbody>
     </table>
+
+    <h3>3.7.2 分层实现约定</h3>
+    <table>
+      <thead><tr><th>约定</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td><strong>提交顺序</strong></td><td>一次状态转移内固定「不可变事实 → 追加流水 → 替换聚合」；由 <code>CommitScope</code> 强制，应用层只 stage</td></tr>
+        <tr><td><strong>事件只通知</strong></td><td>领域事件在提交后同步派发，<strong>不得驱动任何 IO 长任务</strong>；检索/沉淀由 <code>ExecutionLoop</code> 显式调用</td></tr>
+        <tr><td><strong>持久化形态</strong></td><td>文件系统 + 单写者；<code>RecordRange</code> 基于 <code>seq</code>（不基于文件位置），流水超 32 MiB 滚动</td></tr>
+      </tbody>
+    </table>
+    <p>详见 <a href="08-application.html">第 8 章</a> 8.8 与 <a href="09-infrastructure.html">第 9 章</a> 9.6。</p>
 
     <h2><span class="sec">3.8</span>生命周期节点全景</h2>
     <p>四份模块文档里，"每个聚合的生命周期"都用同一套节点词表。这里汇总一次。</p>
@@ -957,9 +984,9 @@ flowchart LR
     <table>
       <thead><tr><th>事件</th><th>谁发出</th><th>什么时候</th><th>谁关心</th></tr></thead>
       <tbody>
-        <tr><td><code>PlanCreated</code></td><td>Plan</td><td>计划校验通过并创建</td><td>记忆·经验检索</td></tr>
-        <tr><td><code>PlanCompleted</code></td><td>Plan</td><td>所有步骤成功</td><td>记忆·经验沉淀</td></tr>
-        <tr><td><code>PlanFailed</code></td><td>Plan</td><td>外循环判定重划用尽并终止</td><td>记忆（失败也沉淀）、界面</td></tr>
+        <tr><td><code>PlanCreated</code></td><td>Plan</td><td>计划校验通过并创建</td><td><strong>无功能性订阅方</strong>：经验分配由 <code>ExecutionLoop</code> 显式调用；事件只供界面/审计</td></tr>
+        <tr><td><code>PlanCompleted</code></td><td>Plan</td><td>所有步骤成功</td><td><strong>无功能性订阅方</strong>：沉淀由 <code>ExecutionLoop</code> 显式调用；事件只供界面/审计</td></tr>
+        <tr><td><code>PlanFailed</code></td><td>Plan</td><td>外循环判定重划用尽并终止</td><td>同上：沉淀为显式调用；事件供界面/审计</td></tr>
         <tr><td><code>StepFailed</code></td><td>Plan</td><td>标记步骤失败</td><td>规划·外循环</td></tr>
         <tr><td><code>VerificationRejected</code></td><td>VerificationReport</td><td>结论为不通过 / 无法判定</td><td>规划·外循环</td></tr>
         <tr><td><code>ReflectionRecorded</code></td><td>Reflection</td><td>反思结论落库</td><td>规划（回注）、记忆（素材）</td></tr>
@@ -981,6 +1008,28 @@ flowchart LR
       <p>后面四章是放大镜：每章都会给出本模块的总览图、对象操作图、聚合与服务清单、
       事件清单、生命周期规则，以及关键服务的时序图。</p>
     </div>
+
+    <h2><span class="sec">3.11</span>分层视图与端口全景</h2>
+    <pre class="mermaid">
+flowchart TD
+    SHELL["外壳&lt;br/>TUI / CLI / Server"] --> APP["应用层&lt;br/>6 用例 + 12 组件"]
+    APP --> DOM["领域层&lt;br/>12 聚合 + 领域服务 + 领域策略"]
+    APP --> PORTS["21 个端口"]
+    PORTS --> INF["基础设施层&lt;br/>22 个适配器"]
+    INF -.实现.-> PORTS
+    </pre>
+    <p class="diagram-note">图 3-4　三层依赖：应用层只认端口，基础设施只实现端口，领域层谁都不认</p>
+
+    <table>
+      <thead><tr><th>组</th><th>端口</th></tr></thead>
+      <tbody>
+        <tr><td>持久化</td><td><code>CommitScope</code>、<code>SessionRepository</code>、<code>RecordStore</code>、<code>PlanRepository</code>、<code>VerificationReportRepository</code>、<code>ReflectionRepository</code>、<code>ExperienceRepository</code>、<code>BudgetRepository</code>、<code>PolicyRepository</code>、<code>CatalogRepository</code>、<code>ArtifactStore</code></td></tr>
+        <tr><td>模型与外部</td><td><code>ModelInvocationPort</code>、<code>ExternalToolPort</code>、<code>SkillSopProvider</code></td></tr>
+        <tr><td>人机与进度</td><td><code>HumanInteractionPort</code>、<code>ProgressPort</code>、<code>DomainEventPublisher</code></td></tr>
+        <tr><td>时间与生命周期</td><td><code>Clock</code>、<code>TokenCounter</code>、<code>InstanceLock</code>、<code>SchemaMigrator</code></td></tr>
+      </tbody>
+    </table>
+    <p>相对早期设计的两处收缩：取消 <code>SubagentRunnerPort</code>（检索/归纳已在应用层，直接调 <code>SubagentLauncher</code>）、<code>InternalToolHandler</code> 收窄为 <code>SkillSopProvider</code>。</p>
 
     <div class="page-foot" id="pagenav"></div>
   </main>

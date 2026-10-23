@@ -31,7 +31,8 @@
       <tbody>
         <tr><td>本模块聚合</td><td><code>Plan</code>、<code>VerificationReport</code></td></tr>
         <tr><td>被本模块引用的外部聚合（仅 ID / 只读）</td><td><code>Session</code>、<code>RuntimePolicy</code>（感知）、<code>Experience</code>（记忆）、<code>Reflection</code>（记忆）</td></tr>
-        <tr><td>本模块调用的外部领域服务</td><td><code>ContextWindowService</code>（感知）、<code>ToolExecutor</code>（行动）、<code>BudgetService</code>（行动）、<code>ExperienceRetriever</code> / <code>ExperienceDistillationService</code> / <code>ExperienceFeedbackService</code>（记忆）</td></tr>
+        <tr><td>本模块调用的外部对象</td><td>应用层：<code>ContextWindowService</code>（感知）、<code>ToolExecutor</code>、<code>BudgetService</code>（行动）、<code>ExperienceRetriever</code> / <code>ExperienceDistillationService</code> / <code>ExperienceFeedbackService</code>（记忆）</td></tr>
+        <tr><td>本模块对象所在的层</td><td><strong>领域层</strong>：<code>Plan</code>、<code>VerificationReport</code>、<code>PlanFactory</code>、<code>VerificationChain</code>；<strong>应用层</strong>：<code>ExecutionLoop</code>、<code>ReActLoop</code>、<code>VerificationRunner</code>（见 <a href="08-application.html">第 8 章</a>）</td></tr>
         <tr><td>被外部引用的本模块对象</td><td><code>Plan</code>（被感知模块的会话持有引用）、<code>VerificationReport</code> / <code>Reflection</code>-ID（被 <code>Attempt</code> 引用）</td></tr>
       </tbody>
     </table>
@@ -154,17 +155,22 @@ classDiagram
     }
 
     namespace 领域服务 {
-        class OuterLoopService {
-            &lt;&lt;DomainService&gt;&gt;
+        class ExecutionLoop {
+            &lt;&lt;ApplicationService&gt;&gt;
             +run(Session)
         }
-        class InnerLoopService {
-            &lt;&lt;DomainService&gt;&gt;
+        class ReActLoop {
+            &lt;&lt;ApplicationService&gt;&gt;
             +runIteration(Session, PlanStep) IterationResult
         }
-        class VerificationService {
-            &lt;&lt;DomainService&gt;&gt;
+        class VerificationRunner {
+            &lt;&lt;ApplicationService&gt;&gt;
             +verify(PlanStep, Attempt) VerificationReport
+        }
+        class VerificationChain {
+            &lt;&lt;DomainService&gt;&gt;
+            +orderedLayers(Set~VerificationType~) List~VerificationType~
+            +merge(VerificationOutcome, VerificationType) VerificationReport
         }
         class PlanFactory {
             &lt;&lt;DomainService&gt;&gt;
@@ -201,13 +207,14 @@ classDiagram
     VerificationReport --> VerificationOutcome
     VerificationReport --> VerificationType
 
-    OuterLoopService ..> Plan
-    OuterLoopService ..> InnerLoopService
-    OuterLoopService ..> VerificationService
-    OuterLoopService ..> RuntimePolicy
-    InnerLoopService ..> IterationResult
-    VerificationService ..> VerificationReport
-    VerificationService ..> RuntimePolicy
+    ExecutionLoop ..> Plan
+    ExecutionLoop ..> ReActLoop
+    ExecutionLoop ..> VerificationRunner
+    ExecutionLoop ..> RuntimePolicy
+    ReActLoop ..> IterationResult
+    VerificationRunner ..> VerificationReport
+    VerificationRunner ..> RuntimePolicy
+    VerificationRunner ..> VerificationChain
     PlanFactory ..> Plan
     PlanFactory ..> RuntimePolicy
 
@@ -223,9 +230,9 @@ classDiagram
     <pre class="mermaid">
 flowchart LR
     subgraph 领域服务
-        OL[OuterLoopService]
-        IL[InnerLoopService]
-        VS[VerificationService]
+        OL[ExecutionLoop]
+        IL[ReActLoop]
+        VS[VerificationRunner]
         PF[PlanFactory]
     end
     subgraph 聚合
@@ -315,34 +322,19 @@ flowchart LR
       </tbody>
     </table>
 
-    <h2><span class="sec">6.5</span>领域服务清单</h2>
+        <h2><span class="sec">6.5</span>领域服务清单</h2>
     <table>
-      <thead><tr><th>服务</th><th>简介</th><th>跨模块依赖</th></tr></thead>
+      <thead><tr><th>服务</th><th>层</th><th>简介</th><th>跨模块依赖</th></tr></thead>
       <tbody>
-        <tr>
-          <td><code>OuterLoopService</code></td>
-          <td>会话执行的总驱动（do-while）：每轮做上下文检查 → 取 step → 跑一次内循环 → 验证 → 推进；计划完结后驱动经验沉淀</td>
-          <td><code>ContextWindowService</code>、<code>ToolExecutor</code>（间接）、<code>ExperienceRetriever</code>、<code>ExperienceDistillationService</code></td>
-        </tr>
-        <tr>
-          <td><code>InnerLoopService</code></td>
-          <td>单次 ReAct 迭代：组装上下文 → 让模型调工具 → 落记录 → 判定收敛与提交</td>
-          <td><code>ToolExecutor</code>、<code>BudgetService</code></td>
-        </tr>
-        <tr>
-          <td><code>VerificationService</code></td>
-          <td>执行串行验证责任链，产出 <code>VerificationReport</code></td>
-          <td><code>RuntimePolicy</code>（感知）、<code>ToolExecutor</code>（行动，人工层调 <code>ask_user</code>）</td>
-        </tr>
-        <tr>
-          <td><code>PlanFactory</code></td>
-          <td>校验 <code>generate_plan</code> 入参并创建 <code>Plan</code> 聚合</td>
-          <td><code>RuntimePolicy</code>（感知）</td>
-        </tr>
+        <tr><td><code>ExecutionLoop</code></td><td>应用</td><td>会话执行的总驱动（do-while）：每轮算上下文 → 取 step → 跑一次内循环 → 验证 → 按三条出口推进</td><td><code>ContextWindowService</code>、<code>ReActLoop</code>、<code>VerificationRunner</code>、经验三件套</td></tr>
+        <tr><td><code>ReActLoop</code></td><td>应用</td><td>单次 ReAct 迭代：组装上下文 → 让模型调工具 → 落记录 → 判定收敛与提交</td><td><code>ToolExecutor</code>、<code>BudgetService</code>、<code>HumanInteractionPort</code>、<code>SubagentLauncher</code></td></tr>
+        <tr><td><code>VerificationRunner</code></td><td>应用</td><td>执行 <code>VerificationChain</code> 给出的有序层，产出 <code>VerificationReport</code></td><td><code>VerificationChain</code>（领域）、<code>ModelInvocationPort</code>、<code>HumanInteractionPort</code></td></tr>
+        <tr><td><code>VerificationChain</code></td><td>领域</td><td>纯规则：<code>requiredVerifications</code> → 有序层列表；短路与三态合并</td><td>无</td></tr>
+        <tr><td><code>PlanFactory</code></td><td>领域</td><td>校验 <code>generate_plan</code> 入参并创建 <code>Plan</code> 聚合</td><td>无（阈值由应用层传入）</td></tr>
       </tbody>
     </table>
 
-    <h2><span class="sec">6.6</span>其他实体 / 值对象</h2>
+<h2><span class="sec">6.6</span>其他实体 / 值对象</h2>
     <table>
       <thead><tr><th>对象</th><th>类型</th><th>简介</th></tr></thead>
       <tbody>
@@ -365,8 +357,8 @@ flowchart LR
         <tr><td><code>PlanCreated</code></td><td>Plan</td><td><code>PlanFactory</code> 校验通过并创建计划（<code>generate_plan</code> 成功）</td><td><code>ExperienceRetriever</code>（记忆）→ 为每个 step 分配经验</td></tr>
         <tr><td><code>PlanCompleted</code></td><td>Plan</td><td>全部 step 达到 <code>SUCCEEDED</code></td><td><code>ExperienceDistillationService</code>（记忆）</td></tr>
         <tr><td><code>PlanFailed</code></td><td>Plan</td><td><strong>外循环判定重划用尽</strong>后调用 <code>terminate()</code>（或显式终止）</td><td><code>ExperienceDistillationService</code>（记忆，终局失败也沉淀）、界面</td></tr>
-        <tr><td><code>StepFailed</code></td><td>Plan</td><td><code>markStepFailed()</code> 状态转换成功</td><td><code>OuterLoopService</code>（重试 / 反思 / 重划决策）</td></tr>
-        <tr><td><code>VerificationRejected</code></td><td>VerificationReport</td><td>报告结论为 <code>FAILED</code> 或 <code>UNDETERMINED</code></td><td><code>OuterLoopService</code></td></tr>
+        <tr><td><code>StepFailed</code></td><td>Plan</td><td><code>markStepFailed()</code> 状态转换成功</td><td><code>ExecutionLoop</code>（重试 / 反思 / 重划决策）</td></tr>
+        <tr><td><code>VerificationRejected</code></td><td>VerificationReport</td><td>报告结论为 <code>FAILED</code> 或 <code>UNDETERMINED</code></td><td><code>ExecutionLoop</code></td></tr>
       </tbody>
     </table>
     <div class="callout">
@@ -407,11 +399,11 @@ flowchart LR
     <table>
       <thead><tr><th>约束</th><th>由谁保证</th><th>实现方式</th></tr></thead>
       <tbody>
-        <tr><td>有效重试次数不超过 <code>maxRetries</code></td><td><code>OuterLoopService</code></td><td>超限时不再新建 <code>Attempt</code>，改走「重划或 <code>terminate()</code>」</td></tr>
-        <tr><td>是否开启反思</td><td><code>OuterLoopService</code></td><td>读 <code>reflectionThreshold</code>（<code>&gt; maxRetries</code> 即永不反思），决定回注原始失败原因还是反思结论</td></tr>
-        <tr><td>重划次数不超过 <code>maxReplanGeneration</code></td><td><code>OuterLoopService</code></td><td>超限时调用 <code>Plan.terminate(reason)</code>（聚合只执行终止，不判断该不该终止）</td></tr>
-        <tr><td>单次迭代 ReAct 轮数不超过 <code>maxReActRounds</code></td><td><code>InnerLoopService</code></td><td>超限时把本次 attempt 判为失败并返回外循环</td></tr>
-        <tr><td>验证链各层是否启用、信任清单是否放行</td><td><code>VerificationService</code></td><td>读 <code>requiredVerifications</code> 与 <code>trustedToolIds</code></td></tr>
+        <tr><td>有效重试次数不超过 <code>maxRetries</code></td><td><code>ExecutionLoop</code></td><td>超限时不再新建 <code>Attempt</code>，改走「重划或 <code>terminate()</code>」</td></tr>
+        <tr><td>是否开启反思</td><td><code>ExecutionLoop</code></td><td>读 <code>reflectionThreshold</code>（<code>&gt; maxRetries</code> 即永不反思），决定回注原始失败原因还是反思结论</td></tr>
+        <tr><td>重划次数不超过 <code>maxReplanGeneration</code></td><td><code>ExecutionLoop</code></td><td>超限时调用 <code>Plan.terminate(reason)</code>（聚合只执行终止，不判断该不该终止）</td></tr>
+        <tr><td>单次迭代 ReAct 轮数不超过 <code>maxReActRounds</code></td><td><code>ReActLoop</code></td><td>超限时把本次 attempt 判为失败并返回外循环</td></tr>
+        <tr><td>验证链各层是否启用、信任清单是否放行</td><td><code>VerificationRunner</code></td><td>读 <code>requiredVerifications</code> 与 <code>trustedToolIds</code></td></tr>
       </tbody>
     </table>
     <p><strong>原则</strong>：配置变化不改写聚合的合法状态迁移，只改外循环选择哪条迁移。</p>
@@ -446,21 +438,17 @@ flowchart LR
 
     <h2><span class="sec">6.9</span>领域服务的具体操作</h2>
 
-    <h3>6.9.1 <code>OuterLoopService.run(Session)</code></h3>
-    <p>会话执行的唯一驱动。一次 <code>run</code> 会把会话推进到"无待执行计划且内循环收敛"为止。</p>
+        <h3>6.9.1 <code>ExecutionLoop.run(Session)</code>（应用层）</h3>
+    <p>端到端用例（含提交点、事件、取消、端口交互）见 <a href="08-application.html">第 8 章</a> 8.9.1；本节只画循环内部的<strong>领域对象交互与三条出口</strong>。</p>
     <pre class="mermaid">
 sequenceDiagram
     autonumber
-    participant OL as OuterLoopService
-    participant CW as ContextWindowService（感知）
+    participant OL as ExecutionLoop
     participant P as Plan
-    participant IL as InnerLoopService
-    participant VS as VerificationService
+    participant IL as ReActLoop
+    participant VS as VerificationRunner
     participant RP as RuntimePolicy（感知）
-    participant EX as ExperienceRetriever（记忆）
-    participant DS as ExperienceDistillationService（记忆）
 
-    OL->>CW: ensureWithinLimit(session)（阻塞）
     loop 每轮跑一次内循环；出口：无计划收敛 / 未提交挂起 / 撞轮次上限后继续
         alt session.hasExecutablePlan()
             OL->>P: getCurrentStep()
@@ -469,7 +457,6 @@ sequenceDiagram
         end
         OL->>IL: runIteration(session, step)
         IL-->>OL: IterationResult
-
         alt iter.submitted 且 step != null
             alt step.requiredVerifications 为空
                 OL->>P: markStepSucceeded(stepId, iter.submittedSummary, null)
@@ -482,23 +469,22 @@ sequenceDiagram
                     OL->>P: markStepFailed(...)
                     OL->>RP: needsReflection(retryCount)
                     alt 达反思阈值（且未超最大重试）
-                        Note over OL: 反思子代理 → Reflection（记忆模块）→ 结论作为失败原因回注
+                        Note over OL: 反思子代理 → Reflection（记忆）→ 结论作为失败原因回注
                     else 未达阈值
                         Note over OL: 直接回注验证失败原因
                     end
                 else UNDETERMINED
-                    Note over OL: 转人工（HUMAN_APPROVAL → ask_user）
+                    Note over OL: 转人工（HUMAN_APPROVAL → ask）
                 end
             end
         else 未提交（收敛但无 submit_step）
             Note over OL: attempt 不结束、step 保持 RUNNING、不消耗重试；等用户下一次输入续跑
         end
     end
-    OL->>EX: planCreated 时 retrieveAndAssign(session, plan)
-    OL->>DS: planCompleted / planFailed 时 distill(plan)
     </pre>
+    <p>经验检索与沉淀由 <code>ExecutionLoop</code> 在<strong>计划诞生 / 计划完结</strong>时<strong>显式调用</strong>（不经领域事件），详见 <a href="08-application.html">第 8 章</a> 8.8。</p>
 
-    <h4>关键分支</h4>
+<h4>关键分支</h4>
     <table>
       <thead><tr><th>条件</th><th>结果</th></tr></thead>
       <tbody>
@@ -513,12 +499,12 @@ sequenceDiagram
       </tbody>
     </table>
 
-    <h3>6.9.2 <code>InnerLoopService.runIteration(Session, PlanStep)</code></h3>
+    <h3>6.9.2 <code>ReActLoop.runIteration(Session, PlanStep)</code>（应用层）</h3>
     <p>跑一次 ReAct 迭代；<strong>唯一出口是"模型不再调用工具"</strong>。它不判断 step 是否完成，只识别模型是否调用了 <code>submit_step</code>。</p>
     <pre class="mermaid">
 sequenceDiagram
     autonumber
-    participant IL as InnerLoopService
+    participant IL as ReActLoop
     participant S as Session（感知）
     participant TE as ToolExecutor（行动）
     participant BS as BudgetService（行动）
@@ -549,12 +535,13 @@ sequenceDiagram
     end
     </pre>
 
-    <h3>6.9.3 <code>VerificationService.verify(PlanStep, Attempt)</code></h3>
+    <h3>6.9.3 <code>VerificationRunner.verify(PlanStep, Attempt)</code>（应用层）</h3>
+    <p>链序与短路/三态合并的规则由领域服务 <code>VerificationChain</code> 给出；<code>VerificationRunner</code> 只负责按序真的执行。</p>
     <p>按声明过滤后的固定链序执行验证，产出不可变报告。</p>
     <pre class="mermaid">
 sequenceDiagram
     autonumber
-    participant VS as VerificationService
+    participant VS as VerificationRunner
     participant PS as PlanStep
     participant RP as RuntimePolicy（感知）
     participant VR as VerificationReport
@@ -583,7 +570,7 @@ sequenceDiagram
     end
     </pre>
 
-    <h3>6.9.4 <code>PlanFactory.create(Session, planArgs)</code></h3>
+    <h3>6.9.4 <code>PlanFactory.create(Session, planArgs)</code>（领域）</h3>
     <p>把大模型产出的计划草案变成合法的 <code>Plan</code> 聚合；<strong>校验失败即工具失败</strong>。</p>
     <pre class="mermaid">
 flowchart TD

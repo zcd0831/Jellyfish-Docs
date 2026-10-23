@@ -33,10 +33,10 @@
       <thead><tr><th>方向</th><th>内容</th></tr></thead>
       <tbody>
         <tr><td>本模块聚合</td><td><code>Experience</code>、<code>Reflection</code>、<code>SkillDefinition</code></td></tr>
-        <tr><td>本模块声明的端口（由外部实现）</td><td><code>SubagentRunnerPort</code>（由【行动】实现：用指定内置 Agent 跑一次任务并回收结论）</td></tr>
-        <tr><td>本模块实现的端口</td><td><code>InternalToolHandler</code>（【行动】声明：<code>load_skill</code> 的处理器 <code>SkillLoader</code>）</td></tr>
+        <tr><td>本模块端口</td><td><strong>无</strong>。检索/归纳所需的子代理能力由应用层 <code>SubagentLauncher</code> 提供；SOP 渲染由基础设施 <code>SkillSopProvider</code> 提供</td></tr>
         <tr><td>被本模块引用的外部 ID（仅 ID）</td><td><code>PlanId</code>、<code>StepId</code>（规划）、<code>RecordRange</code> / <code>SessionId</code>（感知）</td></tr>
         <tr><td>被外部引用的本模块对象</td><td><code>ExperienceId</code>（规划 <code>PlanStep.assignedExperienceIds</code>）、<code>ReflectionId</code>（规划 <code>Attempt.reflectionId</code>）、<code>SkillId</code>（行动 <code>AgentDefinition.skillIds</code>）、<code>RuntimePolicy</code> 中的经验参数（只读）</td></tr>
+        <tr><td>本模块对象所在的层</td><td><strong>领域层</strong>：<code>Experience</code>、<code>Reflection</code>、<code>SkillDefinition</code>（含其规则）；<strong>应用层</strong>：检索 / 沉淀 / 反馈三个服务；<strong>基础设施层</strong>：<code>SkillSopProvider</code></td></tr>
       </tbody>
     </table>
 
@@ -54,7 +54,7 @@
 classDiagram
     namespace 经验聚合 {
         class Experience {
-            &lt;&lt;AggregateRoot&gt;&gt;
+            &lt;&lt;AggregateRoot>>
             +ExperienceId id
             +String applicableScenario
             +LessonLearned lesson
@@ -68,16 +68,16 @@ classDiagram
             +mergeWith(Experience other)
         }
         class LessonLearned {
-            &lt;&lt;ValueObject&gt;&gt;
+            &lt;&lt;ValueObject>>
             +String instruction
             +String expectedOutcome
         }
         class ConfidenceScore {
-            &lt;&lt;ValueObject&gt;&gt;
+            &lt;&lt;ValueObject>>
             +double value
         }
         class ExperienceStatus {
-            &lt;&lt;Enumeration&gt;&gt;
+            &lt;&lt;Enumeration>>
             ACTIVE
             ARCHIVED
         }
@@ -85,7 +85,7 @@ classDiagram
 
     namespace 反思 {
         class Reflection {
-            &lt;&lt;AggregateRoot&gt;&gt;
+            &lt;&lt;AggregateRoot>>
             +ReflectionId id
             +PlanId planId
             +StepId stepId
@@ -97,7 +97,7 @@ classDiagram
 
     namespace 技能聚合 {
         class SkillDefinition {
-            &lt;&lt;AggregateRoot&gt;&gt;
+            &lt;&lt;AggregateRoot>>
             +SkillId id
             +String name
             +String description
@@ -110,13 +110,13 @@ classDiagram
             +renderDetailedSop(Map) String
         }
         class InstructionTemplate {
-            &lt;&lt;ValueObject&gt;&gt;
+            &lt;&lt;ValueObject>>
             +String rawMarkdown
             +List~String~ variables
             +render(Map) String
         }
         class SkillStatus {
-            &lt;&lt;Enumeration&gt;&gt;
+            &lt;&lt;Enumeration>>
             DRAFT
             ACTIVE
             DEPRECATED
@@ -125,29 +125,29 @@ classDiagram
 
     namespace 领域服务 {
         class ExperienceRetriever {
-            &lt;&lt;DomainService&gt;&gt;
+            &lt;&lt;ApplicationService>>
             +retrieveAndAssign(RetrievalInput) Assignment
         }
         class ExperienceDistillationService {
-            &lt;&lt;DomainService&gt;&gt;
+            &lt;&lt;ApplicationService>>
             +distill(DistillationInput) void
         }
         class ExperienceFeedbackService {
-            &lt;&lt;DomainService&gt;&gt;
+            &lt;&lt;ApplicationService>>
             +onStepSucceeded(FeedbackInput) void
             +onStepFailed(FeedbackInput) void
         }
-        class SkillLoader {
-            &lt;&lt;DomainService&gt;&gt;
-            +load(String skillName) String
+        class SkillSopProvider {
+            &lt;&lt;InfrastructureAdapter>>
+            +sop(String skillId) String
         }
         class RetrievalInput {
-            &lt;&lt;ValueObject&gt;&gt;
+            &lt;&lt;ValueObject>>
             +PlanId planId
             +List~StepBrief~ steps
         }
         class DistillationInput {
-            &lt;&lt;ValueObject&gt;&gt;
+            &lt;&lt;ValueObject>>
             +PlanId planId
             +SessionId sessionId
             +String goal
@@ -155,7 +155,7 @@ classDiagram
             +List~StepTrace~ stepTraces
         }
         class StepTrace {
-            &lt;&lt;ValueObject&gt;&gt;
+            &lt;&lt;ValueObject>>
             +StepId stepId
             +String description
             +StepStatus outcome
@@ -165,27 +165,15 @@ classDiagram
             +String reflectionConclusion
         }
         class FeedbackInput {
-            &lt;&lt;ValueObject&gt;&gt;
+            &lt;&lt;ValueObject>>
             +StepId stepId
             +List~ExperienceId~ injectedExperienceIds
             +List~ExperienceId~ suggestedExperienceIds
         }
         class RecordRange {
-            &lt;&lt;ValueObject&gt;&gt;
+            &lt;&lt;ValueObject>>
             +RecordId startRecordId
             +RecordId endRecordId
-        }
-    }
-
-    namespace 端口 {
-        class SubagentRunnerPort {
-            &lt;&lt;Port&gt;&gt;
-            +run(AgentId, String task) String
-        }
-        class InternalToolHandler {
-            &lt;&lt;Port&gt;&gt;
-            +supports(ToolId) boolean
-            +handle(Map args) String
         }
     }
 
@@ -203,17 +191,16 @@ classDiagram
     Experience *-- LessonLearned
     Experience *-- ConfidenceScore
     Experience --> ExperienceStatus
+
     SkillDefinition *-- InstructionTemplate
     SkillDefinition --> SkillStatus
 
     ExperienceRetriever ..> Experience : 筛选 / 分配
-    ExperienceRetriever ..> SubagentRunnerPort
     ExperienceDistillationService ..> Experience : 创建 / 合并
     ExperienceDistillationService ..> Reflection : 只读素材
-    ExperienceDistillationService ..> SubagentRunnerPort
     ExperienceFeedbackService ..> Experience : reinforce / penalize
-    SkillLoader ..> SkillDefinition
-    SkillLoader ..> InternalToolHandler
+
+    SkillSopProvider ..> SkillDefinition
 
     Experience ..> ExperienceCreated : raises
     Experience ..> ExperienceReinforced : raises
@@ -229,18 +216,20 @@ flowchart LR
         R[ExperienceRetriever]
         D[ExperienceDistillationService]
         F[ExperienceFeedbackService]
-        L[SkillLoader]
+        L[SkillSopProvider]
     end
+
     subgraph 聚合
         E[Experience]
         RF[Reflection]
         SK[SkillDefinition]
     end
+
     subgraph 跨模块
-        OL[(规划·OuterLoopService)]
+        OL[(规划·ExecutionLoop)]
         P[(规划·Plan)]
         TE[(行动·ToolExecutor)]
-        SR[(行动·SubagentRunnerPort 实现)]
+        SR[(应用·SubagentLauncher)]
         RP[(感知·RuntimePolicy 只读)]
     end
 
@@ -297,36 +286,20 @@ flowchart LR
     <p>重试达阈值后由反思子代理产出；<strong>双消费者</strong>：回注本 step 的下一次 attempt（作为失败原因）、作为经验沉淀素材。被 <code>Attempt.reflectionId</code> 引用（规划）。</p>
 
     <h3>7.4.3 <code>SkillDefinition</code></h3>
-    <p>渐进披露：系统提示只挂 <code>name + description</code>；模型调 <code>load_skill</code> 才注入 SOP 全文（<code>role = SYSTEM</code> 的 Record）。被 <code>AgentDefinition.skillIds</code> 引用（行动）；被 <code>SkillLoader</code> 渲染。</p>
+    <p>渐进披露：系统提示只挂 <code>name + description</code>；模型调 <code>load_skill</code> 才注入 SOP 全文（<code>role = SYSTEM</code> 的 Record）。被 <code>AgentDefinition.skillIds</code> 引用（行动）；由基础设施 <code>SkillSopProvider</code> 渲染。</p>
 
-    <h2><span class="sec">7.5</span>领域服务清单</h2>
+        <h2><span class="sec">7.5</span>领域服务清单</h2>
     <table>
-      <thead><tr><th>服务</th><th>简介</th><th>依赖</th></tr></thead>
+      <thead><tr><th>服务</th><th>层</th><th>简介</th><th>依赖</th></tr></thead>
       <tbody>
-        <tr>
-          <td><code>ExperienceRetriever</code></td>
-          <td><strong>计划诞生 / 计划重划</strong>时：取全库 <code>ACTIVE</code> 经验 → 交检索子代理做<strong>语义筛选</strong> → 返回每个 step 的 Top-N 经验 ID</td>
-          <td><code>Experience</code>、<code>SubagentRunnerPort</code>、<code>RuntimePolicy</code></td>
-        </tr>
-        <tr>
-          <td><code>ExperienceDistillationService</code></td>
-          <td><strong>计划完结</strong>时：组装复盘素材 → 读原始轨迹 → 交归纳子代理 → 产出候选经验 → 与库内经验去重（合并 + 提置信度）或新建</td>
-          <td><code>Experience</code>、<code>Reflection</code>、<code>SubagentRunnerPort</code>、<code>RuntimePolicy</code>、<code>Session</code>（只读）</td>
-        </tr>
-        <tr>
-          <td><code>ExperienceFeedbackService</code></td>
-          <td>step 结束时回写经验统计：成功 ⇒ 对"被建议的"经验 <code>reinforce</code>；失败 ⇒ 对"本次注入的全部"经验 <code>penalize</code></td>
-          <td><code>Experience</code></td>
-        </tr>
-        <tr>
-          <td><code>SkillLoader</code></td>
-          <td>实现 <code>InternalToolHandler</code>，处理 <code>load_skill(skillName)</code>：渲染 SOP 全文并返回给工具调用方（由内循环注入为 <code>SYSTEM</code> Record）</td>
-          <td><code>SkillDefinition</code></td>
-        </tr>
+        <tr><td><code>ExperienceRetriever</code></td><td>应用</td><td><strong>计划诞生 / 计划重划</strong>时：取全库 <code>ACTIVE</code> 经验 → 交检索子代理做<strong>语义筛选</strong> → 返回每个 step 的 Top-N 经验 ID</td><td><code>Experience</code>、<code>SubagentLauncher</code>、<code>RuntimePolicy</code></td></tr>
+        <tr><td><code>ExperienceDistillationService</code></td><td>应用</td><td><strong>计划完结</strong>时：读轨迹 + 交归纳子代理 → 产出候选经验 → 与库内经验去重（合并 + 提置信度）或新建</td><td><code>Experience</code>、<code>Reflection</code>、<code>SubagentLauncher</code>、<code>RecordStore</code></td></tr>
+        <tr><td><code>ExperienceFeedbackService</code></td><td>应用</td><td>step 结束时回写经验统计：成功 ⇒ 对"被建议的"经验 <code>reinforce</code>；失败 ⇒ 对"本次注入的全部"经验 <code>penalize</code>（<strong>规则在 <code>Experience</code> 聚合内</strong>）</td><td><code>Experience</code></td></tr>
+        <tr><td><code>SkillSopProvider</code></td><td>基础设施</td><td>按 id 读 <code>skills/&lt;id&gt;/SKILL.md</code>、解析 front-matter 并渲染 SOP；供 <code>load_skill</code> 使用</td><td><code>SkillDefinition</code></td></tr>
       </tbody>
     </table>
 
-    <h2><span class="sec">7.6</span>其他实体 / 值对象</h2>
+<h2><span class="sec">7.6</span>其他实体 / 值对象</h2>
     <table>
       <thead><tr><th>对象</th><th>类型</th><th>简介</th></tr></thead>
       <tbody>
@@ -340,8 +313,7 @@ flowchart LR
         <tr><td><code>RecordRange</code></td><td>VO</td><td>指向 <code>Session.Record</code> 流水的一段连续区间（<code>startRecordId → endRecordId</code>）；定义见 6.4.1，本章复用以保持自包含</td></tr>
         <tr><td><code>StepTrace</code></td><td>VO</td><td>一个 step 的执行事实摘要（描述 / 结局 / <code>RecordRange</code> / 子会话 ID / 失败原因 / 反思结论），<strong>带轨迹区间</strong>供归纳子代理读取原始对话</td></tr>
         <tr><td><code>FeedbackInput</code></td><td>VO</td><td>反馈入参：<code>stepId</code>、本次注入的经验集合、检索子代理建议的经验集合</td></tr>
-        <tr><td><code>SubagentRunnerPort</code></td><td>Port</td><td>用指定内置 Agent 跑一次任务并回收结论；由【行动】实现</td></tr>
-        <tr><td><code>InternalToolHandler</code></td><td>Port</td><td>内置工具处理器；<code>SkillLoader</code> 实现其中的 <code>load_skill</code></td></tr>
+        <tr><td><code>SkillSopProvider</code></td><td>Port</td><td>按 id 读 <code>SKILL.md</code> 并渲染 SOP；由基础设施实现（本模块只是它的消费方之一）</td></tr>
       </tbody>
     </table>
 
@@ -441,18 +413,18 @@ flowchart LR
     <pre class="mermaid">
 sequenceDiagram
     autonumber
-    participant OL as OuterLoopService（规划）
+    participant OL as ExecutionLoop（规划）
     participant R as ExperienceRetriever
     participant RP as RuntimePolicy（感知）
     participant E as Experience 库
-    participant SR as SubagentRunnerPort（行动）
+    participant SL as SubagentLauncher（应用层）
 
     OL->>R: retrieveAndAssign(RetrievalInput{planId, steps})
     R->>RP: experienceTopN / experienceCapacity
     R->>E: 取全部 status = ACTIVE 的经验
     E-->>R: 经验列表（适用场景 + 教训）
-    R->>SR: run(检索子代理, 整库 + 各 step 描述)
-    SR-->>R: 每个 step 的建议经验（≤ Top-N）
+    R->>SL: 跑一次内置检索代理（整库 + 各 step 描述）
+    SL-->>R: 每个 step 的建议经验（≤ Top-N）
     R->>R: 汇总 Assignment（Map‹StepId, List‹ExperienceId››）
     R-->>OL: Assignment
     OL->>OL: Plan.assignExperiences(stepId, ids)
@@ -499,7 +471,7 @@ flowchart TD
     <pre class="mermaid">
 sequenceDiagram
     autonumber
-    participant OL as OuterLoopService（规划）
+    participant OL as ExecutionLoop（规划）
     participant F as ExperienceFeedbackService
     participant E as Experience
     participant RP as RuntimePolicy（感知）
@@ -523,14 +495,14 @@ sequenceDiagram
     </pre>
     <p><strong>要点</strong>：失败惩罚<strong>不做相关性归因</strong>（有意为之：宁可错杀）；置信度跌到阈值以下即 <code>archive()</code>，不再参与检索。</p>
 
-    <h3>7.9.4 <code>SkillLoader.load(skillName)</code>（实现 <code>InternalToolHandler</code>）</h3>
+    <h3>7.9.4 <code>SkillSopProvider.sop(skillId)</code>（基础设施，被 <code>load_skill</code> 调用）</h3>
     <pre class="mermaid">
 sequenceDiagram
     autonumber
     participant TE as ToolExecutor（行动）
-    participant L as SkillLoader
+    participant L as SkillSopProvider（基础设施）
     participant SK as SkillDefinition
-    participant IL as InnerLoopService（规划）
+    participant IL as ReActLoop（规划）
 
     TE->>L: handle({skillName})
     L->>SK: 按 name 查 ACTIVE 技能
@@ -544,7 +516,7 @@ sequenceDiagram
         IL->>IL: 追加一条 role = SYSTEM 的 Record（不滑出）
     end
     </pre>
-    <p><strong>要点</strong>：<code>SkillLoader</code> 只负责"取定义 + 渲染"；<strong>把它注入成 <code>SYSTEM</code> Record 是内循环的职责</strong>（记忆模块不写别人的会话）。</p>
+    <p><strong>要点</strong>：<code>SkillSopProvider</code> 只负责"读文件 + 渲染"；<strong>把它注入成 <code>SYSTEM</code> Record 是内循环的职责</strong>（记忆模块不写别人的会话）。</p>
 
     <div class="callout ok">
       <div class="ct">四章读完，回头看</div>

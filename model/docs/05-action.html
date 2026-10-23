@@ -30,8 +30,7 @@
       <thead><tr><th>方向</th><th>内容</th></tr></thead>
       <tbody>
         <tr><td>本模块聚合</td><td><code>ToolDefinition</code>、<code>Provider</code>、<code>Model</code>、<code>AgentDefinition</code>、<code>Budget</code></td></tr>
-        <tr><td>本模块实现的端口</td><td><code>ModelInvocationPort</code>（供感知 / 规划 / 记忆调用）</td></tr>
-        <tr><td>本模块声明的端口（由外部实现）</td><td><code>InternalToolHandler</code>（内置工具处理器注册表：<code>generate_plan</code> → 规划、<code>load_skill</code> → 记忆、其余 → 本模块）</td></tr>
+        <tr><td>本模块对象所在的层</td><td><strong>领域层</strong>：5 个聚合及其规则；<strong>应用层</strong>：<code>ToolExecutor</code>、<code>BudgetService</code>；<strong>基础设施层</strong>：<code>ModelInvoker</code>、<code>SkillSopProvider</code></td></tr>
         <tr><td>被本模块引用的外部 ID（仅 ID）</td><td><code>SessionId</code>（感知，<code>Budget.sessionFamilyRootId</code>、子会话创建）、<code>SkillId</code>（记忆，仅作为绑定 ID）</td></tr>
         <tr><td>被外部引用的本模块对象</td><td><code>RuntimePolicy</code> 的读取者（感知持有）、<code>ToolId</code> / <code>ModelId</code> / <code>AgentId</code> 被各模块引用</td></tr>
       </tbody>
@@ -39,9 +38,9 @@
 
     <div class="callout key">
       <div class="ct">依赖纪律</div>
-      <p>需要"别人家的内容"时（<code>generate_plan</code> 的领域后果、<code>load_skill</code> 的 SOP 解析），
-      <strong>不由本模块直接调用对方聚合</strong>，而是由对方模块提供 <code>InternalToolHandler</code> 实现，本模块只持接口。
-      这样行动模块对规划 / 记忆<strong>零实现依赖</strong>。</p>
+      <p>本模块<strong>不自行实现任何端口</strong>。<code>ModelInvocationPort</code> 由基础设施 <code>ModelInvoker</code> 实现；
+      <code>load_skill</code> 的 SOP 读取由基础设施 <code>SkillSopProvider</code> 实现；其余四个内置工具的处理器本来就在应用层。
+      行动模块因此对"文件、网络、终端"<strong>零依赖</strong>。</p>
     </div>
 
     <h2><span class="sec">5.2</span>模块总览图</h2>
@@ -195,15 +194,15 @@ classDiagram
 
     namespace 领域服务 {
         class ToolExecutor {
-            &lt;&lt;DomainService&gt;&gt;
+            &lt;&lt;ApplicationService&gt;&gt;
             +execute(Session, ToolDefinition, Map) ToolExecOutcome
         }
         class ModelInvoker {
-            &lt;&lt;DomainService&gt;&gt;
+            &lt;&lt;InfrastructureAdapter&gt;&gt;
             +invoke(ModelInvocationRequest) ModelInvocationResult
         }
         class BudgetService {
-            &lt;&lt;DomainService&gt;&gt;
+            &lt;&lt;ApplicationService&gt;&gt;
             +recordUsage(SessionId rootId, long tokens)
             +settleFromSubSession(SessionId subId, long tokens)
         }
@@ -225,11 +224,6 @@ classDiagram
             &lt;&lt;ValueObject&gt;&gt;
             +int maxInputTokens
             +int maxOutputTokens
-        }
-        class InternalToolHandler {
-            &lt;&lt;Port&gt;&gt;
-            +supports(ToolId) boolean
-            +handle(Session, Map) String
         }
     }
 
@@ -256,7 +250,6 @@ classDiagram
     AgentDefinition ..> SkillDefinition : skillIds（记忆）
 
     ToolExecutor ..> ToolDefinition
-    ToolExecutor ..> InternalToolHandler
     ToolExecutor ..> BudgetService
     ModelInvoker ..> Model
     ModelInvoker ..> Provider
@@ -286,8 +279,8 @@ flowchart LR
     end
     subgraph 跨模块
         P1[(规划·PlanFactory&lt;br/>generate_plan)]
-        M1[(记忆·SkillLoader&lt;br/>load_skill)]
-        S1[(感知·SessionFactory&lt;br/>spawn_subagents)]
+        M1[(基础设施·SkillSopProvider&lt;br/>load_skill)]
+        S1[(应用·StartSessionUseCase&lt;br/>spawn_subagents)]
         S2[(感知·Session&lt;br/>appendRecord / switchModel)]
         RP[(感知·RuntimePolicy)]
     end
@@ -352,8 +345,8 @@ flowchart LR
         <tr><td><code>generate_plan</code></td><td>计划草案（steps + 每步声明的验证类型）</td><td>"计划已创建"或失败原因</td><td><code>PlanFactory</code> 创建 <code>Plan</code>，raise <code>PlanCreated</code></td><td>规划</td></tr>
         <tr><td><code>submit_step</code></td><td><code>summary</code>（必填）、<code>artifacts?</code></td><td>"已登记"</td><td>内循环据此置 <code>submitted</code>，交外循环验收</td><td>规划（由内循环识别）</td></tr>
         <tr><td><code>ask_user</code></td><td>问题文本</td><td>用户回答</td><td>阻塞同一 ReAct 循环；记 <code>TOOL_REQUEST</code> + <code>TOOL_RESULT</code></td><td>行动</td></tr>
-        <tr><td><code>spawn_subagents</code></td><td><code>List&lt;SubagentRequest{agentId, modelId, task}&gt;</code></td><td><code>List&lt;SubagentResult{sessionId, conclusion}&gt;</code></td><td>并行创建子会话、join-all、各子独立超时</td><td>行动（内部调感知 <code>SessionFactory</code>）</td></tr>
-        <tr><td><code>load_skill</code></td><td><code>skillName</code></td><td>SOP 全文</td><td>注入一条 <code>role=SYSTEM</code> 的 Record</td><td>记忆（<code>SkillLoader</code>）</td></tr>
+        <tr><td><code>spawn_subagents</code></td><td><code>List&lt;SubagentRequest{agentId, modelId, task}&gt;</code></td><td><code>List&lt;SubagentResult{sessionId, conclusion}&gt;</code></td><td>并行创建子会话、join-all、各子独立超时</td><td>应用（<code>SubagentLauncher</code>，内部调 <code>StartSessionUseCase</code>）</td></tr>
+        <tr><td><code>load_skill</code></td><td><code>skillName</code></td><td>SOP 全文</td><td>注入一条 <code>role=SYSTEM</code> 的 Record</td><td>基础设施（<code>SkillSopProvider</code>）</td></tr>
       </tbody>
     </table>
 
@@ -378,29 +371,32 @@ flowchart LR
       <li>并发（<code>spawn_subagents</code>）：子会话<strong>本地累计</strong>，结束后 <code>settleFromSubSession</code> 一次性归集到根。</li>
     </ul>
 
-    <h2><span class="sec">5.5</span>领域服务清单</h2>
+        <h2><span class="sec">5.5</span>领域服务清单</h2>
     <table>
-      <thead><tr><th>服务</th><th>简介</th><th>依赖</th></tr></thead>
+      <thead><tr><th>服务</th><th>层</th><th>简介</th><th>依赖</th></tr></thead>
       <tbody>
         <tr>
           <td><code>ToolExecutor</code></td>
-          <td>工具执行的唯一入口：合法性校验 → 放行审批判定 → 按来源分发（INTERNAL 走处理器注册表、REST/MCP 走出站调用、NATIVE 走内置实现）→ 结果截断归档</td>
-          <td><code>ToolDefinition</code>、<code>AgentDefinition</code>、<code>RuntimePolicy</code>、<code>InternalToolHandler</code>、<code>Budget</code></td>
-        </tr>
-        <tr>
-          <td><code>ModelInvoker</code></td>
-          <td><strong>模型调用的唯一出口</strong>，同时实现 <code>ModelInvocationPort</code>：选模型 → 校验上下文上限 → 取凭据调用 → 失败按备用链降级 → usage 记账</td>
-          <td><code>Model</code>、<code>Provider</code>、<code>BudgetService</code>、<code>Session.switchModel</code></td>
+          <td>应用</td>
+          <td>工具执行的唯一入口：合法性校验 → 放行审批 → 按来源分发（内部工具处理器 / <code>ExternalToolPort</code>）→ 结果截断归档</td>
+          <td><code>ToolDefinition</code>、<code>AgentDefinition</code>、<code>RuntimePolicy</code>、<code>ExternalToolPort</code>、<code>SkillSopProvider</code>、<code>ArtifactStore</code></td>
         </tr>
         <tr>
           <td><code>BudgetService</code></td>
+          <td>应用</td>
           <td>记账与预警：把会话族内任意位置的消耗归集到根 <code>Budget</code>，判定是否越阈值并触发预警</td>
           <td><code>Budget</code>、<code>RuntimePolicy</code>、<code>Session</code>（解析根）</td>
+        </tr>
+        <tr>
+          <td><code>ModelInvoker</code></td>
+          <td>基础设施</td>
+          <td><strong>模型调用的唯一出口</strong>，实现 <code>ModelInvocationPort</code>：选模型 → 硬校验 → 取凭据调用 → 失败按备用链降级；<strong>只返回 usage，不记账</strong></td>
+          <td><code>Model</code>、<code>Provider</code>、<code>PolicyRepository</code></td>
         </tr>
       </tbody>
     </table>
 
-    <h2><span class="sec">5.6</span>其他实体 / 值对象</h2>
+<h2><span class="sec">5.6</span>其他实体 / 值对象</h2>
     <table>
       <thead><tr><th>对象</th><th>类型</th><th>简介</th></tr></thead>
       <tbody>
@@ -419,7 +415,7 @@ flowchart LR
         <tr><td><code>ToolExecOutcome</code></td><td>VO</td><td>工具执行结果：内容、是否截断、完整内容归档位置（<strong>无 isSuccess</strong>：失败也是一种结果）</td></tr>
         <tr><td><code>ModelInvocationRequest</code></td><td>VO</td><td>端口入参：目标模型（或"当前会话模型"）、消息列表、<code>estimatedPromptTokens</code>、能力需求（可选）</td></tr>
         <tr><td><code>ModelInvocationResult</code></td><td>VO</td><td>端口出参：文本 + usage（token 用量）</td></tr>
-        <tr><td><code>InternalToolHandler</code></td><td>Port</td><td>内置工具处理器；由各模块实现并注册</td></tr>
+        <tr><td><code>ExternalToolPort</code></td><td>Port</td><td>REST / MCP / NATIVE 出站调用；由基础设施实现</td></tr>
         <tr><td><code>ModelInvocationPort</code></td><td>Port</td><td>模型调用端口；由 <code>ModelInvoker</code> 实现</td></tr>
       </tbody>
     </table>
@@ -487,7 +483,7 @@ flowchart LR
       <li><code>contextLimit</code> 在调用前做<strong>硬校验</strong>（超限抛「请求超限」，<strong>不在此处折叠、也不降级</strong>，由外循环补折后重试）。</li>
       <li>模型故障 → 按备用链降级并 <code>Session.switchModel()</code>。</li>
       <li>无价格概念。</li>
-      <li><strong>备用链全部失败不是状态迁移</strong>，聚合保持原状（见 5.9.3「模型不可用的处理」）。</li>
+      <li><strong>备用链全部失败不是状态迁移</strong>，聚合保持原状（见 5.9.3 与 <a href="08-application.html">第 8 章</a> 8.10）。</li>
     </ol>
 
     <h3>5.8.4 <code>AgentDefinition</code></h3>
@@ -523,7 +519,7 @@ flowchart LR
 
     <h2><span class="sec">5.9</span>领域服务的具体操作</h2>
 
-    <h3>5.9.1 <code>ToolExecutor.execute(session, tool, args)</code></h3>
+    <h3>5.9.1 <code>ToolExecutor.execute(session, tool, args)</code>（应用层）</h3>
     <pre class="mermaid">
 flowchart TD
     A[收到工具调用] --> B{tool.status = ACTIVE&lt;br/>且已在 Agent 绑定内?}
@@ -554,7 +550,7 @@ flowchart TD
 sequenceDiagram
     autonumber
     participant TE as ToolExecutor
-    participant SF as SessionFactory（感知）
+    participant SF as StartSessionUseCase（应用层）
     participant C1 as 子会话 A
     participant C2 as 子会话 B
     participant BS as BudgetService
@@ -577,97 +573,35 @@ sequenceDiagram
     </pre>
     <p><strong>要点</strong>：各子代理<strong>独立成败</strong>，不整体失败；中断时已完成的保留、未完成的按中断处理。</p>
 
-    <h3>5.9.2 <code>ModelInvoker.invoke(request)</code></h3>
-    <p>本系统<strong>唯一的模型调用出口</strong>（内循环、摘要、标题、LLM 裁判、以及所有内置子代理都经此）。</p>
-    <pre class="mermaid">
-sequenceDiagram
-    autonumber
-    participant CALLER as 调用方（内循环/摘要/标题/裁判）
-    participant MI as ModelInvoker
-    participant S as Session（感知）
-    participant RP as RuntimePolicy（感知）
-    participant MD as Model
-    participant PV as Provider
-    participant BS as BudgetService
-
-    CALLER->>MI: invoke(request：目标模型／“当前会话模型” + estimatedPromptTokens)
-    MI->>S: 读取 activeModelId（未显式指定时）
-    MI->>MD: describe(modelId) 取 contextLimit（每次必备）
-    MI->>MI: 硬校验：estimatedPromptTokens ≤ maxInputTokens ?
-    alt 硬校验不通过
-        MI-->>CALLER: 抛出“请求超限”
-        Note over CALLER: 外循环强制折叠一次后重试&lt;br/>不消耗重试名额、不改聚合状态
-    end
-    opt 调用方显式指定了能力需求
-        MI->>MD: hasCapability(需求)
-    end
-    MI->>PV: 取凭据与端点（按 model.providerId）
-    MI->>MI: 执行调用（模型调用自身的超时）
-    alt 调用失败
-        MI->>RP: modelFallbackChain
-        MI->>S: switchModel(备用模型)
-        S-->>MI: raise ModelSwitched
-        MI->>MI: 按新模型重新做硬校验后用备用模型重试（链内逐个）
-        alt 链内全部失败
-            MI-->>CALLER: 抛出“模型不可用”
-        end
-    end
-    MI->>BS: recordUsage(会话族根, usage)
-    MI-->>CALLER: ModelInvocationResult（文本 + usage）
-    </pre>
-
-    <h4>两层校验的分工（不得合并）</h4>
+        <h3>5.9.2 模型调用的两层校验（规则）</h3>
+    <p><code>ModelInvoker</code> 的<strong>完整时序见 <a href="09-infrastructure.html">第 9 章</a> 9.11</strong>；「模型不可用 / 请求超限」的<strong>处理结果见 <a href="08-application.html">第 8 章</a> 8.10</strong>。这里只保留跨层必须对齐的口径。</p>
     <table>
       <thead><tr><th>层</th><th>位置</th><th>口径</th><th>失败后果</th></tr></thead>
       <tbody>
-        <tr><td>业务侧预算</td><td>感知 <code>ContextWindowService</code></td><td><code>min(策略阈值, maxInputTokens − inputSafetyMargin)</code></td><td>事前折叠，不报错</td></tr>
-        <tr><td>调用侧硬校验</td><td>行动 <code>ModelInvoker</code></td><td><code>estimatedPromptTokens</code> vs <strong>实际要用的模型</strong> 的 <code>maxInputTokens</code>（<strong>不含输出</strong>：输出有自己的上限）</td><td>抛「请求超限」，由外循环补充折叠后重试</td></tr>
+        <tr><td>业务侧预算</td><td>应用层 <code>ContextWindowService</code></td><td><code>min(策略阈值, maxInputTokens − inputSafetyMargin)</code></td><td>事前折叠，不报错</td></tr>
+        <tr><td>调用侧硬校验</td><td>基础设施 <code>ModelInvoker</code></td><td><code>estimatedPromptTokens</code> vs <strong>实际要用的模型</strong> 的 <code>maxInputTokens</code>（<strong>不含输出</strong>：输出有自己的上限）</td><td>抛「请求超限」，由用例补折一次后重试</td></tr>
       </tbody>
     </table>
+    <ol>
+      <li><strong>用量随请求下行</strong>：<code>estimatedPromptTokens</code> 由调用方填入 <code>ModelInvocationRequest</code>；<strong>执行器不得回查 <code>Session</code></strong>（<code>Session</code> 不知道 <code>contextLimit</code>，回查还会破坏单向依赖）。</li>
+      <li><strong>记账在调用方</strong>：<code>ModelInvoker</code> 只返回 <code>usage</code>，由调用方交给 <code>BudgetService</code> —— 否则会出现"基础设施 → 应用层"的反向依赖。</li>
+    </ol>
 
-    <div class="callout key">
-      <div class="ct">为什么 <code>ModelInvoker</code> 不能去问 <code>Session</code></div>
-      <ol>
-        <li><code>Session</code> 不知道 <code>contextLimit</code>（那是 <code>Model</code> 的物理能力）；</li>
-        <li>行动对感知只应依赖 ID 与端口，回调感知聚合会破坏单向依赖；</li>
-        <li>用量随 <code>request.estimatedPromptTokens</code> <strong>值对象传入</strong>，无需回查（避免取到与请求不一致的版本）。</li>
-      </ol>
-    </div>
-
-    <h3>5.9.3 模型不可用与请求超限（两条不同的异常）</h3>
-    <h4>模型不可用</h4>
+    <h3>5.9.3 模型不可用与请求超限（口径在此，处理在应用层）</h3>
     <table>
-      <thead><tr><th>项</th><th>规则</th></tr></thead>
+      <thead><tr><th>情形</th><th>语义</th><th>唯一出处</th></tr></thead>
       <tbody>
-        <tr><td>语义</td><td><strong>环境故障</strong>，不是业务失败，也不是状态迁移（与「进程退出不是状态迁移」同构）</td></tr>
-        <tr><td><code>ModelInvoker</code></td><td>先按 <code>modelFallbackChain</code> 逐个降级；链内全部失败 ⇒ 抛「模型不可用」</td></tr>
-        <tr><td><code>OuterLoopService</code>（外循环）</td><td>捕获后<strong>立即返回</strong>，不改任何聚合状态</td></tr>
-        <tr><td>聚合落点</td><td><code>Plan</code> 保持 EXECUTING；step 保持 RUNNING；<code>Attempt</code> <strong>不结束</strong>（既非 FAILED 也非 INTERRUPTED）</td></tr>
-        <tr><td>重试与反思</td><td><strong>不消耗重试名额、不触发反思、不触发重划</strong>（反思与重划自身也要调模型，会递归撞死）</td></tr>
-        <tr><td>与 Ctrl-C 的区别</td><td>用户中断 ⇒ <code>INTERRUPTED</code>（用户主动）；模型故障 ⇒ <strong>什么都不落</strong>（环境问题）</td></tr>
-        <tr><td>恢复</td><td>不单独实现：用户再发一条消息或重启程序，走既有「会话续跑 / attempt 继续」</td></tr>
-        <tr><td>提示</td><td>界面提示「模型不可用，已暂停，可稍后重试」；<strong>不自动重试</strong></td></tr>
+        <tr><td>模型不可用</td><td><strong>环境故障</strong>：不是业务失败，也不是状态迁移</td><td><a href="08-application.html">第 8 章</a> 8.10</td></tr>
+        <tr><td>请求超限</td><td><strong>业务预算问题</strong>：强制折叠一次后重试</td><td><a href="08-application.html">第 8 章</a> 8.10</td></tr>
       </tbody>
     </table>
+    <p>本模块只负责 <code>Model</code> 聚合的规则（<code>ACTIVE</code> 才可调用、<code>contextLimit</code> 独立上限、能力标签）；降级实现见 <a href="09-infrastructure.html">第 9 章</a> 9.11，失败后的状态落点见第 8 章 8.10。</p>
 
-    <h4>请求超限（与模型不可用区分）</h4>
-    <table>
-      <thead><tr><th>项</th><th>规则</th></tr></thead>
-      <tbody>
-        <tr><td>语义</td><td><strong>业务预算问题</strong>，不是环境故障、也不是业务失败</td></tr>
-        <tr><td>触发</td><td><code>estimatedPromptTokens &gt; 实际要用的模型.maxInputTokens</code></td></tr>
-        <tr><td><code>ModelInvoker</code></td><td>抛「请求超限」，<strong>不改任何聚合状态</strong></td></tr>
-        <tr><td>外循环</td><td>捕获后<strong>强制折叠一次</strong>（调感知 <code>ContextWindowService</code>）再重试一次</td></tr>
-        <tr><td>次数与配额</td><td><strong>不消耗重试名额</strong>；只补折一次，仍超限则同「模型不可用」返回并提示</td></tr>
-        <tr><td>降级时的重算</td><td>每次切换到备用模型后，<strong>必须按新模型的 <code>maxInputTokens</code> 重新硬校验</strong>（备用链里可能是小上下文模型）</td></tr>
-      </tbody>
-    </table>
-
-    <h3>5.9.4 <code>BudgetService.recordUsage(rootId, tokens)</code></h3>
+<h3>5.9.4 <code>BudgetService.recordUsage(rootId, tokens)</code>（应用层）</h3>
     <pre class="mermaid">
 sequenceDiagram
     autonumber
-    participant CALLER as ModelInvoker / 子会话结算
+    participant CALLER as 调用方（ReActLoop / 子会话结算）
     participant BS as BudgetService
     participant S as Session（感知）
     participant B as Budget
