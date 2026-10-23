@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Jellyfish Agent 领域模型 · 文档</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside id="sidebar"></aside>
+  <main class="content">
+
+    <div class="crumb">Jellyfish Docs</div>
+    <h1>Jellyfish Agent 领域模型</h1>
+    <p class="lede">
+      这是一套给<strong>第一次接触 AI Agent 领域模型</strong>的开发者看的文档。
+      我们不用"先讲概念再讲设计"的写法，而是从一个任务真正怎么跑起来讲起：
+      <em>谁在看、谁在想、谁在做、谁在记着</em>。
+    </p>
+
+    <div class="callout">
+      <div class="ct">阅读前提</div>
+      <p>不需要 AI 或大模型的使用经验，只需要你写过业务代码，知道"对象、接口、数据库"这些词。
+      文中出现的每个术语，第 2 章都有通俗解释。</p>
+    </div>
+
+    <h2><span class="sec"></span>这套文档讲什么</h2>
+    <p>
+      Jellyfish 是一个<strong>运行在本地终端里的 AI Agent</strong>：你给它一句话，它会自己判断要不要拆任务、
+      调工具、查资料、写文件、必要时反问你，最后给你一个结论。过程中还会把踩过的坑记下来，下次少踩一次。
+    </p>
+    <p>
+      这份文档描述的是它的<strong>领域模型</strong>——也就是把"它在做什么事"翻译成一组有明确含义的对象和规则，
+      而不是描述"代码怎么组织、数据库怎么建"。我们只回答三个问题：
+    </p>
+    <ul>
+      <li><strong>有哪些概念？</strong>（会话、计划、步骤、尝试、验证、经验……）</li>
+      <li><strong>它们各自的职责边界在哪？</strong>（谁能改什么、谁不能碰什么）</li>
+      <li><strong>它们之间靠什么规则协作？</strong>（什么时候该重试、什么时候该问人、什么时候算做完了）</li>
+    </ul>
+
+    <h2><span class="sec"></span>章节</h2>
+    <div class="cards">
+      <a class="card" href="01-intro.html">
+        <div class="k">Chapter 1</div>
+        <div class="t">整体介绍</div>
+        <div class="d">这个系统是什么、为什么需要领域模型、四个模块和两个循环怎么咬合。</div>
+      </a>
+      <a class="card" href="02-language.html">
+        <div class="k">Chapter 2</div>
+        <div class="t">统一语言</div>
+        <div class="d">一张术语表 + 最容易混淆的六组概念 + 状态枚举速查。建议先看这页。</div>
+      </a>
+      <a class="card" href="03-overview.html">
+        <div class="k">Chapter 3</div>
+        <div class="t">模型总览</div>
+        <div class="d">十二个聚合、十五个领域服务、模块依赖方向与三条依赖纪律。</div>
+      </a>
+      <a class="card" href="04-perception.html">
+        <div class="k">Chapter 4</div>
+        <div class="t">感知模块</div>
+        <div class="d">模型此刻能看到什么：会话流水、提示词快照、上下文窗口与折叠。</div>
+      </a>
+      <a class="card" href="05-action.html">
+        <div class="k">Chapter 5</div>
+        <div class="t">行动模块</div>
+        <div class="d">能做什么、用什么做、花多少钱：工具、模型、代理、预算。</div>
+      </a>
+      <a class="card" href="06-planning.html">
+        <div class="k">Chapter 6</div>
+        <div class="t">规划模块</div>
+        <div class="d">想怎么做、做到哪一步、算不算做成了：计划、尝试、验证、驱动循环。</div>
+      </a>
+      <a class="card" href="07-memory.html">
+        <div class="k">Chapter 7</div>
+        <div class="t">记忆模块</div>
+        <div class="d">学到的东西怎么留下来、下次怎么用上：反思、经验、技能。</div>
+      </a>
+    </div>
+
+    <h2><span class="sec"></span>建议的阅读顺序</h2>
+    <table>
+      <thead><tr><th>你是谁</th><th>怎么读</th></tr></thead>
+      <tbody>
+        <tr><td>完全第一次接触</td><td>1 → 2 → 3 → 6（规划，最核心）→ 4 → 5 → 7</td></tr>
+        <tr><td>要改代码 / 接手开发</td><td>2 → 3 → 4/5/6/7 逐章，重点看每章的"聚合生命周期与规则"</td></tr>
+        <tr><td>只想搞懂"它为什么这么设计"</td><td>1 → 3 → 6</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout key">
+      <div class="ct">这份文档的底座</div>
+      <p>内容对应领域模型 v4 与四份模块文档（<code>模型图-v4.md</code>、<code>模块-感知.md</code>、
+      <code>模块-行动.md</code>、<code>模块-规划.md</code>、<code>模块-记忆.md</code>）。
+      HTML 版只做转写与通俗化，<strong>不引入新的设计决策</strong>；凡是与源码注释冲突，以后者为准。</p>
+    </div>
+
+    <div class="page-foot" id="pagenav"></div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,992 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>3. 模型总览 · Jellyfish Agent 领域模型</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside id="sidebar"></aside>
+  <main class="content">
+
+    <div class="crumb">第 3 章</div>
+    <h1>模型总览</h1>
+    <p class="lede">
+      这一页把整个模型一次性摊开：有哪些聚合、有哪些服务、模块之间谁依赖谁、
+      以及"一次执行"到底是怎么被驱动的。看完这页，后面四章就是放大镜。
+    </p>
+
+    <h2><span class="sec">3.1</span>数字速览</h2>
+    <div class="cards">
+      <div class="card"><div class="k">模块</div><div class="t">4 个</div><div class="d">感知 / 行动 / 规划 / 记忆</div></div>
+      <div class="card"><div class="k">聚合</div><div class="t">12 个</div><div class="d">每个聚合都有自己的不变量（红线）</div></div>
+      <div class="card"><div class="k">领域服务</div><div class="t">15 个</div><div class="d">跨对象编排的"动作"</div></div>
+      <div class="card"><div class="k">端口</div><div class="t">3 个</div><div class="d">用于切断模块间反向依赖</div></div>
+      <div class="card"><div class="k">领域事件</div><div class="t">15 个</div><div class="d">由聚合根发出，代表状态真的变了</div></div>
+      <div class="card"><div class="k">应用事件</div><div class="t">2 个</div><div class="d">过程通知，不对应状态变化</div></div>
+    </div>
+
+    <h2><span class="sec">3.2</span>领域模型总图</h2>
+    <p>
+      图按<strong>模块</strong>分组。实线菱形是"组合"（同一个聚合内部），
+      虚线箭头是"引用"（跨聚合/跨模块，只存 ID）。
+    </p>
+
+    <pre class="mermaid">
+classDiagram
+    namespace 感知模块 {
+        class Session {
+            &lt;&lt;AggregateRoot&gt;&gt;
+            -SessionId id
+            -SessionId parentSessionId
+            -AgentId agentId
+            -ModelId activeModelId
+            -SessionStatus status
+            -String title
+            -Date createdDate
+            -List~Record~ records
+            -SystemPromptSnapshot systemPromptSnapshot
+            +appendRecord(RecordRole, String, ToolResultPayload) Record
+            +buildContextForLlm(ContextWindowPolicy) ContextWindow
+            +markSummarized(String summary)
+            +switchModel(ModelId)
+            +cancel()
+            +archive()
+        }
+        class Record {
+            &lt;&lt;Entity&gt;&gt;
+            -RecordId id
+            -RecordRole role
+            -String content
+            -ToolResultPayload toolPayload
+            -int sequence
+            -Date date
+        }
+        class ToolResultPayload {
+            &lt;&lt;ValueObject&gt;&gt;
+            -boolean isTruncated
+            -String resourceUri
+        }
+        class SystemPromptSnapshot {
+            &lt;&lt;ValueObject&gt;&gt;
+            -String renderedPrompt
+            -List~ToolSchemaSnapshot~ toolList
+            -List~SkillSummarySnapshot~ skillList
+        }
+        class ToolSchemaSnapshot {
+            &lt;&lt;ValueObject&gt;&gt;
+            -String name
+            -String description
+            -String parametersJsonSchema
+            -String outputDescription
+        }
+        class SkillSummarySnapshot {
+            &lt;&lt;ValueObject&gt;&gt;
+            -String name
+            -String description
+        }
+        class ContextWindow {
+            &lt;&lt;ValueObject&gt;&gt;
+            -List~Record~ records
+            -ContextUsage usage
+        }
+        class ContextUsage {
+            &lt;&lt;ValueObject&gt;&gt;
+            -int usedTokens
+            -int inputCeiling
+            -int systemTokens
+            -int summaryTokens
+            -int windowRecordCount
+        }
+        class ContextWindowPolicy {
+            &lt;&lt;ValueObject&gt;&gt;
+            -int recordCount
+            -double systemRatioLimit
+        }
+        class RuntimePolicy {
+            &lt;&lt;AggregateRoot&gt;&gt;
+            +int maxRetries
+            +int reflectionThreshold
+            +int maxReplanGeneration
+            +int maxReActRounds
+            +int summarizationTokenThreshold
+            +int inputSafetyMargin
+            +int contextWindowRecordCount
+            +double systemRecordRatioLimit
+            +int toolResultTruncateLength
+            +int subagentExecutionTimeoutMillis
+            +int experienceCapacity
+            +int experienceTopN
+            +int experiencePerPlan
+            +double experienceInitialConfidence
+            +double experienceConfidenceStep
+            +double experienceRetireThreshold
+            +double budgetWarnRatio
+            +List~ModelId~ modelFallbackChain
+            +List~ToolId~ trustedToolIds
+            +isToolTrusted(ToolId) boolean
+            +needsReflection(int) boolean
+            +adjust(...)
+        }
+        class SessionStatus {
+            &lt;&lt;Enumeration&gt;&gt;
+            RUNNING
+            RESUMABLE
+            ARCHIVED
+        }
+        class RecordRole {
+            &lt;&lt;Enumeration&gt;&gt;
+            SYSTEM
+            USER
+            ASSISTANT
+            TOOL_REQUEST
+            TOOL_RESULT
+            SUMMARY
+        }
+        class SessionFactory {
+            &lt;&lt;DomainService&gt;&gt;
+            +start(AgentId, ModelId, String) Session
+            +startSubSession(SessionId, AgentId, ModelId, String) Session
+        }
+        class SessionTitleGenerator {
+            &lt;&lt;DomainService&gt;&gt;
+            +generate(Session) String
+        }
+        class SystemPromptAssembler {
+            &lt;&lt;DomainService&gt;&gt;
+            +assemble(AgentSnapshotInput) SystemPromptSnapshot
+        }
+        class ContextWindowService {
+            &lt;&lt;DomainService&gt;&gt;
+            +ensureWithinLimit(Session) void
+            +forceCollapse(Session) void
+        }
+    }
+
+    namespace 行动模块 {
+        class ToolDefinition {
+            &lt;&lt;AggregateRoot&gt;&gt;
+            -ToolId id
+            -String name
+            -String description
+            -ToolSchema inputSchema
+            -ToolSchema outputSchema
+            -ToolSource source
+            -SideEffectLevel sideEffect
+            -int timeoutMillis
+            -ToolStatus status
+            +updateMetadata(String, ToolSchema)
+            +activate()
+            +deprecate()
+            +validateArgs(Map)
+        }
+        class ToolSchema {
+            &lt;&lt;ValueObject&gt;&gt;
+            -String jsonSchemaString
+        }
+        class ToolSource {
+            &lt;&lt;ValueObject&gt;&gt;
+            -SourceType type
+            -String endpointOrIdentifier
+        }
+        class SourceType {
+            &lt;&lt;Enumeration&gt;&gt;
+            INTERNAL
+            NATIVE
+            REST
+            MCP
+        }
+        class SideEffectLevel {
+            &lt;&lt;Enumeration&gt;&gt;
+            READ_ONLY
+            REPEATABLE
+            IRREVERSIBLE
+        }
+        class ToolStatus {
+            &lt;&lt;Enumeration&gt;&gt;
+            DRAFT
+            ACTIVE
+            DEPRECATED
+        }
+        class Provider {
+            &lt;&lt;AggregateRoot&gt;&gt;
+            -ProviderId id
+            -String name
+            -String apiEndpoint
+            -ApiCredential credential
+            -ProviderStatus status
+            +updateCredential(ApiCredential)
+            +activate()
+            +deprecate()
+        }
+        class Model {
+            &lt;&lt;AggregateRoot&gt;&gt;
+            -ModelId id
+            -ProviderId providerId
+            -String modelName
+            -ModelStatus status
+            -ContextLimit contextLimit
+            -List~ModelCapability~ capabilities
+            +hasCapability(ModelCapability) boolean
+            +activate()
+            +deprecate()
+        }
+        class ApiCredential {
+            &lt;&lt;ValueObject&gt;&gt;
+            -String apiKeyRef
+        }
+        class ContextLimit {
+            &lt;&lt;ValueObject&gt;&gt;
+            -int maxInputTokens
+            -int maxOutputTokens
+        }
+        class ModelCapability {
+            &lt;&lt;ValueObject&gt;&gt;
+            -String capabilityName
+        }
+        class ProviderStatus {
+            &lt;&lt;Enumeration&gt;&gt;
+            ACTIVE
+            DEPRECATED
+        }
+        class ModelStatus {
+            &lt;&lt;Enumeration&gt;&gt;
+            ACTIVE
+            DEPRECATED
+        }
+        class AgentDefinition {
+            &lt;&lt;AggregateRoot&gt;&gt;
+            -AgentId id
+            -String name
+            -AgentSource source
+            -PromptTemplate basePrompt
+            -AgentStatus status
+            -List~ToolId~ toolIds
+            -List~SkillId~ skillIds
+            +listBoundToolIds() List~ToolId~
+            +listBoundSkillIds() List~SkillId~
+            +bindTool(ToolId)
+            +unbindTool(ToolId)
+            +bindSkill(SkillId)
+            +updatePrompt(PromptTemplate)
+            +activate()
+            +deprecate()
+        }
+        class PromptTemplate {
+            &lt;&lt;ValueObject&gt;&gt;
+            -String templateText
+            -List~String~ variables
+            +render(Map) String
+        }
+        class AgentSource {
+            &lt;&lt;Enumeration&gt;&gt;
+            USER_DEFINED
+            BUILT_IN
+        }
+        class AgentStatus {
+            &lt;&lt;Enumeration&gt;&gt;
+            DRAFT
+            ACTIVE
+            DEPRECATED
+        }
+        class Budget {
+            &lt;&lt;AggregateRoot&gt;&gt;
+            -BudgetId id
+            -SessionId sessionFamilyRootId
+            -long consumedTokens
+            -boolean warned
+            +recordUsage(long tokens)
+            +shouldWarn(RuntimePolicy) boolean
+        }
+        class ToolExecOutcome {
+            &lt;&lt;ValueObject&gt;&gt;
+            -String content
+            -boolean isTruncated
+            -String resourceUri
+        }
+        class ModelInvocationRequest {
+            &lt;&lt;ValueObject&gt;&gt;
+            -ModelId targetModelId
+            -List~String~ messages
+            -int estimatedPromptTokens
+            -ModelCapability requiredCapability
+        }
+        class ModelInvocationResult {
+            &lt;&lt;ValueObject&gt;&gt;
+            -String text
+            -long usageTokens
+        }
+        class ToolExecutor {
+            &lt;&lt;DomainService&gt;&gt;
+            +execute(Session, ToolDefinition, Map) ToolExecOutcome
+        }
+        class ModelInvoker {
+            &lt;&lt;DomainService&gt;&gt;
+            +invoke(ModelInvocationRequest) ModelInvocationResult
+        }
+        class BudgetService {
+            &lt;&lt;DomainService&gt;&gt;
+            +recordUsage(SessionId, long)
+            +settleFromSubSession(SessionId, long)
+        }
+    }
+
+    namespace 规划模块 {
+        class Plan {
+            &lt;&lt;AggregateRoot&gt;&gt;
+            -PlanId id
+            -SessionId sessionId
+            -String goal
+            -PlanStatus status
+            -int replanGeneration
+            -List~PlanStep~ steps
+            +getCurrentStep() PlanStep
+            +assignExperiences(StepId, List~ExperienceId~)
+            +markStepSucceeded(StepId, String, VerificationReportId)
+            +markStepFailed(StepId, VerificationReportId)
+            +markAttemptInterrupted(StepId, int)
+            +applyReplan(List~PlanStep~)
+            +terminate(String)
+        }
+        class PlanStep {
+            &lt;&lt;Entity&gt;&gt;
+            -StepId id
+            -int sequence
+            -String description
+            -Set~VerificationType~ requiredVerifications
+            -StepStatus status
+            -List~Attempt~ attempts
+            -List~ExperienceId~ assignedExperienceIds
+            -String finalOutput
+            -VerificationReportId finalVerificationReportId
+        }
+        class Attempt {
+            &lt;&lt;Entity&gt;&gt;
+            -int attemptNo
+            -RecordRange recordRange
+            -List~SessionId~ childSessionIds
+            -VerificationReportId verificationReportId
+            -ReflectionId reflectionId
+            -AttemptOutcome outcome
+        }
+        class RecordRange {
+            &lt;&lt;ValueObject&gt;&gt;
+            -RecordId startRecordId
+            -RecordId endRecordId
+        }
+        class VerificationReport {
+            &lt;&lt;AggregateRoot&gt;&gt;
+            -VerificationReportId id
+            -PlanId planId
+            -StepId stepId
+            -int attemptNo
+            -VerificationOutcome outcome
+            -VerificationType failedType
+            -String failureReason
+            -Date decidedAt
+        }
+        class PlanStatus {
+            &lt;&lt;Enumeration&gt;&gt;
+            EXECUTING
+            REPLANNING
+            COMPLETED
+            FAILED
+        }
+        class StepStatus {
+            &lt;&lt;Enumeration&gt;&gt;
+            PENDING
+            RUNNING
+            VERIFYING
+            SUCCEEDED
+            FAILED
+            SUPERSEDED
+            CANCELLED
+        }
+        class AttemptOutcome {
+            &lt;&lt;Enumeration&gt;&gt;
+            SUCCEEDED
+            FAILED
+            INTERRUPTED
+        }
+        class VerificationOutcome {
+            &lt;&lt;Enumeration&gt;&gt;
+            PASSED
+            FAILED
+            UNDETERMINED
+        }
+        class VerificationType {
+            &lt;&lt;Enumeration&gt;&gt;
+            DETERMINISTIC
+            ENV_FEEDBACK
+            LLM_JUDGE
+            HUMAN_APPROVAL
+        }
+        class IterationResult {
+            &lt;&lt;ValueObject&gt;&gt;
+            -boolean isConverged
+            -boolean submitted
+            -String submittedSummary
+            -int attemptNo
+        }
+        class OuterLoopService {
+            &lt;&lt;DomainService&gt;&gt;
+            +run(Session)
+        }
+        class InnerLoopService {
+            &lt;&lt;DomainService&gt;&gt;
+            +runIteration(Session, PlanStep) IterationResult
+        }
+        class VerificationService {
+            &lt;&lt;DomainService&gt;&gt;
+            +verify(PlanStep, Attempt) VerificationReport
+        }
+        class PlanFactory {
+            &lt;&lt;DomainService&gt;&gt;
+            +create(Session, Map) Plan
+        }
+    }
+
+    namespace 记忆模块 {
+        class Experience {
+            &lt;&lt;AggregateRoot&gt;&gt;
+            -ExperienceId id
+            -String applicableScenario
+            -LessonLearned lesson
+            -ConfidenceScore confidence
+            -ExperienceStatus status
+            -int appliedCount
+            -Date createdAt
+            +reinforce()
+            +penalize()
+            +archive()
+            +mergeWith(Experience)
+        }
+        class LessonLearned {
+            &lt;&lt;ValueObject&gt;&gt;
+            -String instruction
+            -String expectedOutcome
+        }
+        class ConfidenceScore {
+            &lt;&lt;ValueObject&gt;&gt;
+            -double value
+        }
+        class ExperienceStatus {
+            &lt;&lt;Enumeration&gt;&gt;
+            ACTIVE
+            ARCHIVED
+        }
+        class Reflection {
+            &lt;&lt;AggregateRoot&gt;&gt;
+            -ReflectionId id
+            -PlanId planId
+            -StepId stepId
+            -int attemptNo
+            -String conclusion
+            -Date createdAt
+        }
+        class SkillDefinition {
+            &lt;&lt;AggregateRoot&gt;&gt;
+            -SkillId id
+            -String name
+            -String description
+            -String triggerCondition
+            -InstructionTemplate sopTemplate
+            -SkillStatus status
+            +activate()
+            +updateSop(InstructionTemplate)
+            +deprecate()
+            +renderDetailedSop(Map) String
+        }
+        class InstructionTemplate {
+            &lt;&lt;ValueObject&gt;&gt;
+            -String rawMarkdown
+            -List~String~ variables
+            +render(Map) String
+        }
+        class SkillStatus {
+            &lt;&lt;Enumeration&gt;&gt;
+            DRAFT
+            ACTIVE
+            DEPRECATED
+        }
+        class RetrievalInput {
+            &lt;&lt;ValueObject&gt;&gt;
+            -PlanId planId
+            -List~StepBrief~ steps
+        }
+        class DistillationInput {
+            &lt;&lt;ValueObject&gt;&gt;
+            -PlanId planId
+            -SessionId sessionId
+            -String goal
+            -PlanOutcome outcome
+            -List~StepTrace~ stepTraces
+        }
+        class StepTrace {
+            &lt;&lt;ValueObject&gt;&gt;
+            -StepId stepId
+            -String description
+            -StepStatus outcome
+            -RecordRange recordRange
+            -List~SessionId~ childSessionIds
+            -String failureReason
+            -String reflectionConclusion
+        }
+        class FeedbackInput {
+            &lt;&lt;ValueObject&gt;&gt;
+            -StepId stepId
+            -List~ExperienceId~ injectedExperienceIds
+            -List~ExperienceId~ suggestedExperienceIds
+        }
+        class ExperienceRetriever {
+            &lt;&lt;DomainService&gt;&gt;
+            +retrieveAndAssign(RetrievalInput) Map
+        }
+        class ExperienceDistillationService {
+            &lt;&lt;DomainService&gt;&gt;
+            +distill(DistillationInput)
+        }
+        class ExperienceFeedbackService {
+            &lt;&lt;DomainService&gt;&gt;
+            +onStepSucceeded(FeedbackInput)
+            +onStepFailed(FeedbackInput)
+        }
+        class SkillLoader {
+            &lt;&lt;DomainService&gt;&gt;
+            +load(String skillName) String
+        }
+    }
+
+    namespace 端口 {
+        class ModelInvocationPort {
+            &lt;&lt;Port&gt;&gt;
+            +invoke(ModelInvocationRequest) ModelInvocationResult
+            +describe(ModelId) ModelProfile
+        }
+        class ModelProfile {
+            &lt;&lt;ValueObject&gt;&gt;
+            -int maxInputTokens
+            -int maxOutputTokens
+        }
+        class InternalToolHandler {
+            &lt;&lt;Port&gt;&gt;
+            +supports(ToolId) boolean
+            +handle(Map) String
+        }
+        class SubagentRunnerPort {
+            &lt;&lt;Port&gt;&gt;
+            +run(AgentId, String task) String
+        }
+    }
+
+    namespace 领域事件 {
+        class PlanCreated
+        class PlanCompleted
+        class PlanFailed
+        class StepFailed
+        class VerificationRejected
+        class ReflectionRecorded
+        class ExperienceCreated
+        class ExperienceReinforced
+        class ExperiencePenalized
+        class BudgetWarning
+        class SummarizationCompleted
+        class SessionCancelled
+        class ModelSwitched
+        class PolicyAdjusted
+        class ToolDefinitionUpdatedEvent
+    }
+
+    namespace 应用事件 {
+        class SummarizationStarted
+        class ExperienceDistillationFinished
+    }
+
+    %% ---------- 感知内部 ----------
+    Session "1" *-- "0..*" Record : append-only
+    Session "1" *-- "1" SystemPromptSnapshot : 会话开启时冻结
+    Record *-- ToolResultPayload
+    SystemPromptSnapshot *-- ToolSchemaSnapshot
+    SystemPromptSnapshot *-- SkillSummarySnapshot
+    Session --> SessionStatus
+    Record --> RecordRole
+    Session ..> ContextWindow : buildContextForLlm 推导
+    ContextWindow *-- ContextUsage
+    ContextWindow ..> ContextWindowPolicy
+
+    %% ---------- 跨模块 ID 引用 ----------
+    Session "0..1" --> "0..*" Session : parentSessionId
+    Session ..> AgentDefinition : agentId
+    Session ..> Model : activeModelId
+    Plan ..> Session : sessionId
+    Budget ..> Session : sessionFamilyRootId
+    Model ..> Provider : providerId
+    AgentDefinition ..> ToolDefinition : toolIds
+    AgentDefinition ..> SkillDefinition : skillIds
+    Attempt ..> Session : childSessionIds
+    Attempt ..> Reflection : reflectionId
+    Attempt ..> VerificationReport : verificationReportId
+    PlanStep ..> Experience : assignedExperienceIds
+
+    %% ---------- 规划内部 ----------
+    Plan "1" *-- "1..*" PlanStep
+    PlanStep "1" *-- "0..*" Attempt
+    Attempt *-- RecordRange
+    Plan --> PlanStatus
+    PlanStep --> StepStatus
+    Attempt --> AttemptOutcome
+    PlanStep ..> VerificationType
+    VerificationReport --> VerificationOutcome
+    VerificationReport --> VerificationType
+
+    %% ---------- 行动内部 ----------
+    ToolDefinition *-- ToolSchema
+    ToolDefinition *-- ToolSource
+    ToolDefinition --> SideEffectLevel
+    ToolDefinition --> ToolStatus
+    ToolSource --> SourceType
+    Provider *-- ApiCredential
+    Provider --> ProviderStatus
+    Model *-- ContextLimit
+    Model *-- ModelCapability
+    Model --> ModelStatus
+    AgentDefinition *-- PromptTemplate
+    AgentDefinition --> AgentSource
+    AgentDefinition --> AgentStatus
+
+    %% ---------- 记忆内部 ----------
+    Experience *-- LessonLearned
+    Experience *-- ConfidenceScore
+    Experience --> ExperienceStatus
+    SkillDefinition *-- InstructionTemplate
+    SkillDefinition --> SkillStatus
+    DistillationInput *-- StepTrace
+
+    %% ---------- 事件 raise ----------
+    Plan ..> PlanCreated : raises
+    Plan ..> PlanCompleted : raises
+    Plan ..> PlanFailed : raises
+    Plan ..> StepFailed : raises
+    VerificationReport ..> VerificationRejected : raises
+    Reflection ..> ReflectionRecorded : raises
+    Experience ..> ExperienceCreated : raises
+    Experience ..> ExperienceReinforced : raises
+    Experience ..> ExperiencePenalized : raises
+    Budget ..> BudgetWarning : raises
+    Session ..> SummarizationCompleted : raises
+    Session ..> SessionCancelled : raises
+    Session ..> ModelSwitched : raises
+    RuntimePolicy ..> PolicyAdjusted : raises
+    ToolDefinition ..> ToolDefinitionUpdatedEvent : raises
+    </pre>
+    <p class="diagram-note">图 3-1　领域模型总图（按模块分组；虚线 = 引用，只存 ID）</p>
+
+    <h2><span class="sec">3.3</span>服务与端口协作图</h2>
+    <pre class="mermaid">
+flowchart LR
+    subgraph 感知
+        SF[SessionFactory]
+        TG[SessionTitleGenerator]
+        SA[SystemPromptAssembler]
+        CW[ContextWindowService]
+        S[(Session)]
+        RP[(RuntimePolicy)]
+    end
+    subgraph 行动
+        TE[ToolExecutor]
+        MI[ModelInvoker]
+        BS[BudgetService]
+        TD[(ToolDefinition)]
+        AG[(AgentDefinition)]
+        MD[(Model)]
+        PV[(Provider)]
+        BU[(Budget)]
+    end
+    subgraph 规划
+        OL[OuterLoopService]
+        IL[InnerLoopService]
+        VS[VerificationService]
+        PF[PlanFactory]
+        P[(Plan)]
+        VR[(VerificationReport)]
+    end
+    subgraph 记忆
+        R[ExperienceRetriever]
+        DS[ExperienceDistillationService]
+        FB[ExperienceFeedbackService]
+        SL[SkillLoader]
+        E[(Experience)]
+        RF[(Reflection)]
+        SK[(SkillDefinition)]
+    end
+    P1[[ModelInvocationPort]]
+    P2[[InternalToolHandler]]
+    P3[[SubagentRunnerPort]]
+
+    OL --> CW
+    OL --> IL
+    OL --> VS
+    OL --> R
+    OL --> DS
+    OL --> FB
+    OL --> P
+    IL --> S
+    IL --> TE
+    IL --> MI
+    IL --> BS
+    VS --> VR
+    VS --> RP
+    VS --> TE
+    PF --> P
+    SF --> S
+    SF --> BU
+    SF --> SA
+    SF --> TG
+    TG --> P1
+    CW --> S
+    CW --> RP
+    CW --> P1
+    TE --> TD
+    TE --> AG
+    TE --> RP
+    TE --> BU
+    TE --> P2
+    MI -.实现.-> P1
+    MI --> MD
+    MI --> PV
+    MI --> BS
+    BS --> BU
+    SL -.实现.-> P2
+    SL --> SK
+    R --> E
+    R --> P3
+    DS --> E
+    DS --> RF
+    DS --> S
+    DS --> P3
+    FB --> E
+    </pre>
+    <p class="diagram-note">图 3-2　十五个领域服务与三个端口的协作关系</p>
+
+    <h2><span class="sec">3.4</span>模块归属表</h2>
+    <table>
+      <thead><tr><th>模块</th><th>定位</th><th>聚合</th><th>领域服务</th><th>端口</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>感知</strong></td>
+          <td>模型此刻能看到什么：上下文流水 + 快照 + 窗口折叠 + 运行环境策略</td>
+          <td><code>Session</code>、<code>RuntimePolicy</code></td>
+          <td><code>SessionFactory</code>、<code>SessionTitleGenerator</code>、<code>SystemPromptAssembler</code>、<code>ContextWindowService</code></td>
+          <td>声明 <code>ModelInvocationPort</code></td>
+        </tr>
+        <tr>
+          <td><strong>行动</strong></td>
+          <td>能做什么 / 用什么做 / 花多少钱：工具、模型、代理、预算</td>
+          <td><code>ToolDefinition</code>、<code>Provider</code>、<code>Model</code>、<code>AgentDefinition</code>、<code>Budget</code></td>
+          <td><code>ToolExecutor</code>、<code>ModelInvoker</code>、<code>BudgetService</code></td>
+          <td>实现 <code>ModelInvocationPort</code> / <code>SubagentRunnerPort</code>；声明 <code>InternalToolHandler</code></td>
+        </tr>
+        <tr>
+          <td><strong>规划</strong></td>
+          <td>想怎么做 / 做到哪 / 算不算做成</td>
+          <td><code>Plan</code>、<code>VerificationReport</code></td>
+          <td><code>OuterLoopService</code>、<code>InnerLoopService</code>、<code>VerificationService</code>、<code>PlanFactory</code></td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td><strong>记忆</strong></td>
+          <td>学到的东西如何留存与复用</td>
+          <td><code>Experience</code>、<code>Reflection</code>、<code>SkillDefinition</code></td>
+          <td><code>ExperienceRetriever</code>、<code>ExperienceDistillationService</code>、<code>ExperienceFeedbackService</code>、<code>SkillLoader</code></td>
+          <td>实现 <code>InternalToolHandler</code>；声明 <code>SubagentRunnerPort</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2><span class="sec">3.5</span>依赖方向与三条纪律</h2>
+    <pre class="mermaid">
+flowchart LR
+    规划 --> 感知
+    规划 --> 行动
+    规划 --> 记忆
+    记忆 --> 感知
+    记忆 --> 行动
+    行动 --> 感知
+    </pre>
+    <p class="diagram-note">图 3-3　单向依赖：感知是叶子，谁都依赖它，它不依赖任何人</p>
+
+    <div class="callout key">
+      <div class="ct">维持这张无环图的三个纪律</div>
+      <ol>
+        <li><strong>需要别人的内容 → 让调用方取好，用值对象传进来。</strong>
+          例：<code>ContextWindowPolicy</code>、<code>AgentSnapshotInput</code>、<code>DistillationInput</code>、<code>RetrievalInput</code>、<code>FeedbackInput</code>、<code>ModelInvocationRequest</code>。</li>
+        <li><strong>需要别人的动作 → 走端口。</strong>
+          例：<code>ModelInvocationPort</code>（感知声明 / 行动实现）、<code>InternalToolHandler</code>（行动声明 / 规划+记忆实现）、<code>SubagentRunnerPort</code>（记忆声明 / 行动实现）。</li>
+        <li><strong>只读别人的聚合不算依赖。</strong>
+          例：记忆按 <code>RecordRange</code> 只读 <code>Session.Record</code>；<strong>但绝不追写</strong>。</li>
+      </ol>
+    </div>
+
+    <h2><span class="sec">3.6</span>十二个聚合与它们的红线</h2>
+    <p>
+      聚合是"必须一起改对"的一小组对象。每个聚合只有一根"根"，外面改它必须通过根。
+      最后一列是<strong>不变量</strong>——违反它的操作一律不允许。<strong>所有不变量都不依赖 <code>RuntimePolicy</code></strong>：
+      配置只改变"外循环选择哪条路",不改变"什么状态是合法的"。
+    </p>
+    <table>
+      <thead><tr><th>聚合</th><th>模块</th><th>一句话</th><th>不变量（红线）</th></tr></thead>
+      <tbody>
+        <tr><td><code>Session</code></td><td>感知</td><td>会话上下文事实流</td><td>① 记录只追加，被引用的区间永不删改；② 快照创建即冻结；③ Agent 不可切换；④ 父取消级联子；⑤ 状态仅 RUNNING/RESUMABLE/ARCHIVED</td></tr>
+        <tr><td><code>RuntimePolicy</code></td><td>感知</td><td>运行环境策略单例</td><td>① 全局唯一；② 不进会话快照；③ 只有用户可改</td></tr>
+        <tr><td><code>ToolDefinition</code></td><td>行动</td><td>一个可调用的动作定义</td><td>① 入参须过 inputSchema；② INTERNAL 必须指向已注册处理器</td></tr>
+        <tr><td><code>Provider</code></td><td>行动</td><td>供应商与凭据持有者</td><td>① 凭据只存于此；② 一 Provider 多 Model</td></tr>
+        <tr><td><code>Model</code></td><td>行动</td><td>具体模型与能力</td><td>① 仅 ACTIVE 可调用；② 无价格概念</td></tr>
+        <tr><td><code>AgentDefinition</code></td><td>行动</td><td>代理身份与能力边界</td><td>① 内置代理 prompt 不可改；② 会话内 Agent 不可切换</td></tr>
+        <tr><td><code>Budget</code></td><td>行动</td><td>会话族 token 台账</td><td>① 一族一账；② 只累加，不预留不分配；③ warned 只置真一次</td></tr>
+        <tr><td><code>Plan</code></td><td>规划</td><td>一次工作分解</td><td>① steps 非空；② 同时至多一个 RUNNING 步骤；③ SUCCEEDED 不可变；④ 重划只替换未执行尾部；⑤ 单写者，无需乐观锁</td></tr>
+        <tr><td><code>VerificationReport</code></td><td>规划</td><td>一次判定的结论</td><td>① 不可变；② 三态；③ 只留失败层与失败原因</td></tr>
+        <tr><td><code>Experience</code></td><td>记忆</td><td>一条经验</td><td>① 置信度 [0,1]；② 不绑定任何维度；③ ARCHIVED 不参与检索；④ 不超容量</td></tr>
+        <tr><td><code>Reflection</code></td><td>记忆</td><td>一次反思结论</td><td>① 不可变；② 唯一归属 (planId, stepId, attemptNo)</td></tr>
+        <tr><td><code>SkillDefinition</code></td><td>记忆</td><td>程序性知识（SOP）</td><td>① 仅 ACTIVE 进快照；② 不含工具依赖；③ SOP 不引用未绑定工具</td></tr>
+      </tbody>
+    </table>
+
+    <h2><span class="sec">3.7</span>驱动：外循环就是 do-while</h2>
+    <pre><code>OuterLoopService.run(session):
+    loop:
+        ContextWindowService.ensureWithinLimit(session)       // 阻塞；算窗口、必要时折叠
+        step = session.hasExecutablePlan() ? plan.getCurrentStep() : null
+        iter = InnerLoopService.runIteration(session, step)    // 内循环只在"模型不再调工具"时返回
+
+        if !iter.isConverged:                                  // 撞 maxReActRounds
+            plan.markAttemptFailed(step, iter.attemptNo)
+            advanceAfterFailure(step)                          // 重试 / 反思 / 重划
+            continue                                           // 不需要用户介入，继续下一轮
+
+        if step == null: return                                // 无计划且收敛：本轮交互完成
+        if !iter.submitted: return                             // 模型在等用户：本轮结束，Attempt 挂起
+
+        // 已提交
+        if step.requiredVerifications.isEmpty():
+            plan.markStepSucceeded(step, iter.submittedSummary, null)   // 不验证即完成
+        else:
+            report = VerificationService.verify(step, iter.attempt)
+            advance(step, report)                              // 通过 → 推进；失败 → 重试/反思/重划</code></pre>
+
+    <p><strong>四条伴随规则</strong>：</p>
+    <ul>
+      <li><strong>工具只有一类</strong>：<code>generate_plan</code>、<code>submit_step</code>、<code>ask_user</code>、<code>spawn_subagents</code>、<code>load_skill</code> 都是普通内置工具，靠"返回结果"改变领域状态；</li>
+      <li><code>generate_plan</code> 成功后<strong>不打断内循环</strong>，模型确认后自然收敛，下一轮迭代转入计划执行；</li>
+      <li>计划 <code>COMPLETED</code> 后会再跑一轮<strong>自由内循环</strong>，由模型产出最终答复（结论交付）；</li>
+      <li><strong>三条出口</strong>：未收敛（撞轮次上限）⇒ 判失败后<strong>继续</strong>；无计划且收敛 ⇒ <strong>结束</strong>；有计划、收敛但<strong>未提交</strong> ⇒ <strong>挂起</strong>（Attempt 不落终态，等用户输入）；</li>\n      <li>经验检索的触发点是<strong>计划诞生 / 计划重划</strong>，不是每轮迭代。</li>
+    </ul>
+
+    <h3>3.7.1 一次尝试（<code>Attempt</code>）的边界</h3>
+    <p><code>Attempt</code> = <strong>一个 step 的一次完整执行周期</strong>（可被多次用户输入切成多段 ReAct，但不切分 attempt）。</p>
+    <table>
+      <thead><tr><th>结束方式</th><th>outcome</th><th>消耗重试名额</th></tr></thead>
+      <tbody>
+        <tr><td><code>submit_step</code> → 验证通过</td><td><code>SUCCEEDED</code></td><td>—</td></tr>
+        <tr><td>验证失败 / 执行失败</td><td><code>FAILED</code></td><td>是</td></tr>
+        <tr><td>中断（Ctrl-C / 进程退出）</td><td><code>INTERRUPTED</code></td><td>否</td></tr>
+        <tr><td><strong>收敛但未提交</strong></td><td><strong>不结束</strong>，用户输入后续跑</td><td>否</td></tr>
+      </tbody>
+    </table>
+    <p><code>recordRange</code> 始终连续（用户输入、注入、摘要都是 <code>Record</code>）；
+    <code>retryCount</code> = <code>FAILED</code> 的次数；<code>maxReActRounds</code> 按"自上次用户输入以来的连续轮数"计。</p>
+
+    <table>
+      <thead><tr><th>条件</th><th>结果</th></tr></thead>
+      <tbody>
+        <tr><td>无计划 + 内循环收敛</td><td>本轮交互结束，会话转为 RESUMABLE</td></tr>
+        <tr><td>内循环里 generate_plan 成功</td><td>本轮收敛后，下一轮迭代发现"有计划了",转入计划执行</td></tr>
+        <tr><td>计划 COMPLETED</td><td>再跑一轮自由内循环，由模型产出最终答复（结论交付）</td></tr>
+        <tr><td>计划 FAILED（外循环判定重划用尽）</td><td>循环收敛退出，触发经验沉淀</td></tr>
+        <tr><td>模型不可用</td><td><code>run()</code> 立即返回；不改状态、不耗重试、不触发反思/重划；仅提示</td></tr>
+        <tr><td>请求超限</td><td>强制折叠一次后重试；不耗重试；仍超限按模型不可用处理</td></tr>
+      </tbody>
+    </table>
+
+    <h2><span class="sec">3.8</span>生命周期节点全景</h2>
+    <p>四份模块文档里，"每个聚合的生命周期"都用同一套节点词表。这里汇总一次。</p>
+    <table>
+      <thead><tr><th>节点</th><th>含义</th><th>涉及聚合</th></tr></thead>
+      <tbody>
+        <tr><td><strong>平台初始化</strong></td><td>应用启动：载入策略，播种内置代理 / 工具 / 技能</td><td>RuntimePolicy、AgentDefinition、ToolDefinition、Provider、Model</td></tr>
+        <tr><td><strong>策略调整</strong></td><td>用户修改策略，立即生效</td><td>RuntimePolicy</td></tr>
+        <tr><td><strong>会话开启</strong></td><td>建会话 + 台账 + 冻结快照 + 生成标题</td><td>Session、Budget</td></tr>
+        <tr><td><strong>会话续跑</strong></td><td>重启后继续；半截工具调用视为失败</td><td>Session、Plan、Budget</td></tr>
+        <tr><td><strong>子代理派遣</strong></td><td>派生子会话（并行，各自独立超时）</td><td>Session</td></tr>
+        <tr><td><strong>计划诞生</strong></td><td>校验通过创建计划，并分配经验</td><td>Plan、Experience</td></tr>
+        <tr><td><strong>步骤启动</strong></td><td>取当前步骤，创建一次尝试</td><td>Plan、Attempt</td></tr>
+        <tr><td><strong>步骤提交验收</strong></td><td>submit_step → 触发验证 / 或免验证直接完成</td><td>VerificationReport、Plan</td></tr>
+        <tr><td><strong>步骤固化 / 判败 / 中断</strong></td><td>步骤的三种结束</td><td>Plan、Attempt</td></tr>
+        <tr><td><strong>步骤重试</strong></td><td>失败后新建尝试；达阈值产生反思</td><td>Attempt、Reflection</td></tr>
+        <tr><td><strong>计划重划</strong></td><td>代次 +1，未执行的步骤置为 SUPERSEDED 并重分配经验</td><td>Plan、Experience</td></tr>
+        <tr><td><strong>计划完结</strong></td><td>成功或失败，触发经验沉淀</td><td>Plan、Experience</td></tr>
+        <tr><td><strong>上下文折叠</strong></td><td>token 超阈值 → 生成摘要 → 窗口收窄</td><td>Session</td></tr>
+        <tr><td><strong>模型降级</strong></td><td>故障命中备用模型链</td><td>Session</td></tr>
+        <tr><td><strong>会话封存 / 会话销毁</strong></td><td>归档（不可续跑）/ 物理删除（经验保留）</td><td>Session、Budget</td></tr>
+      </tbody>
+    </table>
+
+    <h2><span class="sec">3.9</span>跨模块只靠 ID 说话</h2>
+    <table>
+      <thead><tr><th>从</th><th>到</th><th>持有什么</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td><code>Session</code></td><td>AgentDefinition</td><td><code>agentId</code></td><td>这个会话用哪个角色</td></tr>
+        <tr><td><code>Session</code></td><td>Model</td><td><code>activeModelId</code></td><td>当前用哪个模型（可降级切换）</td></tr>
+        <tr><td><code>Plan</code></td><td>Session</td><td><code>sessionId</code></td><td>这个计划属于哪个会话</td></tr>
+        <tr><td><code>Budget</code></td><td>Session</td><td><code>sessionFamilyRootId</code></td><td>这个台账属于哪个会话族</td></tr>
+        <tr><td><code>Attempt</code></td><td>Session</td><td><code>childSessionIds</code></td><td>这次尝试派了哪些子代理</td></tr>
+        <tr><td><code>Attempt</code></td><td>VerificationReport</td><td><code>verificationReportId</code></td><td>这次尝试的验收结论</td></tr>
+        <tr><td><code>Attempt</code></td><td>Reflection</td><td><code>reflectionId</code></td><td>这次尝试的复盘结论</td></tr>
+        <tr><td><code>PlanStep</code></td><td>Experience</td><td><code>assignedExperienceIds</code></td><td>这一步分配到了哪些历史经验</td></tr>
+        <tr><td><code>AgentDefinition</code></td><td>ToolDefinition / SkillDefinition</td><td><code>toolIds</code> / <code>skillIds</code></td><td>这个角色能用什么</td></tr>
+        <tr><td><code>Model</code></td><td>Provider</td><td><code>providerId</code></td><td>这个模型属于哪个供应商</td></tr>
+      </tbody>
+    </table>
+
+    <h2><span class="sec">3.10</span>事件全景</h2>
+    <p>
+      领域事件由<strong>聚合根</strong>在状态真的改变后发出，代表"这件事已经发生了"。
+      应用层在事务提交后才发布，订阅方只看 ID 和事件内容。
+    </p>
+    <table>
+      <thead><tr><th>事件</th><th>谁发出</th><th>什么时候</th><th>谁关心</th></tr></thead>
+      <tbody>
+        <tr><td><code>PlanCreated</code></td><td>Plan</td><td>计划校验通过并创建</td><td>记忆·经验检索</td></tr>
+        <tr><td><code>PlanCompleted</code></td><td>Plan</td><td>所有步骤成功</td><td>记忆·经验沉淀</td></tr>
+        <tr><td><code>PlanFailed</code></td><td>Plan</td><td>外循环判定重划用尽并终止</td><td>记忆（失败也沉淀）、界面</td></tr>
+        <tr><td><code>StepFailed</code></td><td>Plan</td><td>标记步骤失败</td><td>规划·外循环</td></tr>
+        <tr><td><code>VerificationRejected</code></td><td>VerificationReport</td><td>结论为不通过 / 无法判定</td><td>规划·外循环</td></tr>
+        <tr><td><code>ReflectionRecorded</code></td><td>Reflection</td><td>反思结论落库</td><td>规划（回注）、记忆（素材）</td></tr>
+        <tr><td><code>ExperienceCreated</code></td><td>Experience</td><td>归纳产出新经验</td><td>界面</td></tr>
+        <tr><td><code>ExperienceReinforced</code></td><td>Experience</td><td>加分成功 / 合并去重</td><td>界面</td></tr>
+        <tr><td><code>ExperiencePenalized</code></td><td>Experience</td><td>减分成功</td><td>界面</td></tr>
+        <tr><td><code>BudgetWarning</code></td><td>Budget</td><td>首次越过预警阈值</td><td>内循环 → 问用户</td></tr>
+        <tr><td><code>SummarizationCompleted</code></td><td>Session</td><td>摘要记录已追加</td><td>界面 / 审计</td></tr>
+        <tr><td><code>SessionCancelled</code></td><td>Session</td><td>用户取消会话</td><td>级联取消子会话</td></tr>
+        <tr><td><code>ModelSwitched</code></td><td>Session</td><td>降级命中备用链</td><td>审计 / 界面</td></tr>
+        <tr><td><code>PolicyAdjusted</code></td><td>RuntimePolicy</td><td>用户修改策略成功</td><td>三个模块刷新读取缓存</td></tr>
+        <tr><td><code>ToolDefinitionUpdatedEvent</code></td><td>ToolDefinition</td><td>元数据或 schema 更新</td><td>运行中会话不订阅（快照已冻结）</td></tr>
+      </tbody>
+    </table>
+    <p><strong>应用事件</strong>（不进领域模型）：<code>SummarizationStarted</code>（压缩开始，无状态转换）、<code>ExperienceDistillationFinished</code>（沉淀流程跑完）。</p>
+
+    <div class="callout">
+      <div class="ct">接下来</div>
+      <p>后面四章是放大镜：每章都会给出本模块的总览图、对象操作图、聚合与服务清单、
+      事件清单、生命周期规则，以及关键服务的时序图。</p>
+    </div>
+
+    <div class="page-foot" id="pagenav"></div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

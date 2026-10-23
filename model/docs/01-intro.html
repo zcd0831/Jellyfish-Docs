@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>1. 整体介绍 · Jellyfish Agent 领域模型</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside id="sidebar"></aside>
+  <main class="content">
+
+    <div class="crumb">第 1 章</div>
+    <h1>整体介绍</h1>
+    <p class="lede">
+      先把一件容易搞混的事说清楚：这份文档不是"技术方案"，而是<strong>这门生意的规则手册</strong>。
+      它规定"什么东西存在、谁能改它、什么时候算做完"。代码可以重写，这些规则不能随便改。
+    </p>
+
+    <h2><span class="sec">1.1</span>这个系统在做什么</h2>
+    <p>
+      Jellyfish 是一个跑在你终端里的 AI Agent（智能体）。你输入一句话，它不一定马上回答，而可能：
+    </p>
+    <ul>
+      <li>先想一下这活儿要几步，<strong>写个计划</strong>；</li>
+      <li>一步一步做，每一步去<strong>调工具</strong>（读文件、跑命令、查网页、调外部接口）；</li>
+      <li>做完一步<strong>检查</strong>一下是不是真做对了，没做对就重做或改计划；</li>
+      <li>遇到拿不准的事<strong>反问你</strong>；</li>
+      <li>把这次的教训<strong>记下来</strong>，下次遇到类似情况少走弯路。</li>
+    </ul>
+    <p>
+      听起来像个员工。所以建模时我们真的按"一个员工在公司里干活"来拆：他看到了什么、他怎么打算、
+      他做了什么、他学到了什么。这四件事，正好是四个模块。
+    </p>
+
+    <div class="callout">
+      <div class="ct">一个前提约束</div>
+      <p>它是<strong>本地单机、面向单个用户</strong>的终端应用。所以"多租户、组织架构、权限体系、按金额计费"
+      这些概念<strong>刻意没有建模</strong>。如果你以后要做云端多用户版本，需要在这里加一整层。</p>
+    </div>
+
+    <h2><span class="sec">1.2</span>为什么需要领域模型</h2>
+    <p>没有领域模型会怎样？常见三种惨状：</p>
+    <table>
+      <thead><tr><th>惨状</th><th>典型症状</th></tr></thead>
+      <tbody>
+        <tr><td>同一件事有好几个名字</td><td>代码里"任务""步骤""轮次""尝试"混着叫，产品说的"重试"和开发说的"重试"不是一回事</td></tr>
+        <tr><td>没有边界</td><td>任何一个服务都能改任何一张表，"谁把计划改坏了"永远查不出来</td></tr>
+        <tr><td>规则散落</td><td>"失败几次才反思""什么时候该问用户"这些规则散在 if-else 里，改一处崩三处</td></tr>
+      </tbody>
+    </table>
+    <p>领域模型要解决的就是这三件事，对应三个产出：</p>
+    <div class="cards">
+      <div class="card">
+        <div class="k">产出 1</div>
+        <div class="t">统一语言</div>
+        <div class="d">产品、开发、测试说同一个词时指的是同一件事。<a href="02-language.html">第 2 章</a></div>
+      </div>
+      <div class="card">
+        <div class="k">产出 2</div>
+        <div class="t">边界（聚合）</div>
+        <div class="d">一组必须"同时改对"的数据被绑在一起，改动只能从它的"根"进去。<a href="03-overview.html">第 3 章</a></div>
+      </div>
+      <div class="card">
+        <div class="k">产出 3</div>
+        <div class="t">规则（不变量）</div>
+        <div class="d">"什么情况下这个状态不可能出现"被写成硬规则，而不是靠人记得。<a href="03-overview.html">第 3 章</a></div>
+      </div>
+    </div>
+
+    <h2><span class="sec">1.3</span>四个模块：像一个人做事</h2>
+    <p>
+      整个模型被切成四块，每一块只回答一个问题。它们<strong>单向依赖</strong>：
+      规划能叫行动和记忆，记忆能叫行动和感知，但感知谁都不叫——因为它只负责"呈现世界"。
+    </p>
+
+    <pre class="mermaid">
+flowchart LR
+    P["感知&lt;br/>我看到什么"] -->|当前上下文| PL["规划&lt;br/>我下一步做什么"]
+    PL -->|要执行的动作| A["行动&lt;br/>我真的去做"]
+    A -->|工具结果| P
+    PL -->|沉淀素材| M["记忆&lt;br/>我学到了什么"]
+    M -->|可复用的经验| PL
+    </pre>
+    <p class="diagram-note">图 1-1　四个模块的信息流向（箭头 = 数据流向；<strong>不是依赖方向</strong>，依赖见 3.5）</p>
+
+    <table>
+      <thead><tr><th>模块</th><th>用人打比方</th><th>它管什么</th><th>它不管什么</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>感知</strong></td>
+          <td>眼睛和耳朵 + 工作台</td>
+          <td>对话流水、系统提示词快照、上下文窗口、超过长度时压缩</td>
+          <td>不判断对错、不做决定</td>
+        </tr>
+        <tr>
+          <td><strong>规划</strong></td>
+          <td>脑子里的计划表</td>
+          <td>计划、步骤、尝试、验证、什么时候重试 / 改计划</td>
+          <td>不直接调工具、不存历史</td>
+        </tr>
+        <tr>
+          <td><strong>行动</strong></td>
+          <td>手 + 工具箱 + 钱包</td>
+          <td>工具定义与执行、模型与凭据、代理身份、token 花销</td>
+          <td>不组装上下文、不决定做什么</td>
+        </tr>
+        <tr>
+          <td><strong>记忆</strong></td>
+          <td>笔记本</td>
+          <td>反思、经验库、技能（SOP）</td>
+          <td>不推进当前任务</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2><span class="sec">1.4</span>两个循环：内循环与它的老板</h2>
+    <p>
+      这是整套模型最需要先理解的一点。Agent 干活有<strong>两个层次</strong>的循环，它们是嵌套的。
+    </p>
+
+    <h3>内循环：ReAct（想 → 做 → 看 → 再想）</h3>
+    <p>
+      模型每次只能做一件事：<strong>决定调一个工具，或者决定说完了</strong>。调完工具，结果回到上下文，
+      它再决定下一步。这个"想—调—看"的循环就是 ReAct（Reason + Act）。
+    </p>
+    <p>
+      它的<strong>唯一出口</strong>是：模型不再调用工具。就这么简单——没有"任务完成"的判断，
+      它只负责"这一轮我说完了"。
+    </p>
+
+    <h3>外循环：Plan-and-Execute（要不要拆任务、拆完怎么推）</h3>
+    <p>
+      外循环是个 do-while。它每转一圈，就跑一次内循环：
+    </p>
+    <ul>
+      <li>如果<strong>还没有计划</strong>：跑一次不带步骤的内循环。模型可能只是聊两句，也可能调 <code>generate_plan</code> 生成计划；</li>
+      <li>如果<strong>已有计划</strong>：取当前那一步，让内循环去执行；执行完走验证，再决定"推进 / 重试 / 重划"；</li>
+      <li>计划做完了：<strong>再跑一次不带步骤的内循环</strong>，让模型把各步结果汇总成给你的答复——这就是"交付结论"。</li>
+    </ul>
+
+    <pre class="mermaid">
+flowchart TD
+    U["用户输入"] --> B["算上下文，必要时折叠"]
+    B --> C{"有可执行计划？"}
+    C -- 有 --> D["取当前步骤<br/>（同一 Attempt 继续）"]
+    C -- 无 --> E["本轮不带步骤"]
+    D --> F["内循环：ReAct"]
+    E --> F
+    F --> G{"模型不再调工具？"}
+    G -- 否 --> F
+    G -- 已达轮次上限 --> R["该 Attempt 判失败<br/>重试 / 反思 / 重划"]
+    R --> B
+    G -- 是 --> H{"提交了 submit_step？"}
+    H -- 否 --> P["本轮结束：Attempt 挂起<br/>不消耗重试，等你再说一句"]
+    P --> U
+    H -- 是 --> I["验证链 → 推进 / 重试 / 重划"]
+    I --> K{"还有可执行计划？"}
+    K -- 有 --> B
+    K -- 无 --> L["本轮交互结束<br/>（计划完成后另跑一轮自由内循环交付结论）"]
+    </pre>
+    <p class="diagram-note">图 1-2　外循环 do-while 与内循环的嵌套关系（三条出口：继续 / 结束 / 挂起）</p>
+
+    <div class="callout key">
+      <div class="ct">关键设计：一切都是工具</div>
+      <p>
+        "生成计划""提交这一步做完了""问用户一句话""开子代理""加载技能"——这五件事<strong>全部是工具</strong>，
+        和"读文件""跑命令"没有本质区别。模型看到的就是一份工具清单，它自己决定调哪个。
+      </p>
+      <p>
+        好处是：<strong>没有隐藏的控制流</strong>。不存在"调了某个工具就偷偷跳转"的魔法，
+        所有行为都能在对话记录里被看见、被审计、被复现。
+      </p>
+    </div>
+
+    <h2><span class="sec">1.5</span>一次对话的完整生命周期</h2>
+    <p>把上面两个循环走一遍，一次对话大致是这条时间线：</p>
+    <table>
+      <thead><tr><th>时刻</th><th>发生了什么</th><th>谁负责</th></tr></thead>
+      <tbody>
+        <tr><td>会话开启</td><td>建会话、建这个会话族的 token 台账、冻结一份提示词快照、用模型起个标题</td><td>感知</td></tr>
+        <tr><td>第一步之前</td><td>检查上下文是否超长，必要时压缩</td><td>感知</td></tr>
+        <tr><td>内循环</td><td>模型挑工具 → 执行 → 结果回到上下文 → 再挑，直到不再调工具</td><td>规划（驱动）+ 行动（执行）</td></tr>
+        <tr><td>模型决定拆任务</td><td>调 <code>generate_plan</code>，校验通过后计划诞生，并给每步分配历史经验</td><td>规划（+ 记忆）</td></tr>
+        <tr><td>每步执行</td><td>内循环跑这一步 → 模型调 <code>submit_step</code> 声明做完了</td><td>规划</td></tr>
+        <tr><td>每步验收</td><td>按这一步声明的验证类型跑验证链；通过就固化，不通过就重试 / 反思 / 重划</td><td>规划</td></tr>
+        <tr><td>计划完结</td><td>成功或失败都会触发一次"复盘"，把教训蒸馏成经验</td><td>记忆</td></tr>
+        <tr><td>交付</td><td>再跑一轮不带步骤的内循环，模型把结果汇总成答复</td><td>规划</td></tr>
+      </tbody>
+    </table>
+
+    <h2><span class="sec">1.6</span>六条贯穿全模型的设计原则</h2>
+    <p>后面四章会反复出现这些原则。它们决定了"为什么这个规则长这样"。</p>
+
+    <table>
+      <thead><tr><th>原则</th><th>一句话解释</th><th>它挡住了什么问题</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>收敛 ≠ 完成</strong></td>
+          <td>模型说完了，只代表这次执行结束；算不算做成，由验证判定</td>
+          <td>模型只输出了一句"我需要你确认…"就被当成任务完成</td>
+        </tr>
+        <tr>
+          <td><strong>故障不是业务失败</strong></td>
+          <td>模型连不上、请求超长，都不是"这一步失败了"</td>
+          <td>用业务失败掩盖环境问题，把计划判死、白白消耗重试次数</td>
+        </tr>
+        <tr>
+          <td><strong>可推导的不存</strong></td>
+          <td>能算出来的（比如上下文窗口里有哪些记录）就不落库</td>
+          <td>同一事实两处真相，改一处忘一处</td>
+        </tr>
+        <tr>
+          <td><strong>聚合不读配置</strong></td>
+          <td>阈值、上限这类配置由"调用方"判断，聚合只保证状态迁移合法</td>
+          <td>改一个配置导致历史数据"不合法"</td>
+        </tr>
+        <tr>
+          <td><strong>定义冻结、策略不冻结</strong></td>
+          <td>会话开始时把工具/技能/提示词"拍快照"；但用户改的策略立即生效</td>
+          <td>跑到一半有人改了工具定义，正在跑的任务行为漂移</td>
+        </tr>
+        <tr>
+          <td><strong>谁拥有，谁修改</strong></td>
+          <td>记忆模块不能直接改计划；它只返回"建议",由计划自己改</td>
+          <td>跨模块互改对方数据，出问题查不清</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2><span class="sec">1.7</span>后面四章怎么读</h2>
+    <p>每一章的结构完全一样，可以按需跳读：</p>
+    <ol>
+      <li><strong>模块定位与边界</strong>——它管什么、不管什么、依赖谁</li>
+      <li><strong>模块总览图</strong>——这一块里有哪些对象，彼此什么关系</li>
+      <li><strong>对象操作图</strong>——谁调用谁、谁改谁</li>
+      <li><strong>聚合清单</strong>——有几个聚合，各自的红线（不变量）是什么</li>
+      <li><strong>领域服务清单</strong>——跨对象编排的那些"动作"</li>
+      <li><strong>其他实体 / 值对象</strong>——配角们</li>
+      <li><strong>领域事件</strong>——发生了什么、谁关心</li>
+      <li><strong>生命周期与规则</strong>——每个聚合从生到死经历哪些节点、有哪些硬规则</li>
+      <li><strong>服务操作详解</strong>——时序图级别的"到底怎么跑"</li>
+    </ol>
+
+    <div class="callout">
+      <div class="ct">先看哪章？</div>
+      <p>如果只想搞懂"它怎么把一件事做完"，直接跳到 <a href="06-planning.html">第 6 章 规划模块</a>，
+      那是整个系统的心脏。看完再回头看感知和行动会轻松很多。</p>
+    </div>
+
+    <div class="page-foot" id="pagenav"></div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

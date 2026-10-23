@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>2. 统一语言 · Jellyfish Agent 领域模型</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside id="sidebar"></aside>
+  <main class="content">
+
+    <div class="crumb">第 2 章</div>
+    <h1>统一语言</h1>
+    <p class="lede">
+      统一语言（Ubiquitous Language）是领域建模里最便宜、收益最高的一件事：
+      <strong>把词定死</strong>。产品说"这一步失败重来"，开发说"retry"，测试说"重新跑"——
+      如果三者指的不是同一件事，后面所有讨论都会慢慢跑偏。
+    </p>
+    <p>这一页就是这本"词典"。建议先扫一遍，后面看四章时随时回来查。</p>
+
+    <h2><span class="sec">2.1</span>为什么词要定死</h2>
+    <p>拿三个最容易混的词举例：</p>
+    <table>
+      <thead><tr><th>说法</th><th>到底指什么</th><th>谁在管</th></tr></thead>
+      <tbody>
+        <tr><td>"这个任务失败了"</td><td>是一个<strong>步骤</strong>失败？一次<strong>尝试</strong>失败？还是整个<strong>计划</strong>失败？</td><td>三种，全不同</td></tr>
+        <tr><td>"让它重来一次"</td><td>重试同一个步骤？改计划？还是重新思考为什么错？</td><td>重试 / 重划 / 反思</td></tr>
+        <tr><td>"保存一下上下文"</td><td>往流水里追加一条记录？还是压缩成摘要？</td><td>追加 / 折叠</td></tr>
+      </tbody>
+    </table>
+    <p>定死之后，讨论就变成"这一步的<strong>第三次尝试</strong>验证失败了，外循环要决定<strong>重试</strong>还是<strong>重划</strong>"——不会再有歧义。</p>
+
+    <h2><span class="sec">2.2</span>核心术语表</h2>
+
+    <h3>A. 会话与上下文（感知模块）</h3>
+    <table>
+      <thead><tr><th>术语</th><th>英文 / 代码名</th><th>通俗解释</th></tr></thead>
+      <tbody>
+        <tr><td><strong>会话</strong></td><td><code>Session</code></td><td>一次对话的"现场"。它保存了你和模型说过的每一句话、工具返回的每个结果，以及一开始拍下的提示词快照。</td></tr>
+        <tr><td><strong>子会话</strong></td><td><code>Session.parentSessionId</code></td><td>主会话派出去干活的"分身"。它是一次完整会话（有自己的上下文和计划），只是由主会话发起。</td></tr>
+        <tr><td><strong>会话族</strong></td><td>root <code>Session</code></td><td>主会话 + 它派出的所有子会话，算一家人。token 花销按"一家人"合计。</td></tr>
+        <tr><td><strong>记录</strong></td><td><code>Record</code></td><td>上下文流水里的一条：谁说的、说了什么、什么时候说的。只追加，不修改。</td></tr>
+        <tr><td><strong>记录角色</strong></td><td><code>RecordRole</code></td><td>这条记录是谁写的：系统 / 用户 / 模型 / 工具请求 / 工具结果 / 摘要。</td></tr>
+        <tr><td><strong>上下文窗口</strong></td><td><code>ContextWindow</code></td><td>这次真正发给模型的那一批记录。不是全部历史，是"当前能装进去的那一段 + 摘要"。</td></tr>
+        <tr><td><strong>上下文用量</strong></td><td><code>ContextUsage</code></td><td>窗口里用了多少 token、上限多少、其中系统提示占了多少。</td></tr>
+        <tr><td><strong>折叠（压缩）</strong></td><td>summarization</td><td>历史太长时，把旧记录压成一条"摘要记录"，给新内容腾地方。用户会看到"压缩中"。</td></tr>
+        <tr><td><strong>系统提示词快照</strong></td><td><code>SystemPromptSnapshot</code></td><td>会话开始时把"人设 + 工具说明 + 技能清单"拍一份内容照，之后运行中不再受定义变更影响。</td></tr>
+        <tr><td><strong>会话续跑</strong></td><td>resume</td><td>关掉终端后再打开，把历史会话接着跑。半截的工具调用按失败处理。</td></tr>
+      </tbody>
+    </table>
+
+    <h3>B. 执行与验收（规划模块）</h3>
+    <table>
+      <thead><tr><th>术语</th><th>英文 / 代码名</th><th>通俗解释</th></tr></thead>
+      <tbody>
+        <tr><td><strong>计划</strong></td><td><code>Plan</code></td><td>模型把任务拆成的一串步骤。严格按顺序做，不并行。</td></tr>
+        <tr><td><strong>步骤</strong></td><td><code>PlanStep</code></td><td>计划里的一步。它自己声明"这一步该怎么验证"。</td></tr>
+        <tr><td><strong>尝试</strong></td><td><code>Attempt</code></td><td>一个步骤的<strong>一次完整执行周期</strong>。可能中间被你插话几次，但仍然是同一次尝试。</td></tr>
+        <tr><td><strong>轨迹区间</strong></td><td><code>RecordRange</code></td><td>这次尝试对应流水里的哪一段。用"起点记录 ID + 终点记录 ID"表示，不重复存内容。</td></tr>
+        <tr><td><strong>提交</strong></td><td><code>submit_step</code></td><td>模型声明"这一步我做完了"，并附上产出摘要。模型不提交，这一步就一直没完成。</td></tr>
+        <tr><td><strong>收敛</strong></td><td>converged</td><td>模型不再调用工具，这一轮说完了。<strong>注意：收敛不等于完成。</strong></td></tr>
+        <tr><td><strong>验证链</strong></td><td><code>VerificationType</code> × 链</td><td>验收这一步的流水线，最多四道：确定性规则 → 外部反馈 → 模型裁判 → 人工审批。</td></tr>
+        <tr><td><strong>验证报告</strong></td><td><code>VerificationReport</code></td><td>验收结论：通过 / 不通过 / 无法判定，以及失败发生在哪道、原因是什么。</td></tr>
+        <tr><td><strong>重试</strong></td><td>retry</td><td>同一步骤再做一次（换做法），会消耗一次重试名额。</td></tr>
+        <tr><td><strong>反思</strong></td><td><code>Reflection</code></td><td>失败到一定次数后，让一个"军师"代理分析为什么失败，结论会喂给下一次尝试。</td></tr>
+        <tr><td><strong>重划</strong></td><td>replan</td><td>重做计划：只替换<strong>还没执行</strong>的那部分，已完成的步骤保留。</td></tr>
+        <tr><td><strong>固化</strong></td><td>succeeded 不可变</td><td>步骤成功后，它的产出与记录就锁死，不再改动。</td></tr>
+        <tr><td><strong>中断</strong></td><td><code>INTERRUPTED</code></td><td>你按了 Ctrl-C 或关掉程序。这次尝试作废，但<strong>不算一次失败</strong>。</td></tr>
+      </tbody>
+    </table>
+
+    <h3>C. 能力与执行器（行动模块）</h3>
+    <table>
+      <thead><tr><th>术语</th><th>英文 / 代码名</th><th>通俗解释</th></tr></thead>
+      <tbody>
+        <tr><td><strong>工具</strong></td><td><code>ToolDefinition</code></td><td>模型能调用的一个动作。有入参 schema、出参说明、超时、副作用等级。</td></tr>
+        <tr><td><strong>内置工具</strong></td><td><code>SourceType.INTERNAL</code></td><td>应用自己实现的那几个：生成计划、提交步骤、问用户、开子代理、加载技能。</td></tr>
+        <tr><td><strong>副作用等级</strong></td><td><code>SideEffectLevel</code></td><td>只读 / 可重复 / 不可逆。决定执行前要不要先问你要不要放行。</td></tr>
+        <tr><td><strong>信任清单</strong></td><td><code>trustedToolIds</code></td><td>你自己维护的一份"这些工具不用问我"的白名单。<strong>连不可逆工具也能放进去。</strong></td></tr>
+        <tr><td><strong>代理</strong></td><td><code>AgentDefinition</code></td><td>一个"角色"：人设 prompt + 能用哪些工具 + 能用哪些技能。</td></tr>
+        <tr><td><strong>内置代理</strong></td><td><code>AgentSource.BUILT_IN</code></td><td>系统自带的四个角色：反思、裁判、检索经验、归纳经验。人设不可改、工具写死。</td></tr>
+        <tr><td><strong>技能</strong></td><td><code>SkillDefinition</code></td><td>一份"怎么做好某类事"的操作手册（SOP）。它不携带工具，只教方法。</td></tr>
+        <tr><td><strong>SOP</strong></td><td><code>InstructionTemplate</code></td><td>技能的正文。默认只给模型看标题和简介，它需要时才加载全文。</td></tr>
+        <tr><td><strong>供应商</strong></td><td><code>Provider</code></td><td>模型的服务商（端点 + 凭据）。一个供应商下可以有多个模型。</td></tr>
+        <tr><td><strong>模型</strong></td><td><code>Model</code></td><td>具体可调用的模型：上下文上限、能力标签（如视觉、函数调用）、状态。</td></tr>
+        <tr><td><strong>预算</strong></td><td><code>Budget</code></td><td>会话族的 token 台账。<strong>只记账、只预警，不硬中断</strong>。</td></tr>
+      </tbody>
+    </table>
+
+    <h3>D. 学习（记忆模块）</h3>
+    <table>
+      <thead><tr><th>术语</th><th>英文 / 代码名</th><th>通俗解释</th></tr></thead>
+      <tbody>
+        <tr><td><strong>反思</strong></td><td><code>Reflection</code></td><td>失败后的复盘结论。它有两个用处：喂给下一次尝试、作为经验素材。</td></tr>
+        <tr><td><strong>沉淀（蒸馏）</strong></td><td>distillation</td><td>计划结束时，把这次的反思蒸馏成一条"经验"。只有能让任务最终成功的反思才算好素材。</td></tr>
+        <tr><td><strong>经验</strong></td><td><code>Experience</code></td><td>一条可复用的教训：什么场景下、该怎么做。<strong>不绑定任何代理或工具</strong>，全局共享。</td></tr>
+        <tr><td><strong>置信度</strong></td><td><code>ConfidenceScore</code></td><td>这条经验有多可信（0~1）。被用对了加分，用错了减分，低到一定程度就淘汰。</td></tr>
+        <tr><td><strong>检索</strong></td><td><code>ExperienceRetriever</code></td><td>新计划生成时，让一个子代理从经验库里挑出"对这几步有用的"。</td></tr>
+      </tbody>
+    </table>
+
+    <h3>E. 运行环境（策略）</h3>
+    <table>
+      <thead><tr><th>术语</th><th>英文 / 代码名</th><th>通俗解释</th></tr></thead>
+      <tbody>
+        <tr><td><strong>运行策略</strong></td><td><code>RuntimePolicy</code></td><td>所有"用户可以调"的全局参数：重试几次、什么时候反思、窗口多长、经验库多大……</td></tr>
+        <tr><td><strong>安全余量</strong></td><td><code>inputSafetyMargin</code></td><td>算上下文上限时预留的 token（默认 10000），防止估算偏差。<strong>不是给输出预留的。</strong></td></tr>
+        <tr><td><strong>最大 ReAct 轮次</strong></td><td><code>maxReActRounds</code></td><td>唯一一道硬闸：一次尝试里最多让模型连多少轮工具。超了就判失败。</td></tr>
+      </tbody>
+    </table>
+
+    <h3>F. 建模词汇（读图用）</h3>
+    <table>
+      <thead><tr><th>术语</th><th>含义</th><th>怎么认</th></tr></thead>
+      <tbody>
+        <tr><td><strong>聚合 / 聚合根</strong></td><td>一组必须"同时改对"的对象，外面只能通过根去改它</td><td>图上标 <code>&lt;&lt;AggregateRoot&gt;&gt;</code></td></tr>
+        <tr><td><strong>实体</strong></td><td>有身份标识、会变的对象（改属性还是同一个它）</td><td>标 <code>&lt;&lt;Entity&gt;&gt;</code></td></tr>
+        <tr><td><strong>值对象</strong></td><td>没有身份，只看内容；内容一样就是相等，且不可变</td><td>标 <code>&lt;&lt;ValueObject&gt;&gt;</code></td></tr>
+        <tr><td><strong>领域服务</strong></td><td>一个"动作"，它跨多个对象协作，不属于任何一个对象</td><td>标 <code>&lt;&lt;DomainService&gt;&gt;</code></td></tr>
+        <tr><td><strong>领域事件</strong></td><td>"某事发生了"的通知，由聚合根在状态变化后发出</td><td>标 <code>&lt;&lt;Event&gt;&gt;</code>，箭头写 <code>raises</code></td></tr>
+        <tr><td><strong>应用事件</strong></td><td>过程性通知，不对应任何聚合状态变化（如"开始压缩了"）</td><td>单独一个命名空间</td></tr>
+        <tr><td><strong>端口</strong></td><td>一个"插座"：A 模块只声明接口，B 模块提供实现，避免互相依赖</td><td>标 <code>&lt;&lt;Port&gt;&gt;</code></td></tr>
+        <tr><td><strong>不变量</strong></td><td>永远必须成立的规则；一旦会破坏它，这个操作就不该被允许</td><td>每章"聚合清单"的最后一列</td></tr>
+        <tr><td><strong>ID 引用</strong></td><td>跨聚合只存对方的 ID，不存对象本身</td><td>图上的虚线箭头</td></tr>
+      </tbody>
+    </table>
+
+    <h2><span class="sec">2.3</span>最容易混淆的七组概念</h2>
+
+    <h3>① 会话 / 计划 / 尝试 —— 三个"容器"</h3>
+    <table>
+      <thead><tr><th></th><th>会话</th><th>计划</th><th>尝试</th></tr></thead>
+      <tbody>
+        <tr><td>装什么</td><td>所有说过的话</td><td>一串要做的步骤</td><td>某一步的一次执行</td></tr>
+        <tr><td>一个会话里有几个</td><td>—</td><td>0 到多个（闲聊就是 0）</td><td>每步可以有多个（重试就有多个）</td></tr>
+        <tr><td>什么时候结束</td><td>归档或删除</td><td>成功 / 失败</td><td>提交 / 失败 / 中断</td></tr>
+      </tbody>
+    </table>
+
+    <h3>② 收敛 / 提交 / 验证通过 —— "做完了"的三个层次</h3>
+    <ul>
+      <li><strong>收敛</strong>：模型这一轮不调工具了。<em>只说明它话说完了。</em></li>
+      <li><strong>提交</strong>：模型主动说"这一步我做完了"（<code>submit_step</code>）。<em>这是它的自我声明。</em></li>
+      <li><strong>验证通过</strong>：验收流水线判定产出合格。<em>这才是真正的"做完"。</em></li>
+    </ul>
+    <p>三者缺一不可：只收敛不算完；只提交不过验证也不算完；没声明验证的步骤则是"提交即完成"（这是模型的合法选择，但有风险）。</p>
+
+    <h3>③ 验证 / 反思 —— 一个判对错，一个想办法</h3>
+    <table>
+      <thead><tr><th></th><th>验证</th><th>反思</th></tr></thead>
+      <tbody>
+        <tr><td>回答的问题</td><td>"这算不算做对了？"</td><td>"为什么老是做不对？"</td></tr>
+        <tr><td>产出</td><td>验证报告（三态结论）</td><td>反思结论（一段可执行的建议）</td></tr>
+        <tr><td>什么时候发生</td><td>每次提交后（如果声明了验证）</td><td>失败达到阈值后</td></tr>
+        <tr><td>给谁用</td><td>外循环决定推进/重试</td><td>喂给下一次尝试 + 沉淀成经验</td></tr>
+      </tbody>
+    </table>
+
+    <h3>④ 经验 / 技能 —— 陈述性知识 vs 程序性知识</h3>
+    <ul>
+      <li><strong>经验</strong>："上次这么干翻车了，别这么干。"——是<strong>踩过的坑</strong>，模型自动获得（检索后注入）。</li>
+      <li><strong>技能</strong>："做这类事的标准流程是 1、2、3。"——是<strong>操作手册</strong>，模型主动加载（<code>load_skill</code>）。</li>
+    </ul>
+
+    <h3>⑤ 工具失败 / 模型不可用 / 请求超限 —— 三种"不顺利"</h3>
+    <table>
+      <thead><tr><th>情形</th><th>性质</th><th>怎么处理</th></tr></thead>
+      <tbody>
+        <tr><td>工具报错、超时</td><td><strong>正常业务的一部分</strong></td><td>当成一种"工具结果"喂回模型，它自己想办法</td></tr>
+        <tr><td>模型连不上（备用链全挂）</td><td><strong>环境故障</strong></td><td>暂停，什么都不改、不消耗重试、不自动重试</td></tr>
+        <tr><td>请求超过模型上下文上限</td><td><strong>预算问题</strong></td><td>强制压缩一次再试；还不行就按环境故障处理</td></tr>
+      </tbody>
+    </table>
+
+    <h3>⑥ 重试 / 反思 / 重划 —— 三条不同的"再来一次"</h3>
+    <table>
+      <thead><tr><th></th><th>重试</th><th>反思</th><th>重划</th></tr></thead>
+      <tbody>
+        <tr><td>改什么</td><td>同一步换个做法</td><td>不改动作，只改"下次怎么想"</td><td>改计划本身</td></tr>
+        <tr><td>消耗重试名额</td><td>是</td><td>否（反思是一次额外调用）</td><td>否（消耗重划代次）</td></tr>
+        <tr><td>谁触发</td><td>验证不通过</td><td>失败次数达阈值</td><td>重试用尽 / 用户要求</td></tr>
+      </tbody>
+    </table>
+
+    <h3>⑦ 归档 / 删除 / 续跑 —— 会话的三种"离开"</h3>
+    <ul>
+      <li><strong>关终端</strong>：不是状态变化，只是程序没了；下次可以<strong>续跑</strong>。</li>
+      <li><strong>归档</strong>：保留数据，但<strong>不能再续跑</strong>。</li>
+      <li><strong>删除</strong>：物理删除这个会话族的记录、计划、预算；<strong>已沉淀的经验保留</strong>（经验是全局资产）。</li>
+    </ul>
+
+    <h2><span class="sec">2.4</span>状态枚举速查</h2>
+    <table>
+      <thead><tr><th>枚举</th><th>取值</th><th>用在哪</th></tr></thead>
+      <tbody>
+        <tr><td><code>SessionStatus</code></td><td>RUNNING / RESUMABLE / ARCHIVED</td><td>会话是否在跑</td></tr>
+        <tr><td><code>PlanStatus</code></td><td>EXECUTING / REPLANNING / COMPLETED / FAILED</td><td>计划走到哪</td></tr>
+        <tr><td><code>StepStatus</code></td><td>PENDING / RUNNING / VERIFYING / SUCCEEDED / FAILED / SUPERSEDED / CANCELLED</td><td>单个步骤</td></tr>
+        <tr><td><code>AttemptOutcome</code></td><td>SUCCEEDED / FAILED / INTERRUPTED</td><td>一次尝试的结局（只有这三种是边界）</td></tr>
+        <tr><td><code>VerificationOutcome</code></td><td>PASSED / FAILED / UNDETERMINED</td><td>验证结论（三态，中间那态会转人工）</td></tr>
+        <tr><td><code>VerificationType</code></td><td>DETERMINISTIC / ENV_FEEDBACK / LLM_JUDGE / HUMAN_APPROVAL</td><td>验证链的四道，顺序固定</td></tr>
+        <tr><td><code>RecordRole</code></td><td>SYSTEM / USER / ASSISTANT / TOOL_REQUEST / TOOL_RESULT / SUMMARY</td><td>流水里每条记录的身份</td></tr>
+        <tr><td><code>SideEffectLevel</code></td><td>READ_ONLY / REPEATABLE / IRREVERSIBLE</td><td>工具的副作用等级</td></tr>
+        <tr><td><code>SourceType</code></td><td>INTERNAL / NATIVE / REST / MCP</td><td>工具从哪来</td></tr>
+        <tr><td><code>ExperienceStatus</code></td><td>ACTIVE / ARCHIVED</td><td>经验是否还参与检索</td></tr>
+        <tr><td><code>SkillStatus</code></td><td>DRAFT / ACTIVE / DEPRECATED</td><td>技能是否进新会话快照</td></tr>
+        <tr><td><code>ToolStatus</code></td><td>DRAFT / ACTIVE / DEPRECATED</td><td>工具是否还能被调</td></tr>
+        <tr><td><code>AgentStatus</code></td><td>DRAFT / ACTIVE / DEPRECATED</td><td>角色是否可用</td></tr>
+        <tr><td><code>AgentSource</code></td><td>USER_DEFINED / BUILT_IN</td><td>角色是你建的还是系统带的</td></tr>
+        <tr><td><code>ModelStatus</code> / <code>ProviderStatus</code></td><td>ACTIVE / DEPRECATED</td><td>模型 / 供应商是否可用</td></tr>
+      </tbody>
+    </table>
+
+    <h2><span class="sec">2.5</span>命名约定</h2>
+    <table>
+      <thead><tr><th>东西</th><th>约定</th><th>例子</th></tr></thead>
+      <tbody>
+        <tr><td>状态动词</td><td>统一用 <code>submit</code> / <code>activate</code> / <code>deprecate</code></td><td>不再混用 publish / deactivate</td></tr>
+        <tr><td>事件命名</td><td>过去式，"某件事已经发生了"</td><td><code>PlanCompleted</code>、<code>ExperienceCreated</code></td></tr>
+        <tr><td>跨聚合引用</td><td>只存 ID，命名 <code>xxxId</code></td><td><code>sessionId</code>、<code>verificationReportId</code></td></tr>
+        <tr><td>值对象</td><td>名词短语，不可变</td><td><code>ContextUsage</code>、<code>RecordRange</code></td></tr>
+        <tr><td>时间戳</td><td>一律 <code>xxxAt</code> / <code>xxxDate</code></td><td><code>createdAt</code>、<code>decidedAt</code></td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout ok">
+      <div class="ct">看完这页你应该能回答</div>
+      <ul>
+        <li>"这一步失败了"到底说的是步骤、尝试还是计划？</li>
+        <li>为什么模型说完了还不能算完成？</li>
+        <li>工具报错和模型挂了，处理方式差在哪？</li>
+      </ul>
+    </div>
+
+    <div class="page-foot" id="pagenav"></div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

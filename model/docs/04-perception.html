@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>4. 感知模块 · Jellyfish Agent 领域模型</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside id="sidebar"></aside>
+  <main class="content">
+
+    <div class="crumb">第 4 章</div>
+    <h1>感知模块</h1>
+    <p class="lede">
+      感知模块只回答一个问题：<strong>模型此刻能看到什么</strong>。
+      它把「外部输入」（你、工具结果、模型输出、技能注入）和「运行环境」（全局策略、模型能力、可用工具清单）
+      变成一条可追溯的上下文流水，长了就折叠。
+    </p>
+
+    <div class="chips">
+      <span class="chip">聚合 2</span>
+      <span class="chip">领域服务 4</span>
+      <span class="chip">端口 1（声明）</span>
+      <span class="chip">领域事件 4</span>
+      <span class="chip g">应用事件 1</span>
+    </div>
+
+    <h2><span class="sec">4.1</span>模块定位与边界</h2>
+    <table>
+      <thead><tr><th>方向</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td>本模块聚合</td><td><code>Session</code>、<code>RuntimePolicy</code></td></tr>
+        <tr><td>本模块声明的端口（由外部实现）</td><td><code>ModelInvocationPort</code>（由【行动】<code>ModelInvoker</code> 实现：选模型 / 降级 / 调用 / 计 token / 提供模型档案）</td></tr>
+        <tr><td>被本模块引用的外部 ID（仅 ID）</td><td><code>AgentId</code>、<code>ModelId</code>、<code>ToolId</code>、<code>SkillId</code></td></tr>
+        <tr><td>被外部引用的本模块对象</td><td><code>Session</code>（被规划持有 <code>sessionId</code>、被行动持有 <code>rootSessionId</code>）、<code>RuntimePolicy</code>（被规划 / 行动 / 记忆只读）</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout key">
+      <div class="ct">依赖纪律</div>
+      <p><code>SystemPromptAssembler</code> 不自己去查工具/技能定义——内容由调用方（外循环 / 应用层）取好作为入参传入；
+      模型调用一律走 <code>ModelInvocationPort</code>。这样感知模块<strong>不依赖任何其它模块的具体实现</strong>。</p>
+    </div>
+
+    <h2><span class="sec">4.2</span>模块总览图</h2>
+    <pre class="mermaid">
+classDiagram
+    namespace 会话聚合 {
+        class Session {
+            &lt;&lt;AggregateRoot&gt;&gt;
+            -SessionId id
+            -SessionId parentSessionId
+            -AgentId agentId
+            -ModelId activeModelId
+            -SessionStatus status
+            -String title
+            -Date createdDate
+            -List~Record~ records
+            -SystemPromptSnapshot systemPromptSnapshot
+            +appendRecord(RecordRole, String, ToolResultPayload) Record
+            +buildContextForLlm(ContextWindowPolicy) ContextWindow
+            +markSummarized(String summary)
+            +switchModel(ModelId)
+            +cancel()
+            +archive()
+        }
+        class Record {
+            &lt;&lt;Entity&gt;&gt;
+            -RecordId id
+            -RecordRole role
+            -String content
+            -ToolResultPayload toolPayload
+            -Date date
+            -int sequence
+        }
+        class ToolResultPayload {
+            &lt;&lt;ValueObject&gt;&gt;
+            -boolean isTruncated
+            -String resourceUri
+        }
+        class SystemPromptSnapshot {
+            &lt;&lt;ValueObject&gt;&gt;
+            -String renderedPrompt
+            -List~ToolSchemaSnapshot~ toolList
+            -List~SkillSummarySnapshot~ skillList
+        }
+        class ToolSchemaSnapshot {
+            &lt;&lt;ValueObject&gt;&gt;
+            -String name
+            -String description
+            -String parametersJsonSchema
+            -String outputDescription
+        }
+        class SkillSummarySnapshot {
+            &lt;&lt;ValueObject&gt;&gt;
+            -String name
+            -String description
+        }
+        class ContextWindow {
+            &lt;&lt;ValueObject&gt;&gt;
+            -List~Record~ records
+            -ContextUsage usage
+        }
+        class ContextUsage {
+            &lt;&lt;ValueObject&gt;&gt;
+            -int usedTokens
+            -int inputCeiling
+            -int systemTokens
+            -int summaryTokens
+            -int windowRecordCount
+        }
+        class ContextWindowPolicy {
+            &lt;&lt;ValueObject&gt;&gt;
+            -int recordCount
+            -double systemRatioLimit
+        }
+        class SessionStatus {
+            &lt;&lt;Enumeration&gt;&gt;
+            RUNNING
+            RESUMABLE
+            ARCHIVED
+        }
+        class RecordRole {
+            &lt;&lt;Enumeration&gt;&gt;
+            SYSTEM
+            USER
+            ASSISTANT
+            TOOL_REQUEST
+            TOOL_RESULT
+            SUMMARY
+        }
+    }
+
+    namespace 策略配置 {
+        class RuntimePolicy {
+            &lt;&lt;AggregateRoot&gt;&gt;
+            +int maxRetries
+            +int reflectionThreshold
+            +int maxReplanGeneration
+            +int maxReActRounds
+            +int summarizationTokenThreshold
+            +int inputSafetyMargin
+            +int contextWindowRecordCount
+            +double systemRecordRatioLimit
+            +int toolResultTruncateLength
+            +int subagentExecutionTimeoutMillis
+            +int experienceCapacity
+            +int experienceTopN
+            +int experiencePerPlan
+            +double experienceInitialConfidence
+            +double experienceConfidenceStep
+            +double experienceRetireThreshold
+            +double budgetWarnRatio
+            +List~ModelId~ modelFallbackChain
+            +List~ToolId~ trustedToolIds
+            +isToolTrusted(ToolId) boolean
+            +needsReflection(int) boolean
+            +adjust(...)
+        }
+    }
+
+    namespace 领域服务 {
+        class SessionFactory {
+            &lt;&lt;DomainService&gt;&gt;
+            +start(AgentId, ModelId, String) Session
+            +startSubSession(SessionId, AgentId, ModelId, String) Session
+        }
+        class SessionTitleGenerator {
+            &lt;&lt;DomainService&gt;&gt;
+            +generate(Session) String
+        }
+        class SystemPromptAssembler {
+            &lt;&lt;DomainService&gt;&gt;
+            +assemble(AgentSnapshotInput) SystemPromptSnapshot
+        }
+        class ContextWindowService {
+            &lt;&lt;DomainService&gt;&gt;
+            +ensureWithinLimit(Session) void
+            +forceCollapse(Session) void
+        }
+    }
+
+    namespace 端口 {
+        class ModelInvocationPort {
+            &lt;&lt;Port&gt;&gt;
+            +invoke(ModelInvocationRequest) ModelInvocationResult
+            +describe(ModelId) ModelProfile
+        }
+        class ModelProfile {
+            &lt;&lt;ValueObject&gt;&gt;
+            -int maxInputTokens
+            -int maxOutputTokens
+        }
+    }
+
+    namespace 领域事件 {
+        class SessionCancelled
+        class ModelSwitched
+        class SummarizationCompleted
+        class PolicyAdjusted
+    }
+
+    namespace 应用事件 {
+        class SummarizationStarted
+    }
+
+    Session "1" *-- "0..*" Record : append-only
+    Session "1" *-- "1" SystemPromptSnapshot : 会话开启时冻结
+    Record *-- ToolResultPayload
+    SystemPromptSnapshot *-- ToolSchemaSnapshot
+    SystemPromptSnapshot *-- SkillSummarySnapshot
+    Session --> SessionStatus
+    Record --> RecordRole
+    Session "0..1" --> "0..*" Session : parentSessionId
+    Session ..> ContextWindow : buildContextForLlm 产出（推导，不落库）
+    ContextWindow *-- ContextUsage
+    ContextWindow ..> ContextWindowPolicy : 计算依据
+
+    SessionFactory ..> Session
+    SessionFactory ..> SessionTitleGenerator
+    SessionTitleGenerator ..> ModelInvocationPort
+    SystemPromptAssembler ..> SystemPromptSnapshot
+    ContextWindowService ..> Session
+    ContextWindowService ..> RuntimePolicy
+    ContextWindowService ..> ModelInvocationPort
+
+    Session ..> SessionCancelled : raises
+    Session ..> ModelSwitched : raises
+    Session ..> SummarizationCompleted : raises
+    RuntimePolicy ..> PolicyAdjusted : raises
+    </pre>
+    <p class="diagram-note">图 4-1　感知模块总览（本模块聚合 + 服务 + 端口 + 事件）</p>
+
+    <h2><span class="sec">4.3</span>对象操作图</h2>
+    <pre class="mermaid">
+flowchart LR
+    subgraph 领域服务
+        SF[SessionFactory]
+        TG[SessionTitleGenerator]
+        SA[SystemPromptAssembler]
+        CW[ContextWindowService]
+    end
+    subgraph 聚合
+        S[Session]
+        RP[RuntimePolicy]
+    end
+    subgraph 聚合内对象
+        R[Record]
+        SNAP[SystemPromptSnapshot]
+    end
+    subgraph 端口 / 外部
+        PORT[(ModelInvocationPort&lt;br/>实现：行动·ModelInvoker)]
+        APP[(应用层 / 外循环)]
+    end
+
+    APP -->|start| SF
+    SF -->|new Session RUNNING| S
+    SF -->|assemble| SA
+    SA -->|快照| S
+    SF -->|generate| TG
+    TG -->|invoke 计 token| PORT
+
+    APP -->|ensureWithinLimit| CW
+    CW -->|读取阈值| RP
+    CW -->|invoke 生成摘要| PORT
+    CW -->|markSummarized 追加 SUMMARY| S
+
+    S -->|appendRecord| R
+    APP -->|buildContextForLlm| S
+    APP -->|switchModel / cancel / archive| S
+    APP -->|adjust| RP
+    </pre>
+    <p class="diagram-note">图 4-2　对象之间的操作关系（箭头 = 调用；标注 = 调用的操作）</p>
+
+    <h2><span class="sec">4.4</span>聚合清单</h2>
+    <table>
+      <thead><tr><th>聚合</th><th>简介</th><th>不变量</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>Session</code></td>
+          <td>一次会话（可嵌套）的全部上下文事实：记录流水、系统提示词快照、窗口与摘要。由 <code>parentSessionId</code> 组成会话树</td>
+          <td>① <code>Record</code> 只追加，被 <code>Attempt.recordRange</code> 引用的记录永不删除/改写；② 快照在会话开启时冻结，运行中不再变；③ Agent 不可切换，Model 可切换；④ 父子会话一致（父取消级联）；⑤ 状态迁移只在 RUNNING / RESUMABLE / ARCHIVED 之间</td>
+        </tr>
+        <tr>
+          <td><code>RuntimePolicy</code></td>
+          <td>全局唯一的运行环境策略，只有用户能改，立即生效</td>
+          <td>① 全局唯一；② 不进会话冻结快照；③ 参数只能由用户调整</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>4.4.1 <code>Session</code></h3>
+    <dl class="kv">
+      <dt>简介</dt><dd>会话族的一个节点。承载"模型能看到的世界"：<code>SystemPromptSnapshot</code> + <code>Record</code> 序列；窗口与用量由 <code>buildContextForLlm()</code> <strong>推导产出，不落库</strong>。</dd>
+      <dt>关联</dt><dd><code>agentId</code>、<code>activeModelId</code>（行动）、<code>parentSessionId</code>（自身）、<code>Record</code>（内部）</dd>
+    </dl>
+
+    <h3>4.4.2 <code>RuntimePolicy</code></h3>
+    <p>单例聚合，装全部"用户可调"的全局参数；规划 / 行动 / 记忆<strong>只读</strong>它。</p>
+    <table>
+      <thead><tr><th>参数组</th><th>参数</th><th>主要消费者</th></tr></thead>
+      <tbody>
+        <tr><td>重试与反思</td><td><code>maxRetries</code>、<code>reflectionThreshold</code>、<code>maxReplanGeneration</code>、<code>maxReActRounds</code></td><td>规划</td></tr>
+        <tr><td>上下文</td><td><code>summarizationTokenThreshold</code>、<code>inputSafetyMargin</code>、<code>contextWindowRecordCount</code>、<code>systemRecordRatioLimit</code>、<code>toolResultTruncateLength</code></td><td>感知（本模块）</td></tr>
+        <tr><td>经验</td><td><code>experienceCapacity</code>、<code>experienceTopN</code>、<code>experiencePerPlan</code>、<code>experienceInitialConfidence</code>、<code>experienceConfidenceStep</code>、<code>experienceRetireThreshold</code></td><td>记忆</td></tr>
+        <tr><td>预算与执行</td><td><code>budgetWarnRatio</code>、<code>subagentExecutionTimeoutMillis</code>、<code>modelFallbackChain</code>、<code>trustedToolIds</code></td><td>行动</td></tr>
+      </tbody>
+    </table>
+
+    <h2><span class="sec">4.5</span>领域服务清单</h2>
+    <table>
+      <thead><tr><th>服务</th><th>简介</th><th>跨模块依赖</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>SessionFactory</code></td>
+          <td>会话的<strong>唯一创建入口</strong>：创建 <code>Session</code> + <code>Budget</code>（会话族根）+ 冻结快照 + 生成标题；也是子代理会话的唯一创建者</td>
+          <td><code>Budget</code>（行动，经应用层/端口）、<code>SystemPromptAssembler</code></td>
+        </tr>
+        <tr>
+          <td><code>SessionTitleGenerator</code></td>
+          <td>用当前会话模型依据首次输入意图生成标题，失败降级为首句截断</td>
+          <td><code>ModelInvocationPort</code>（行动实现）</td>
+        </tr>
+        <tr>
+          <td><code>SystemPromptAssembler</code></td>
+          <td>纯组装：入参是已取好的工具 schema 内容与技能摘要内容，输出 <code>SystemPromptSnapshot</code></td>
+          <td>无（不查任何定义）</td>
+        </tr>
+        <tr>
+          <td><code>ContextWindowService</code></td>
+          <td>上下文计量与折叠：经端口取模型档案 → 算有效上限 → 量测窗口 → 超限则触发摘要并追加 <code>SUMMARY</code>；同时承接行动侧「请求超限」后的<strong>强制折叠一次</strong></td>
+          <td><code>ModelInvocationPort</code>、<code>RuntimePolicy</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2><span class="sec">4.6</span>其他实体 / 值对象</h2>
+    <table>
+      <thead><tr><th>对象</th><th>类型</th><th>简介</th></tr></thead>
+      <tbody>
+        <tr><td><code>Record</code></td><td>Entity（<code>Session</code> 内）</td><td>上下文流水的一条：<code>role</code> 决定它在窗口里的地位；<code>sequence</code> 保证全序</td></tr>
+        <tr><td><code>RecordRole</code></td><td>Enum</td><td>SYSTEM / USER / ASSISTANT / TOOL_REQUEST / TOOL_RESULT / SUMMARY</td></tr>
+        <tr><td><code>ToolResultPayload</code></td><td>VO</td><td>工具结果的附属信息：是否被截断、完整内容的本地归档位置</td></tr>
+        <tr><td><code>SystemPromptSnapshot</code></td><td>VO</td><td>会话开启时冻结的内容快照：渲染后的提示词 + 工具 schema 列表 + 技能摘要列表</td></tr>
+        <tr><td><code>ToolSchemaSnapshot</code></td><td>VO</td><td>工具 schema 的<strong>内容快照</strong>（不是 ID 引用）</td></tr>
+        <tr><td><code>SkillSummarySnapshot</code></td><td>VO</td><td>技能的 <code>name + description</code>（渐进披露的浅层；SOP 正文靠 <code>load_skill</code> 注入）</td></tr>
+        <tr><td><code>ContextWindow</code></td><td>VO</td><td><code>buildContextForLlm()</code> 的产物：真正发给模型的那批记录（已排序）+ 用量</td></tr>
+        <tr><td><code>ContextUsage</code></td><td>VO</td><td>只读投影：<code>usedTokens / inputCeiling / systemTokens / summaryTokens / windowRecordCount</code></td></tr>
+        <tr><td><code>ContextWindowPolicy</code></td><td>VO</td><td>组装策略入参（来自 <code>RuntimePolicy</code> 的两个值）：窗口条数、SYSTEM 占比上限</td></tr>
+        <tr><td><code>ModelProfile</code></td><td>VO</td><td>端口返回的模型档案：<code>maxInputTokens / maxOutputTokens</code>（感知据此算有效上限，<strong>不直接引用 <code>Model</code> 聚合</strong>）</td></tr>
+        <tr><td><code>SessionStatus</code></td><td>Enum</td><td>RUNNING / RESUMABLE / ARCHIVED（进程退出不是状态迁移；删除 = 物理消失）</td></tr>
+        <tr><td><code>ModelInvocationPort</code></td><td>Port</td><td>模型调用的唯一出口（选模型、降级、调用、计 token、提供模型档案）；由【行动】<code>ModelInvoker</code> 实现</td></tr>
+      </tbody>
+    </table>
+
+    <h2><span class="sec">4.7</span>领域事件</h2>
+    <table>
+      <thead><tr><th>事件</th><th>谁发出</th><th>什么时候</th><th>谁关心</th></tr></thead>
+      <tbody>
+        <tr><td><code>SessionCancelled</code></td><td>Session</td><td>用户取消会话</td><td>级联取消子会话</td></tr>
+        <tr><td><code>ModelSwitched</code></td><td>Session</td><td>模型故障、降级策略命中</td><td>审计 / 界面</td></tr>
+        <tr><td><code>SummarizationCompleted</code></td><td>Session</td><td><code>markSummarized()</code> 完成（<code>SUMMARY</code> 已追加，窗口将在下次推导时生效）</td><td>界面 / 审计</td></tr>
+        <tr><td><code>PolicyAdjusted</code></td><td>RuntimePolicy</td><td>用户修改策略成功后</td><td>行动（备用模型链 / 信任清单缓存）、记忆（容量参数）、规划（阈值）</td></tr>
+      </tbody>
+    </table>
+    <p><strong>应用事件</strong>：<code>SummarizationStarted</code>——压缩过程开始，没有聚合状态转换，不属领域事件；用户可据此看到"压缩中"。</p>
+
+    <h2><span class="sec">4.8</span>聚合生命周期与规则</h2>
+
+    <h3>4.8.1 <code>Session</code> 的生命周期</h3>
+    <table>
+      <thead><tr><th>诞生</th><th>变更</th><th>终结</th><th>重建</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>会话开启</strong>（用户发起对话）<br><strong>子代理派遣</strong>（spawn_subagents）</td>
+          <td>迭代中不断追加 Record；上下文折叠；模型降级；取消</td>
+          <td><strong>会话封存</strong>（ARCHIVED，不可续跑）<br><strong>会话销毁</strong>（物理删除）</td>
+          <td><strong>会话续跑</strong>（程序重启后按 sessionId 加载为 RESUMABLE）</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h4>规则清单（12 条）</h4>
+    <ol>
+      <li><strong>唯一创建入口</strong>：只有 <code>SessionFactory</code> 能创建会话；两个触发点——用户发起对话、主会话发起子代理。</li>
+      <li><strong>创建时必须指定</strong> <code>agentId</code> 与 <code>modelId</code>（缺省取默认）；<strong>Agent 在会话内不可切换</strong>，Model 可切换（仅降级）。</li>
+      <li><strong>标题</strong>：由 LLM 依据首次输入的意图生成；失败则用首句截断兜底。</li>
+      <li><strong>快照冻结</strong>：<code>SystemPromptSnapshot</code> 在会话开启时生成并冻结（<strong>内容</strong>快照）；运行中工具/技能定义变更<strong>不影响</strong>进行中的会话。</li>
+      <li><strong>流水只追加</strong>：<code>Record</code> 不得修改；被 <code>Attempt.recordRange</code> 引用的区间<strong>永不删除、永不改写</strong>（本地应用的磁盘控制只能靠归档/导出）。</li>
+      <li><strong>会话树</strong>：<code>parentSessionId</code> 组树；<strong>父会话取消 ⇒ 级联取消所有子会话</strong>；<strong>子代理不得再开子代理</strong>（深度恒为 1）。</li>
+      <li><strong>状态</strong>：RUNNING（在跑）/ RESUMABLE（持久化、未运行）/ ARCHIVED（封存、不可续跑）。<strong>"关终端"不是状态迁移</strong>，只是运行态消失。</li>
+      <li><strong>销毁</strong>：物理删除该会话族的 <code>Record</code>、<code>Plan</code>、<code>Budget</code>；<strong>已沉淀的 <code>Experience</code> 保留</strong>（记忆模块全局资产）。</li>
+      <li><strong>上下文组装</strong>（<code>buildContextForLlm(policy)</code>）为<strong>三步推导 + 一次降级</strong>：
+        ① 取全部 <code>role = SYSTEM</code> 的记录（系统提示词渲染 + SOP 注入 + 工具注入 + 经验注入）；
+        ② 取最新一条 <code>SUMMARY</code> 记录（若有）；
+        ③ 取最近 <code>policy.recordCount</code> 条<strong>非 SYSTEM</strong> 记录；
+        ④ 降级：若 <code>systemTokens / usedTokens &gt; policy.systemRatioLimit</code> ⇒ 只保留系统提示词快照，丢弃 SOP 与工具注入。</li>
+      <li><strong>SYSTEM 类不参与淘汰</strong>：<code>role = SYSTEM</code> 的记录不被第 ③ 步的"最近 n 条"挤出，只能被第 ④ 步<strong>整体</strong>裁剪。</li>
+      <li><strong>可推导状态不落库</strong>：窗口边界与用量都是推导结果，不持久化；会话续跑时重新推导。</li>
+      <li><strong>聚合不依赖配置聚合</strong>：策略以 <code>ContextWindowPolicy</code> <strong>值对象入参</strong>传入，<code>Session</code> 不引用 <code>RuntimePolicy</code>，也不读取任何阈值。</li>
+    </ol>
+
+    <h3>4.8.2 <code>RuntimePolicy</code> 的生命周期</h3>
+    <table>
+      <thead><tr><th>诞生</th><th>变更</th><th>终结</th><th>重建</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>平台初始化</strong>（应用启动载入默认值）</td>
+          <td><strong>策略调整</strong>（用户修改，立即生效）</td>
+          <td>无（应用生命周期内常驻）</td>
+          <td><strong>平台初始化</strong></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h4>规则清单（8 条）</h4>
+    <ol>
+      <li><strong>全局唯一</strong>，只有用户能调整；任何 Agent 都不能覆盖。</li>
+      <li><strong>立即生效、不进会话快照</strong>：与"工具/技能定义、系统提示词在会话开启时冻结"形成对照。</li>
+      <li><strong>反思阈值与最大重试独立配置</strong>：<code>reflectionThreshold &gt; maxRetries</code> ⇒ <strong>永不反思</strong>。</li>
+      <li><strong>唯一硬闸</strong> <code>maxReActRounds</code>：按"自上次用户输入以来的连续轮数"计，用户介入即重置。</li>
+      <li><strong>信任清单</strong>：工具级粒度，语义 = 免审批，<strong>可覆盖不可逆工具</strong>；未命中且工具非只读 ⇒ 执行前放行审批。</li>
+      <li><strong>预算参数</strong>：单位 token、只预警不中断、同一会话族只报一次。</li>
+      <li><strong>变更即通知</strong>：<code>adjust()</code> 成功后 raise <code>PolicyAdjusted</code>，避免其它模块各自缓存常量快照。</li>
+      <li><strong>聚合不变量不依赖自身取值</strong>：策略只改变"外循环选择哪条迁移"，不改变任何聚合的合法状态迁移。</li>
+    </ol>
+
+    <h2><span class="sec">4.9</span>领域服务的具体操作</h2>
+
+    <h3>4.9.1 <code>SessionFactory.start(agentId, modelId, firstInput)</code></h3>
+    <pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant APP as 应用层
+    participant SF as SessionFactory
+    participant S as Session
+    participant SA as SystemPromptAssembler
+    participant TG as SessionTitleGenerator
+    participant PORT as ModelInvocationPort（行动）
+    participant B as Budget（行动）
+
+    APP->>SF: start(agentId, modelId, firstInput)
+    SF->>SF: 解析 agentId / modelId（缺省取默认）
+    SF->>B: 创建 Budget（rootSessionId = 新会话 id）
+    SF->>SA: assemble(AgentSnapshotInput)（内容由调用方取好）
+    SA-->>SF: SystemPromptSnapshot
+    SF->>S: 创建 Session（status = RUNNING，快照冻结）
+    SF->>S: appendRecord(USER, firstInput)
+    SF->>TG: generate(session)
+    TG->>PORT: invoke(标题生成请求)
+    PORT-->>TG: 标题文本（token 已记账）
+    alt 生成失败
+        TG-->>SF: 首句截断兜底
+    end
+    SF->>S: title = 标题
+    SF-->>APP: Session
+    </pre>
+    <p><strong>要点</strong>：<code>Budget</code> 与会话族根<strong>同一时刻</strong>创建；子会话（<code>startSubSession</code>）<strong>不自建</strong> <code>Budget</code>，沿 <code>parentSessionId</code> 上溯到根。</p>
+
+    <h3>4.9.2 <code>ContextWindowService.ensureWithinLimit(session)</code></h3>
+    <p>阻塞式地保证本次模型调用前上下文不超限；必要时折叠。</p>
+    <pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant APP as 外循环 / 内循环
+    participant CW as ContextWindowService
+    participant RP as RuntimePolicy
+    participant PORT as ModelInvocationPort（行动）
+    participant S as Session
+
+    APP->>CW: ensureWithinLimit(session)
+    CW->>RP: summarizationTokenThreshold / contextWindowRecordCount / systemRecordRatioLimit
+    CW->>PORT: describe(activeModelId) 取模型档案
+    CW->>CW: inputCeiling = min(策略阈值, maxInputTokens − inputSafetyMargin)
+    CW->>S: buildContextForLlm(ContextWindowPolicy)
+    S-->>CW: ContextWindow（窗口记录 + ContextUsage）
+    alt usage.usedTokens ≤ inputCeiling
+        CW-->>APP: 直接返回
+    else 超限
+        CW-->>APP: 应用事件 SummarizationStarted（界面显示“压缩中”）
+        CW->>CW: 选出窗口外的旧记录作为待摘要区间
+        CW->>PORT: invoke(摘要请求)&lt;br/>提示词不进 Record
+        PORT-->>CW: 摘要文本（token 记账到会话族根）
+        CW->>S: markSummarized(summary)
+        S->>S: appendRecord(SUMMARY)
+        S-->>CW: raise SummarizationCompleted
+        CW-->>APP: 返回（下一次推导即得到新窗口）
+    end
+    </pre>
+
+    <h4>要点（8 条）</h4>
+    <ol>
+      <li><strong>压缩阻塞</strong>：期间不发起新的模型调用（摘要那一次除外）。</li>
+      <li><strong>摘要提示词用户不可见</strong>、且<strong>不进 <code>Record</code></strong>；用户只能看到压缩状态与压缩结果（<code>SUMMARY</code> 记录）。</li>
+      <li>摘要由<strong>当前会话模型</strong>生成，token 记到<strong>会话族根</strong>。</li>
+      <li><strong>不存在"滑窗"这个动作</strong>：窗口由 <code>buildContextForLlm()</code> 每次推导，追加 <code>SUMMARY</code> 后自然生效；SYSTEM 占比在推导的第 ④ 步处理。</li>
+      <li><strong>有效上限</strong> = <code>min(summarizationTokenThreshold, maxInputTokens − inputSafetyMargin)</code>（<code>inputSafetyMargin</code> 默认 <strong>10000</strong>）。语义是"<strong>安全余量</strong>"（抵御估算偏差、系统提示临时插入），<strong>不是输出预留</strong>——输入与输出是两个独立上限（<code>maxOutputTokens</code> 单独生效）。</li>
+      <li><strong>计量口径唯一</strong>：本服务不自己实现 tokenizer，一律经 <code>ModelInvocationPort</code> 计量，保证与真实计费一致。</li>
+      <li><strong>用量随请求传下去</strong>：推导出的 <code>ContextUsage.usedTokens</code> 由调用方填入 <code>ModelInvocationRequest.estimatedPromptTokens</code>，供行动侧硬校验；<strong>行动不得反向回查 <code>Session</code></strong>。</li>
+      <li><strong>承接"请求超限"的补充折叠</strong>：行动 <code>ModelInvoker</code> 抛「请求超限」时，外循环调本服务<strong>强制折叠一次</strong>再重试；<strong>不消耗重试名额</strong>；仍超限则同"模型不可用"返回并提示。</li>
+    </ol>
+
+    <h3>4.9.3 <code>SystemPromptAssembler.assemble(AgentSnapshotInput)</code></h3>
+    <pre class="mermaid">
+flowchart TD
+    A[入参：agentId + 已解析的工具 schema 内容 + 技能摘要内容] --> B{工具/技能&lt;br/>是否全部 ACTIVE?}
+    B -- 否 --> C[排除非 ACTIVE 项]
+    B -- 是 --> D[保持全量]
+    C --> E{SOP 引用的工具&lt;br/>是否都在绑定内?}
+    D --> E
+    E -- 否 --> F[一致性告警：提示词不得出现未绑定工具]
+    E -- 是 --> G[渲染 basePrompt]
+    F --> G
+    G --> H[组装 ToolSchemaSnapshot 列表]
+    H --> I[组装 SkillSummarySnapshot 列表&lt;br/>仅 name + description]
+    I --> J[输出 SystemPromptSnapshot]
+    </pre>
+    <p><strong>要点</strong>：只做<strong>组装</strong>，不查任何定义——这样感知模块对行动 / 记忆零实现依赖；非 <code>ACTIVE</code> 的工具 / 技能不进入快照。</p>
+
+    <h3>4.9.4 <code>SessionTitleGenerator.generate(session)</code></h3>
+    <pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant SF as SessionFactory
+    participant TG as SessionTitleGenerator
+    participant PORT as ModelInvocationPort（行动）
+
+    SF->>TG: generate(session)
+    TG->>TG: 取首条 USER 记录
+    TG->>PORT: invoke(标题生成请求，当前会话模型)
+    PORT-->>TG: 标题（或失败）
+    alt 失败或超长
+        TG-->>SF: 首句截断兜底
+    else 成功
+        TG-->>SF: 标题
+    end
+    </pre>
+
+    <h3>4.9.5 <code>Session.buildContextForLlm(policy) → ContextWindow</code></h3>
+    <p>把"记录流水"推导为"本次发给模型的窗口 + 用量"。它是<strong>纯函数式的推导行为</strong>：不改状态、不落库、不读配置聚合。</p>
+    <pre class="mermaid">
+flowchart TD
+    A[入参：ContextWindowPolicy] --> B[① 取全部 role=SYSTEM 记录&lt;br/>系统提示词渲染 / SOP 注入 / 工具注入 / 经验注入]
+    B --> C[② 取最新一条 SUMMARY 记录（若有）]
+    C --> D[③ 取最近 policy.recordCount 条&lt;br/>非 SYSTEM 记录]
+    D --> E[④ 计算 usedTokens / systemTokens / summaryTokens]
+    E --> F{systemTokens / usedTokens&lt;br/>&gt; policy.systemRatioLimit ?}
+    F -- 否 --> H[输出 ContextWindow]
+    F -- 是 --> G[退化为：只保留系统提示词快照&lt;br/>丢弃 SOP 与工具注入] --> H
+    </pre>
+
+    <h4>四条 DDD 约束</h4>
+    <table>
+      <thead><tr><th>约束</th><th>体现</th></tr></thead>
+      <tbody>
+        <tr><td>聚合方法不读其它聚合</td><td>策略以 <code>ContextWindowPolicy</code> <strong>值对象入参</strong>传入，<code>Session</code> 不引用 <code>RuntimePolicy</code></td></tr>
+        <tr><td>可推导状态不落库</td><td>窗口边界与用量不持久化，续跑时重算</td></tr>
+        <tr><td>值对象不可变</td><td><code>ContextWindow</code> / <code>ContextUsage</code> / <code>ContextWindowPolicy</code> 生成后不可改</td></tr>
+        <tr><td>无副作用</td><td>只读 <code>records</code> 与入参，不改任何聚合状态；摘要写入由 <code>markSummarized()</code> 单独完成</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <div class="ct">与折叠的分工（不要混）</div>
+      <p><code>buildContextForLlm</code> 只负责"算"；<code>ContextWindowService</code> 负责"决定要不要折"；<code>Session.markSummarized()</code> 负责"把摘要写进流水"。</p>
+    </div>
+
+
+    <h2><span class="sec">附</span>生命周期节点词表（全站统一）</h2>
+    <p>四份模块文档共用同一套节点词汇，便于横向对照；"节点 → 涉及聚合"的完整对照表见 <a href="03-overview.html">第 3 章 3.8</a>。</p>
+    <table>
+      <thead><tr><th>节点</th><th>含义</th></tr></thead>
+      <tbody>
+        <tr><td><strong>平台初始化</strong></td><td>应用启动：载入 <code>RuntimePolicy</code>，播种内置 Agent / 内置工具 / 内置技能</td></tr>
+        <tr><td><strong>策略调整</strong></td><td>用户修改 <code>RuntimePolicy</code>，立即生效</td></tr>
+        <tr><td><strong>会话开启</strong></td><td>创建 <code>Session</code> + <code>Budget</code>（会话族根）+ 冻结提示词快照 + 生成标题</td></tr>
+        <tr><td><strong>会话续跑</strong></td><td>程序重启后 resume：加载 <code>Session</code> / <code>Plan</code> / <code>Budget</code>；半截工具调用视为失败</td></tr>
+        <tr><td><strong>子代理派遣</strong></td><td><code>spawn_subagents</code> 内部创建完整子会话</td></tr>
+        <tr><td><strong>计划诞生</strong></td><td><code>PlanFactory</code> 创建 <code>Plan</code>（并触发经验分配）</td></tr>
+        <tr><td><strong>步骤启动</strong></td><td>取当前 step，创建 <code>Attempt</code>（开区间）</td></tr>
+        <tr><td><strong>步骤提交验收</strong></td><td><code>submit_step</code> → 触发验证 / 或免验证直接完成</td></tr>
+        <tr><td><strong>步骤固化 / 判败 / 中断</strong></td><td>step 的三种结束：<code>SUCCEEDED</code> / <code>FAILED</code> / <code>INTERRUPTED</code></td></tr>
+        <tr><td><strong>步骤重试</strong></td><td>失败后新建 <code>Attempt</code>；达阈值则产生 <code>Reflection</code></td></tr>
+        <tr><td><strong>计划重划</strong></td><td><code>replanGeneration + 1</code>，未执行 step 置 <code>SUPERSEDED</code> 并重新分配经验</td></tr>
+        <tr><td><strong>计划完结</strong></td><td><code>COMPLETED</code> / <code>FAILED</code>，触发经验沉淀</td></tr>
+        <tr><td><strong>上下文折叠</strong></td><td>token 超阈值 → 生成 <code>SUMMARY</code> → 窗口收窄</td></tr>
+        <tr><td><strong>模型降级</strong></td><td>故障命中备用模型链</td></tr>
+        <tr><td><strong>会话封存 / 会话销毁</strong></td><td>归档（不可 resume）/ 物理删除（连带 <code>Record</code> / <code>Plan</code> / <code>Budget</code>，经验保留）</td></tr>
+      </tbody>
+    </table>
+
+    <div class="page-foot" id="pagenav"></div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
