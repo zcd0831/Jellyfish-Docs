@@ -8,7 +8,9 @@
     { href: '04-perception.html',num: '4', title: '感知模块' },
     { href: '05-action.html',    num: '5', title: '行动模块' },
     { href: '06-planning.html',  num: '6', title: '规划模块' },
-    { href: '07-memory.html',    num: '7', title: '记忆模块' }
+    { href: '07-memory.html',    num: '7', title: '记忆模块' },
+    { href: '08-application.html', num: '8', title: '应用层' },
+    { href: '09-infrastructure.html', num: '9', title: '基础设施层' }
   ];
 
   const here = (location.pathname.split('/').pop() || 'index.html');
