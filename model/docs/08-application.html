@@ -468,21 +468,21 @@ sequenceDiagram
     participant HI as HumanInteractionPort
 
     alt 取消
-        UI->>U4: cancel(sessionId)
-        U4->>C: cancel()（唤醒阻塞中的 ask / join）
-        U4->>CS: stageReplace(meta：CANCELLED)；stageReplace(plan 中 RUNNING 的 attempt → INTERRUPTED)；commit
-        U4->>EP: publishAfterCommit(SessionCancelled)
-        Note over U4: 级联取消所有子会话（同一事务内逐个 replace meta）
+        UI-&gt;&gt;U4: cancel(sessionId)
+        U4-&gt;&gt;C: cancel()（唤醒阻塞中的 ask / join）
+        U4-&gt;&gt;CS: stageReplace(meta：RESUMABLE)；stageReplace(plan 中 RUNNING 的 attempt → INTERRUPTED)；commit
+        U4-&gt;&gt;EP: publishAfterCommit(SessionCancelled)
+        Note over U4: 级联取消所有子会话（同一事务内逐个 replace meta）；运行中的循环由外壳用取消令牌打断
     else 归档
-        UI->>U4: archive(sessionId)
-        U4->>R: archive(sessionId)（目录移动到 archive/，只读）
+        UI-&gt;&gt;U4: archive(sessionId)
+        U4-&gt;&gt;R: archive(sessionId)（目录移动到 archive/，只读）
         Note over U4: 不 raise 事件，不可 resume
     else 删除
-        UI->>U4: delete(sessionId)
-        U4->>R: delete(sessionId)（递归删除目录，含 records/plans/reports/artifacts/budget）
+        UI-&gt;&gt;U4: delete(sessionId)
+        U4-&gt;&gt;R: delete(sessionId)（递归删除目录，含 records/plans/reports/artifacts/budget）
         Note over U4: experience/ 与 skills/ 不受影响；需外壳先做二次确认
     end
-    </pre>
+        </pre>
 
     <h3>8.9.5 <code>AdjustPolicyUseCase.adjust(changes)</code></h3>
     <pre class="mermaid">
