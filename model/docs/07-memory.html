@@ -54,7 +54,7 @@
 classDiagram
     namespace 经验聚合 {
         class Experience {
-            &lt;&lt;AggregateRoot>>
+            &lt;&lt;AggregateRoot&gt;&gt;
             +ExperienceId id
             +String applicableScenario
             +LessonLearned lesson
@@ -68,16 +68,16 @@ classDiagram
             +mergeWith(Experience other)
         }
         class LessonLearned {
-            &lt;&lt;ValueObject>>
+            &lt;&lt;ValueObject&gt;&gt;
             +String instruction
             +String expectedOutcome
         }
         class ConfidenceScore {
-            &lt;&lt;ValueObject>>
+            &lt;&lt;ValueObject&gt;&gt;
             +double value
         }
         class ExperienceStatus {
-            &lt;&lt;Enumeration>>
+            &lt;&lt;Enumeration&gt;&gt;
             ACTIVE
             ARCHIVED
         }
@@ -85,7 +85,7 @@ classDiagram
 
     namespace 反思 {
         class Reflection {
-            &lt;&lt;AggregateRoot>>
+            &lt;&lt;AggregateRoot&gt;&gt;
             +ReflectionId id
             +PlanId planId
             +StepId stepId
@@ -97,7 +97,7 @@ classDiagram
 
     namespace 技能聚合 {
         class SkillDefinition {
-            &lt;&lt;AggregateRoot>>
+            &lt;&lt;AggregateRoot&gt;&gt;
             +SkillId id
             +String name
             +String description
@@ -110,13 +110,13 @@ classDiagram
             +renderDetailedSop(Map) String
         }
         class InstructionTemplate {
-            &lt;&lt;ValueObject>>
+            &lt;&lt;ValueObject&gt;&gt;
             +String rawMarkdown
             +List~String~ variables
             +render(Map) String
         }
         class SkillStatus {
-            &lt;&lt;Enumeration>>
+            &lt;&lt;Enumeration&gt;&gt;
             DRAFT
             ACTIVE
             DEPRECATED
@@ -125,37 +125,42 @@ classDiagram
 
     namespace 领域服务 {
         class ExperienceRetriever {
-            &lt;&lt;ApplicationService>>
-            +retrieveAndAssign(RetrievalInput) Assignment
+            &lt;&lt;ApplicationService&gt;&gt;
+            +retrieveAndAssign(RetrievalInput) Map~StepId, List~ExperienceId~~
         }
         class ExperienceDistillationService {
-            &lt;&lt;ApplicationService>>
+            &lt;&lt;ApplicationService&gt;&gt;
             +distill(DistillationInput) void
         }
         class ExperienceFeedbackService {
-            &lt;&lt;ApplicationService>>
+            &lt;&lt;ApplicationService&gt;&gt;
             +onStepSucceeded(FeedbackInput) void
             +onStepFailed(FeedbackInput) void
         }
         class SkillSopProvider {
-            &lt;&lt;InfrastructureAdapter>>
+            &lt;&lt;InfrastructureAdapter&gt;&gt;
             +sop(String skillId) String
         }
         class RetrievalInput {
-            &lt;&lt;ValueObject>>
+            &lt;&lt;ValueObject&gt;&gt;
             +PlanId planId
             +List~StepBrief~ steps
         }
+        class StepBrief {
+            &lt;&lt;ValueObject&gt;&gt;
+            +StepId stepId
+            +String description
+        }
         class DistillationInput {
-            &lt;&lt;ValueObject>>
+            &lt;&lt;ValueObject&gt;&gt;
             +PlanId planId
             +SessionId sessionId
             +String goal
-            +PlanOutcome outcome
+            +PlanStatus outcome
             +List~StepTrace~ stepTraces
         }
         class StepTrace {
-            &lt;&lt;ValueObject>>
+            &lt;&lt;ValueObject&gt;&gt;
             +StepId stepId
             +String description
             +StepStatus outcome
@@ -165,13 +170,13 @@ classDiagram
             +String reflectionConclusion
         }
         class FeedbackInput {
-            &lt;&lt;ValueObject>>
+            &lt;&lt;ValueObject&gt;&gt;
             +StepId stepId
             +List~ExperienceId~ injectedExperienceIds
             +List~ExperienceId~ suggestedExperienceIds
         }
         class RecordRange {
-            &lt;&lt;ValueObject>>
+            &lt;&lt;ValueObject&gt;&gt;
             +RecordId startRecordId
             +RecordId endRecordId
         }
@@ -190,23 +195,23 @@ classDiagram
 
     Experience *-- LessonLearned
     Experience *-- ConfidenceScore
-    Experience --> ExperienceStatus
+    Experience --&gt; ExperienceStatus
 
     SkillDefinition *-- InstructionTemplate
-    SkillDefinition --> SkillStatus
+    SkillDefinition --&gt; SkillStatus
 
-    ExperienceRetriever ..> Experience : 筛选 / 分配
-    ExperienceDistillationService ..> Experience : 创建 / 合并
-    ExperienceDistillationService ..> Reflection : 只读素材
-    ExperienceFeedbackService ..> Experience : reinforce / penalize
+    ExperienceRetriever ..&gt; Experience : 筛选 / 分配
+    ExperienceDistillationService ..&gt; Experience : 创建 / 合并
+    ExperienceDistillationService ..&gt; Reflection : 只读素材
+    ExperienceFeedbackService ..&gt; Experience : reinforce / penalize
 
-    SkillSopProvider ..> SkillDefinition
+    SkillSopProvider ..&gt; SkillDefinition
 
-    Experience ..> ExperienceCreated : raises
-    Experience ..> ExperienceReinforced : raises
-    Experience ..> ExperiencePenalized : raises
-    Reflection ..> ReflectionRecorded : raises
-    </pre>
+    Experience ..&gt; ExperienceCreated : raises
+    Experience ..&gt; ExperienceReinforced : raises
+    Experience ..&gt; ExperiencePenalized : raises
+    Reflection ..&gt; ReflectionRecorded : raises
+        </pre>
     <p class="diagram-note">图 7-1　记忆模块总览</p>
 
     <h2><span class="sec">7.3</span>对象操作图</h2>

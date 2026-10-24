@@ -551,12 +551,17 @@ classDiagram
             -PlanId planId
             -List~StepBrief~ steps
         }
+        class StepBrief {
+            &lt;&lt;ValueObject&gt;&gt;
+            -StepId stepId
+            -String description
+        }
         class DistillationInput {
             &lt;&lt;ValueObject&gt;&gt;
             -PlanId planId
             -SessionId sessionId
             -String goal
-            -PlanOutcome outcome
+            -PlanStatus outcome
             -List~StepTrace~ stepTraces
         }
         class StepTrace {
