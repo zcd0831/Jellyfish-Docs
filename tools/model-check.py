@@ -43,8 +43,6 @@ PENDING_CLASSES = {
 }
 PENDING = {
     "RuntimePolicy": ["adjust"],                      # S5 策略调整
-    "StartSessionUseCase": ["startSubSession"],       # S3 子代理
-    "BudgetService": ["settleFromSubSession"],        # S3 子会话结算
     "Experience": ["reinforce", "penalize", "archive", "mergeWith"],   # S4 经验闭环
     "SkillDefinition": ["updateSop", "renderDetailedSop"],             # S5 技能
     "InstructionTemplate": ["render"],                                 # S5 技能

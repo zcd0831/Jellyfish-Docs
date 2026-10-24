@@ -265,6 +265,7 @@ flowchart LR
         <tr><td><code>GeneratePlanHandler</code></td><td><code>generate_plan</code> 的处理器：草案校验通过才建计划，失败转工具错误结果</td><td><code>PlanFactory</code>、<code>PlanRepository</code>、<code>CommitScope</code></td></tr>
         <tr><td><code>InternalToolHandlers</code></td><td>内置工具处理器注册表（按工具 id 索引），由 <code>ToolExecutor</code> 分发</td><td><code>InternalToolHandler</code></td></tr>
         <tr><td><code>EnvironmentFeedbackVerifier</code></td><td>验证第二层（<code>ENV_FEEDBACK</code>）的钩子：校验外部系统返回；未配置时返回 <code>UNDETERMINED</code></td><td><code>VerificationRunner</code></td></tr>
+        <tr><td><code>SpawnSubagentsHandler</code></td><td><code>spawn_subagents</code> 的处理器：<strong>拒绝子会话再开子代理</strong>，解析请求后交给启动器</td><td><code>SubagentLauncher</code></td></tr>
       </tbody>
     </table>
 

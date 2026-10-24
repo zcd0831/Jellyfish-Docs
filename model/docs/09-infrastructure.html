@@ -236,6 +236,7 @@ status: active
     open(path, APPEND)
     write(line + "\n")
     fsync(path)                 # 单写者保证不交错</code></pre>
+    <p>同一路径的写入按目标路径串行化：子代理并行改同一个 <code>budget.json</code>、或在同一 <code>sub/</code> 下建目录时，不会互相覆盖临时文件或撞"目录已存在"。</p>
     <p><code>FileCommitScope.commit()</code> 的固定顺序：</p>
     <pre><code>① 所有 stageFact   → 原子写（只新建，若已存在则跳过，幂等）
 ② 所有 stageAppend → 追加 + fsync
