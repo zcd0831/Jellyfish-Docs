@@ -400,6 +400,7 @@ flowchart LR
     <h3>5.4.2 <code>Provider</code> / <code>Model</code></h3>
     <ul>
       <li>凭据只在 <code>Provider</code>；<code>Model</code> 通过 <code>providerId</code> 关联。</li>
+        <li><strong><code>protocol</code> 决定线协议</strong>：<code>OPENAI_CHAT</code>（缺省；OpenAI / DeepSeek / Kimi / MiniMax 等兼容端点）、<code>ANTHROPIC_MESSAGES</code>、<code>GEMINI</code>。厂商差异（baseUrl、模型名）是<strong>数据</strong>，协议差异是<strong>适配器</strong>——新增厂商只加 <code>providers/*.json</code>，不改代码。</li>
       <li><code>capabilities</code> 的<strong>唯一消费者是 LLM</strong>：<code>spawn_subagents</code> 指定子代理模型时，按能力匹配（如需要 vision / function calling）。</li>
       <li>模型故障 → <code>ModelInvoker</code> 按 <code>RuntimePolicy.modelFallbackChain</code> 自动降级，并让 <code>Session.switchModel()</code> raise <code>ModelSwitched</code>。</li>
     </ul>
@@ -414,7 +415,8 @@ flowchart LR
     <h3>5.4.4 <code>Budget</code></h3>
     <ul>
       <li>单位 <strong>token</strong>，不换算金额。</li>
-      <li><strong>只预警、不中断</strong>：达到 <code>budgetWarnRatio</code> → 外循环经 <code>ask_user</code> 询问是否继续；同一会话族只报一次。</li>
+      <li><strong>只预警、不中断</strong>：达到 <code>budgetWarnRatio</code> → 外循环经 <code>ask_user</code> 询问是否继续；同一会话族只报一次。<br/>
+          <code>budgetLimitTokens</code> 是会话族的<strong>总额度</strong>（token，用户可调），<code>budgetWarnRatio</code> 是它的百分比——两者缺一不可，否则"越过 80%"没有分母。</li>
       <li>并发（<code>spawn_subagents</code>）：子会话<strong>本地累计</strong>，结束后 <code>settleFromSubSession</code> 一次性归集到根。</li>
     </ul>
 
@@ -456,12 +458,16 @@ flowchart LR
         <tr><td><code>ContextLimit</code></td><td>VO</td><td><code>maxInputTokens / maxOutputTokens</code>。<strong>语义：两个上限相互独立</strong>，输入上限与输出无关；若某供应商实为"共享窗口"，则在配置 <code>maxInputTokens</code> 时自行扣除常用输出预算来适配</td></tr>
         <tr><td><code>ModelCapability</code></td><td>VO</td><td>能力标签，供 LLM 选模型时匹配</td></tr>
         <tr><td><code>ProviderStatus</code> / <code>ModelStatus</code></td><td>Enum</td><td>ACTIVE / DEPRECATED</td></tr>
+        <tr><td><code>ChatProtocol</code></td><td>Enum</td><td><code>OPENAI_CHAT / ANTHROPIC_MESSAGES / GEMINI</code>：<code>Provider</code> 上的线协议选择；缺省 <code>OPENAI_CHAT</code>（枚举按名字存，新增常量无需迁移）</td></tr>
         <tr><td><code>PromptTemplate</code></td><td>VO</td><td>基础提示词模板 + 变量</td></tr>
         <tr><td><code>AgentSource</code></td><td>Enum</td><td>USER_DEFINED / BUILT_IN</td></tr>
         <tr><td><code>AgentStatus</code></td><td>Enum</td><td>DRAFT / ACTIVE / DEPRECATED</td></tr>
         <tr><td><code>ToolExecOutcome</code></td><td>VO</td><td>工具执行结果：内容、是否截断、完整内容归档位置（<strong>无 isSuccess</strong>：失败也是一种结果）</td></tr>
-        <tr><td><code>ModelInvocationRequest</code></td><td>VO</td><td>端口入参：目标模型（或"当前会话模型"）、消息列表、<code>estimatedPromptTokens</code>、能力需求（可选）</td></tr>
-        <tr><td><code>ModelInvocationResult</code></td><td>VO</td><td>端口出参：文本 + usage（token 用量）</td></tr>
+        <tr><td><code>ModelInvocationRequest</code></td><td>VO</td><td>端口入参：目标模型（或"当前会话模型"）、<code>systemPrompt</code>、<code>ChatMessage</code> 列表、<strong>可用工具 schema 快照</strong>（<code>List&lt;ToolSchemaSnapshot&gt;</code>，来自会话冻结快照）、<code>estimatedPromptTokens</code>、能力需求（可选）</td></tr>
+        <tr><td><code>ModelInvocationResult</code></td><td>VO</td><td>端口出参：文本 + 本次的工具调用请求 + <code>ModelUsage</code> + <strong>实际服务的模型</strong>（降级后可被调用方据此 <code>switchModel</code>）</td></tr>
+        <tr><td><code>ChatMessage</code></td><td>VO</td><td>一条对话消息：<code>role</code>（复用 <code>RecordRole</code>）、<code>content</code>、模型请求的工具调用（ASSISTANT）、<code>toolCallId</code>（TOOL_RESULT 回填用）</td></tr>
+        <tr><td><code>ToolCall</code></td><td>VO</td><td>模型请求的一次工具调用：<code>callId</code>（协议侧 id，用于回灌结果）、<code>name</code>、<code>argumentsJson</code></td></tr>
+        <tr><td><code>ModelUsage</code></td><td>VO</td><td>一次调用的精确用量：<code>inputTokens</code> / <code>outputTokens</code>（D08 台账口径；厂商不给时由 <code>TokenCounter</code> 估算）</td></tr>
         <tr><td><code>ExternalToolPort</code></td><td>Port</td><td>REST / MCP / NATIVE 出站调用；由基础设施实现</td></tr>
         <tr><td><code>ModelInvocationPort</code></td><td>Port</td><td>模型调用端口；由 <code>ModelInvoker</code> 实现</td></tr>
       </tbody>
@@ -632,6 +638,9 @@ sequenceDiagram
     <ol>
       <li><strong>用量随请求下行</strong>：<code>estimatedPromptTokens</code> 由调用方填入 <code>ModelInvocationRequest</code>；<strong>执行器不得回查 <code>Session</code></strong>（<code>Session</code> 不知道 <code>contextLimit</code>，回查还会破坏单向依赖）。</li>
       <li><strong>记账在调用方</strong>：<code>ModelInvoker</code> 只返回 <code>usage</code>，由调用方交给 <code>BudgetService</code> —— 否则会出现"基础设施 → 应用层"的反向依赖。</li>
+      <li><strong>系统提示词独立于消息列表</strong>：<code>systemPrompt</code> 由调用方（<code>ReActLoop</code> / <code>ContextWindowService</code> / <code>SessionTitleGenerator</code>）从窗口推导后填入，不进 <code>messages</code>；<strong>工具清单同理</strong>：<code>tools</code> 取自 <code>SystemPromptSnapshot.toolList</code>（会话开启时冻结），执行器<strong>不得</strong>现查目录；落到各家协议里的差异（OpenAI 用首条 <code>role=system</code>、Anthropic 用顶层 <code>system</code>、Gemini 用 <code>systemInstruction</code>）由基础设施适配器吸收（见 D16）。</li>
+      <li><strong>端口失败用上下文错误码表达</strong>：<code>ModelInvoker</code> 失败时抛 <code>ModelInvocationException(ModelError)</code>，错误码取 <code>M_*</code>；调用方据此区分"不可用"（不改状态）与"请求超限"（补折一次）。</li>
+      <li><strong>降级后由调用方切换会话模型</strong>：<code>ModelInvocationResult.servedModelId</code> 指出实际服务的模型；与请求的目标模型不同 ⇒ 调用方调 <code>Session.switchModel(...)</code> 让聚合 raise <code>ModelSwitched</code>（<code>ModelInvoker</code> 不碰聚合）。</li>
     </ol>
 
     <h3>5.9.3 模型不可用与请求超限（口径在此，处理在应用层）</h3>

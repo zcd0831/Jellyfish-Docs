@@ -363,6 +363,7 @@ flowchart LR
         <tr><td><code>ContextWindow</code></td><td>VO</td><td><code>buildContextForLlm()</code> 的产物：真正发给模型的那批记录（已排序）+ 用量</td></tr>
         <tr><td><code>ContextUsage</code></td><td>VO</td><td>只读投影：<code>usedTokens / inputCeiling / systemTokens / summaryTokens / windowRecordCount</code></td></tr>
         <tr><td><code>ContextWindowPolicy</code></td><td>VO</td><td>组装策略入参（来自 <code>RuntimePolicy</code> 的两个值）：窗口条数、SYSTEM 占比上限</td></tr>
+        <tr><td><code>AgentSnapshotInput</code></td><td>VO</td><td><code>SystemPromptAssembler</code> 的入参：<code>agentId</code>、<code>basePrompt</code>、<code>promptVariables</code>、<strong>已过滤 <code>ACTIVE</code></strong> 的 <code>activeTools</code> / <code>activeSkills</code>、<code>sopReferencedToolNames</code>（一致性告警用，本期恒空）</td></tr>
         <tr><td><code>ModelProfile</code></td><td>VO</td><td>端口返回的模型档案：<code>maxInputTokens / maxOutputTokens</code>（感知据此算有效上限，<strong>不直接引用 <code>Model</code> 聚合</strong>）</td></tr>
         <tr><td><code>SessionStatus</code></td><td>Enum</td><td>RUNNING / RESUMABLE / ARCHIVED（进程退出不是状态迁移；删除 = 物理消失）</td></tr>
         <tr><td><code>ModelInvocationPort</code></td><td>Port</td><td>模型调用的唯一出口（选模型、降级、调用、计 token、提供模型档案）；由【行动】<code>ModelInvoker</code> 实现</td></tr>
@@ -407,13 +408,14 @@ flowchart LR
       <li><strong>状态</strong>：RUNNING（在跑）/ RESUMABLE（持久化、未运行）/ ARCHIVED（封存、不可续跑）。<strong>"关终端"不是状态迁移</strong>，只是运行态消失。</li>
       <li><strong>销毁</strong>：物理删除该会话族的 <code>Record</code>、<code>Plan</code>、<code>Budget</code>；<strong>已沉淀的 <code>Experience</code> 保留</strong>（记忆模块全局资产）。</li>
       <li><strong>上下文组装</strong>（<code>buildContextForLlm(policy)</code>）为<strong>三步推导 + 一次降级</strong>：
-        ① 取全部 <code>role = SYSTEM</code> 的记录（系统提示词渲染 + SOP 注入 + 工具注入 + 经验注入）；
+        ① 取全部 <code>role = SYSTEM</code> 的记录（<strong>运行期注入</strong>：SOP 注入 + 工具注入 + 经验注入）；经验注入由外循环在<strong>步骤启动前</strong>写一条带 <code>step=&lt;id&gt;</code> 标记的 SYSTEM 记录，正文来自 <code>ExperienceRepository.find(id)</code>，同一步只注入一次；系统提示词来自 <code>SystemPromptSnapshot</code>，<strong>不落 <code>Record</code></strong>，由调用方作为 <code>systemPrompt</code> 单独传给模型；
         ② 取最新一条 <code>SUMMARY</code> 记录（若有）；
         ③ 取最近 <code>policy.recordCount</code> 条<strong>非 SYSTEM</strong> 记录；
         ④ 降级：若 <code>systemTokens / usedTokens &gt; policy.systemRatioLimit</code> ⇒ 只保留系统提示词快照，丢弃 SOP 与工具注入。</li>
       <li><strong>SYSTEM 类不参与淘汰</strong>：<code>role = SYSTEM</code> 的记录不被第 ③ 步的"最近 n 条"挤出，只能被第 ④ 步<strong>整体</strong>裁剪。</li>
       <li><strong>可推导状态不落库</strong>：窗口边界与用量都是推导结果，不持久化；会话续跑时重新推导。</li>
-      <li><strong>聚合不依赖配置聚合</strong>：策略以 <code>ContextWindowPolicy</code> <strong>值对象入参</strong>传入，<code>Session</code> 不引用 <code>RuntimePolicy</code>，也不读取任何阈值。</li>
+      <li><strong>聚合不依赖配置聚合</strong>：策略以 <code>ContextWindowPolicy</code> <strong>值对象入参</strong>传入，<code>Session</code> 不引用 <code>RuntimePolicy</code>，也不读取任何阈值。</li></li>
+      <li><strong>系统提示词与流水分离</strong>：基础提示词只存在于 <code>SystemPromptSnapshot</code>（会话开启时冻结），<code>SYSTEM</code> 记录只承载运行期注入（<code>load_skill</code> 的 SOP、工具/经验注入）；发给模型时前者走 <code>systemPrompt</code>、后者并入同一 <code>system</code> 字段，二者都不进 <code>messages</code>。第 ④ 步降级只保留快照，即丢弃全部注入。
     </ol>
 
     <h3>4.8.2 <code>RuntimePolicy</code> 的生命周期</h3>

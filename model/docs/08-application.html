@@ -279,6 +279,10 @@ flowchart LR
         <tr><td><code>PlanCreationException</code></td><td><code>generate_plan</code> 草案不合法时抛出（携带 <code>P_INVALID_PLAN</code>），由处理器转成工具错误结果</td></tr>
         <tr><td><code>ModelInvocationException</code></td><td>端口失败时抛出，携带上下文自己的 <code>DomainError</code>（<code>M_*</code>）</td></tr>
         <tr><td><code>Json</code> / <code>JsonText</code></td><td>应用层自带的极简 JSON 解析与转义：<strong>不引 JSON 库</strong>（D02 的模块边界）</td></tr>
+        <tr><td><code>RunSessionProvider</code></td><td>延迟取 <code>RunSessionUseCase</code>：子代理启动器 → 用例 → 外循环 → 内循环 → 工具执行 → 启动器 是构造环，用"取的时候才要"打断它（应用层不引容器类型）</td></tr>
+        <tr><td><code>Approvals</code></td><td>人工审批的判定：<strong>先看否定再看肯定</strong>（"不同意"里含着"同意"），工具放行与结果验收共用</td></tr>
+        <tr><td><code>TechnicalLog</code></td><td>技术事件出口（事件名 + 耗时 + key=value 字段），实现由基础设施注入；应用层不引日志库</td></tr>
+        <tr><td><code>LoadSkillHandler</code></td><td><code>load_skill</code> 的处理器：取 SOP 文本；注入为 <code>SYSTEM</code> 记录是内循环的职责</td></tr>
       </tbody>
     </table>
     <blockquote><p><code>ProgressEvent</code> 是 <code>ProgressPort</code> 的入参值对象（<code>Kind</code> + <code>message</code>），面向界面、可丢弃，不属于领域事实。</p></blockquote>
