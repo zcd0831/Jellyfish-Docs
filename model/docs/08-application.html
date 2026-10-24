@@ -489,18 +489,19 @@ sequenceDiagram
         </pre>
 
     <h3><span class="sec">8.9.4.1</span>取消令牌怎么到阻塞点</h3>
-    <p>外壳创建并持有唯一实现（本期 <code>ShellCancellationToken</code>）；<code>ManageSessionUseCase.cancel</code> 与 Ctrl-C 都调它的 <code>cancel()</code>。令牌随用例入参下传，四个检查点任一命中即抛 <code>CancellationException</code>，走 8.9.4 的 <code>Cancelled</code> 分支；基础设施拿不到令牌就必须能放弃等待，所以 <code>ModelInvocationPort.invoke(request, token)</code> 也带它。取消是终态：<strong>不进重试、不降级、不弹错误</strong>（D10 第 4 节、"取消不是错误"），落 <code>RESUMABLE</code>（M21）。</p>
+    <p>外壳创建并持有唯一实现（本期 <code>ShellCancellationToken</code>，每轮开始复位）；<code>ManageSessionUseCase.cancel</code> 与 Ctrl-C 都调它的 <code>cancel()</code>。令牌只下传到<strong>轮次边界</strong>：<code>RunSessionUseCase.run(..., token)</code> → <code>ExecutionLoop</code> 每轮开头检查，命中即抛 <code>CancellationException</code>，走 8.9.4 的 <code>Cancelled</code> 分支。</p>
+    <p>重试的终止<strong>不靠令牌</strong>，而靠<strong>传输层的取消标记</strong>：<code>Call.cancel()</code> 之后 <code>HttpJsonClient</code> 记下“本次调用被用户取消”，<code>ModelInvoker</code> 见到这个标记直接抛 <code>CancellationException</code>（不重试、不降级）。这样令牌不必穿进 <code>ContextWindowService</code>、<code>VerificationRunner</code>、<code>ExperienceRetriever</code>、<code>ExperienceDistillationService</code>——它们都在轮次内，在途请求同样被立刻打断，只是“不再重试”由传输层保证。轮次外的调用（<code>SessionTitleGenerator</code>、测试复跑）拿不到令牌，用“永不取消”的 <code>CancellationToken.never()</code>。</p>
+    <p>取消是终态：<strong>不进重试、不降级、不弹错误</strong>（D10 第 4 节、“取消不是错误”），落 <code>RESUMABLE</code>（M21）。</p>
     <pre class="mermaid">
 flowchart LR
-    K["Ctrl-C / ManageSession.cancel"] --&gt;|cancel| T["ShellCancellationToken（外壳持有）"]
-    T --&gt;|onCancel| H["HttpJsonClient.cancelActive()：阻塞读立刻失败"]
-    T --&gt;|唤醒| A["阻塞中的 ask / 子代理 join → CANCELLED"]
+    K["Ctrl-C / ManageSession.cancel"] --&gt;|cancel| T["ShellCancellationToken（外壳持有，每轮复位）"]
+    T --&gt;|onCancel| H["HttpJsonClient.cancelActive()：在途读立刻失败"]
     T --&gt;|throwIfCancelled| R["RunSessionUseCase.run(..., token)"]
-    R --&gt; L1["ReAct 每轮边界"]
-    R --&gt; L2["ModelInvoker 退避等待前"]
-    L1 --&gt; X["CancellationException"]
-    L2 --&gt; X
-    X --&gt; C["Cancelled 分支：不重试 / 不降级 / 不弹错误"]
+    R --&gt; E["ExecutionLoop 每轮开头检查"]
+    E --&gt; X["CancellationException"]
+    H --&gt;|传输层取消标记| M["ModelInvoker：不重试、不降级"]
+    M --&gt; X
+    X --&gt; C["Cancelled 分支：不弹错误"]
     C --&gt; S["meta = RESUMABLE + SessionCancelled"]
     </pre>
 
