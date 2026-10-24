@@ -305,8 +305,8 @@ flowchart LR
         <tr><td><code>ModelInvocationPort</code></td><td>选模型、降级、调用、计量（流式与非流式双方法）</td><td><code>invoke</code> / <code>invokeStreaming(request, ChunkSink)</code> / <code>describe</code></td><td>基础设施</td></tr>
         <tr><td><code>ExternalToolPort</code></td><td>REST / MCP / NATIVE 出站调用</td><td><code>invoke(tool, args)</code></td><td>基础设施</td></tr>
         <tr><td><code>SkillSopProvider</code></td><td>按 id 读并渲染 SOP</td><td><code>sop(skillId)</code></td><td>基础设施</td></tr>
-        <tr><td><code>HumanInteractionPort</code></td><td><strong>阻塞式</strong>提问（单队列、标来源、可取消）</td><td><code>ask(question) → answer</code></td><td>终端 / Server</td></tr>
-        <tr><td><code>ProgressPort</code></td><td>非领域进度：压缩中、子代理并行、步骤推进、模型降级</td><td><code>emit(event)</code></td><td>终端 UI</td></tr>
+        <tr><td><code>HumanInteractionPort</code></td><td><strong>阻塞式</strong>提问（单队列、标来源、可取消）</td><td><code>ask(question) → answer</code></td><td>外壳（TUI）；CLI / Server 各自实现</td></tr>
+        <tr><td><code>ProgressPort</code></td><td>非领域进度：压缩中、子代理并行、步骤推进、模型降级</td><td><code>emit(event)</code></td><td>外壳（TUI）</td></tr>
         <tr><td><code>DomainEventPublisher</code></td><td>领域事件，<strong>提交后同步派发</strong>（只通知）</td><td><code>publishAfterCommit(events)</code></td><td>基础设施</td></tr>
         <tr><td><code>Clock</code></td><td>时间（便于测试与审计）</td><td><code>now</code></td><td>基础设施</td></tr>
         <tr><td><code>TokenCounter</code></td><td>token 计量（与真实计费一致）</td><td><code>count(messages, modelId)</code></td><td>基础设施</td></tr>

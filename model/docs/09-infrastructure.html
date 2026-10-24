@@ -30,7 +30,7 @@
     <table>
       <thead><tr><th>方向</th><th>内容</th></tr></thead>
       <tbody>
-        <tr><td>本层对象</td><td>22 个适配器（实现 21 个端口，部分端口有多个实现）</td></tr>
+        <tr><td>本层对象</td><td>20 个适配器（实现 19 个端口；<code>HumanInteractionPort</code> / <code>ProgressPort</code> 由外壳实现，见 D19）</td></tr>
         <tr><td>本层依赖</td><td>只依赖<strong>端口接口</strong>与 JDK；不依赖应用层与领域层的具体类（值以 JSON 传递）</td></tr>
         <tr><td>谁依赖本层</td><td>启动装配（组装端口实现并注入应用层）</td></tr>
         <tr><td>本层<strong>不</strong>负责</td><td>业务判断、状态机、事务的"决定"（只执行既定的提交顺序）</td></tr>
@@ -43,6 +43,7 @@
         <li>适配器之间只通过<strong>端口</strong>协作，不直接引用彼此的实现类；</li>
         <li>一切写入落地都要经过<strong>原子写协议</strong>（<code>.tmp</code> → fsync → rename → fsync 目录）；</li>
         <li>本层不认识聚合——它只认"路径 + JSON 文本"和"记录行"。</li>
+      <li><strong>本层不实现任何与终端相关的端口</strong>（<code>HumanInteractionPort</code> / <code>ProgressPort</code>）：界面归外壳（D19）。</li>
       </ol>
     </div>
 
@@ -74,8 +75,6 @@ flowchart LR
         A6[ModelInvoker]
         A7[HttpToolAdapter / McpToolAdapter]
         A8[FileSkillSopProvider]
-        A9[TerminalHumanInteraction]
-        A10[TerminalProgressReporter]
         A11[InProcessEventPublisher]
         A12[SystemClock / ProviderTokenCounter / FileInstanceLock / FileSchemaMigrator]
     end
@@ -85,30 +84,26 @@ flowchart LR
         TTY[(终端)]
     end
 
-    UC --> P1 & P2 & P3 & P4 & P5 & P6 & P7 & P8 & P9 & P10 & P11
-    A1 -.实现.-> P1
-    A2 -.实现.-> P2
-    A3 -.实现.-> P3
-    A4 -.实现.-> P3
-    A5 -.实现.-> P4
-    A6 -.实现.-> P5
-    A7 -.实现.-> P6
-    A8 -.实现.-> P7
-    A9 -.实现.-> P8
-    A10 -.实现.-> P9
-    A11 -.实现.-> P10
-    A12 -.实现.-> P11
-    A1 --> FS
-    A2 --> FS
-    A3 --> FS
-    A4 --> FS
-    A5 --> FS
-    A6 --> NET
-    A7 --> NET
-    A8 --> FS
-    A9 --> TTY
-    A10 --> TTY
-    </pre>
+    UC --&gt; P1 &amp; P2 &amp; P3 &amp; P4 &amp; P5 &amp; P6 &amp; P7 &amp; P8 &amp; P9 &amp; P10 &amp; P11
+    A1 -.实现.-&gt; P1
+    A2 -.实现.-&gt; P2
+    A3 -.实现.-&gt; P3
+    A4 -.实现.-&gt; P3
+    A5 -.实现.-&gt; P4
+    A6 -.实现.-&gt; P5
+    A7 -.实现.-&gt; P6
+    A8 -.实现.-&gt; P7
+    A11 -.实现.-&gt; P10
+    A12 -.实现.-&gt; P11
+    A1 --&gt; FS
+    A2 --&gt; FS
+    A3 --&gt; FS
+    A4 --&gt; FS
+    A5 --&gt; FS
+    A6 --&gt; NET
+    A7 --&gt; NET
+    A8 --&gt; FS
+        </pre>
     <p class="diagram-note">图 9-1　端口 ↔ 适配器 ↔ 外部资源</p>
 
     <h2><span class="sec">9.3</span>对象操作图</h2>
@@ -122,7 +117,6 @@ flowchart LR
         CR[FileCatalogRepository]
         AS[FileArtifactStore]
         MI[ModelInvoker]
-        HI[TerminalHumanInteraction]
         PUB[InProcessEventPublisher]
         MIG[FileSchemaMigrator]
         LOCK[FileInstanceLock]
@@ -131,18 +125,17 @@ flowchart LR
         POL[(PolicyRepository)]
         TK[(TokenCounter)]
     end
-    MI -->|"读取降级链"| POL
-    MI -->|"返回 usage（不记账）"| CS
-    CS -->|"① stageFact"| SR & PR
-    CS -->|"② stageAppend"| RS
-    CS -->|"③ stageReplace"| SR & PR
-    RS -->|"32 MiB 触发滚动"| RS
-    CR -->|"合并 jar 内置代理"| CR
-    AS -->|"resourceUri"| CS
-    HI -->|"单队列串行化"| HI
-    MIG -->|"读 schema.version"| LOCK
-    PUB -->|"提交后同步派发"| CS
-    </pre>
+    MI --&gt;|"读取降级链"| POL
+    MI --&gt;|"返回 usage（不记账）"| CS
+    CS --&gt;|"① stageFact"| SR &amp; PR
+    CS --&gt;|"② stageAppend"| RS
+    CS --&gt;|"③ stageReplace"| SR &amp; PR
+    RS --&gt;|"32 MiB 触发滚动"| RS
+    CR --&gt;|"合并 jar 内置代理"| CR
+    AS --&gt;|"resourceUri"| CS
+    MIG --&gt;|"读 schema.version"| LOCK
+    PUB --&gt;|"提交后同步派发"| CS
+        </pre>
     <p class="diagram-note">图 9-2　适配器之间的协作（全部经端口，不直接引用实现）</p>
 
     <h2><span class="sec">9.4</span>适配器清单</h2>
@@ -163,8 +156,8 @@ flowchart LR
         <tr><td><code>ModelInvocationPort</code></td><td><code>ModelInvoker</code></td><td>—（网络）</td><td>选模型 → 硬校验 → 调用 → <strong>降级链</strong>；<strong>只返回 usage，不记账</strong>。调用方是 <code>ReActLoop</code>、<code>ContextWindowService</code>、<code>SessionTitleGenerator</code> 与裁判</td></tr>
         <tr><td><code>ExternalToolPort</code></td><td><code>HttpToolAdapter</code> / <code>McpToolAdapter</code></td><td>—（网络）</td><td>工具自带超时；结果原样返回给应用层截断</td></tr>
         <tr><td><code>SkillSopProvider</code></td><td><code>FileSkillSopProvider</code></td><td><code>skills/&lt;id&gt;/SKILL.md</code></td><td>解析 front-matter + 正文；缺失或非 active 返回"不可用"</td></tr>
-        <tr><td><code>HumanInteractionPort</code></td><td><code>TerminalHumanInteraction</code></td><td>—（终端）</td><td><strong>单队列</strong>：所有来源排队、逐个呈现、标注来源；<code>cancel</code> 可唤醒</td></tr>
-        <tr><td><code>ProgressPort</code></td><td><code>TerminalProgressReporter</code></td><td>—（终端）</td><td>单向推送；丢弃不影响业务</td></tr>
+        
+        
         <tr><td><code>DomainEventPublisher</code></td><td><code>InProcessEventPublisher</code></td><td>—（内存）</td><td>提交后同步派发；订阅方必须短、幂等、不阻塞</td></tr>
         <tr><td><code>Clock</code></td><td><code>SystemClock</code></td><td>—</td><td>便于测试替换</td></tr>
         <tr><td><code>TokenCounter</code></td><td><code>CompositeTokenCounter</code>（策略链：jtokkit → 可选 count API → 估算兜底）</td><td>—（本地分词器）</td><td>事前估算（决定折叠）；台账仍用厂商 usage，偏差由 <code>UsageCalibrator</code> 收敛</td></tr>
@@ -283,7 +276,7 @@ status: active
         <tr><td>多实例</td><td><code>InstanceLock</code>：<code>locks/jellyfish.lock</code> 上 <code>FileChannel.tryLock</code>（进程级互斥，进程退出由 OS 释放）；获取失败则拒绝启动并提示</td></tr>
         <tr><td>写并发</td><td><strong>每个会话一个写者</strong>：主循环写主会话目录，子代理各自写 <code>sub/&lt;childId&gt;/</code>；同一会话内由 <code>CommitScope</code> 串行</td></tr>
         <tr><td>读并发</td><td>读操作无锁（依赖 rename 的原子性：读到的要么是旧版本、要么是新版本）</td></tr>
-        <tr><td>终端输入</td><td><code>TerminalHumanInteraction</code> 由独立读取线程收输入，提问队列串行呈现</td></tr>
+        <tr><td>终端输入</td><td><strong>由外壳的读取线程负责</strong>（应用层 §10）；本层不碰 stdin / stdout / ANSI</td></tr>
       </tbody>
     </table>
 
