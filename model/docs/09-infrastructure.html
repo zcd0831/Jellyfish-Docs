@@ -173,7 +173,23 @@ flowchart LR
       </tbody>
     </table>
 
-    <h2><span class="sec">9.5</span>目录布局与文件形态</h2>
+        <h3><span class="sec">9.4.1</span>本层的内部辅助类</h3>
+    <p>不单独建模，但规则在这里落地。</p>
+    <table>
+      <thead><tr><th>类</th><th>承担的契约</th></tr></thead>
+      <tbody>
+        <tr><td><code>DataDirectory</code></td><td>数据目录布局；路径拼装只在这一点</td></tr>
+        <tr><td><code>AtomicFiles</code></td><td>原子写与追加（<code>.tmp → fsync → rename → fsync 目录</code>），同一路径写入串行化</td></tr>
+        <tr><td><code>SessionDirs</code></td><td><code>sessionId → 目录</code>：先看顶层，再扫 <code>sub/</code>（深度 ≤ 2）</td></tr>
+        <tr><td><code>PlanOwnerIndex</code></td><td><code>planId → sessionId</code>：报告/反思落盘需要知道计划所属会话</td></tr>
+        <tr><td><code>JsonCodec</code> / <code>IdJsonModule</code> / <code>*Dto</code></td><td>序列化配置与"聚合 ↔ 文件"的映射（<code>Id</code> 在 JSON 里是字符串）</td></tr>
+        <tr><td><code>ToolCatalog</code> / <code>AgentCatalog</code> / <code>ProviderCatalog</code> / <code>ModelCatalog</code> / <code>SkillCatalog</code></td><td>五类目录的"jar 内置 + 磁盘"合并</td></tr>
+        <tr><td><code>BuiltinAssets</code> / <code>FrontMatter</code></td><td>jar 内资产清单读取、人写资产的 front-matter 解析</td></tr>
+        <tr><td><code>ModelResponseFormatException</code></td><td>模型响应无法解析（不可重试的技术异常）</td></tr>
+      </tbody>
+    </table>
+
+<h2><span class="sec">9.5</span>目录布局与文件形态</h2>
     <pre><code>~/.jellyfish/
 ├── schema.version                    # 迁移版本（单行文本）
 ├── settings.json                     # RuntimePolicy

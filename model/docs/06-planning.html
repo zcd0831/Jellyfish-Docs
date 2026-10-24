@@ -62,6 +62,7 @@ classDiagram
             +markAttemptFailed(StepId, int)
             +retryStep(StepId) Attempt
             +markAttemptInterrupted(StepId, int)
+            +recordReflection(StepId, int, ReflectionId)
             +applyReplan(List~PlanStep~)
             +terminate(String)
         }

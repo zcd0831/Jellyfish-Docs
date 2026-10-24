@@ -314,6 +314,7 @@ flowchart LR
         <tr><td><code>InstructionTemplate</code></td><td>VO</td><td>SOP 原文与变量，<code>render()</code> 后得到注入文本</td></tr>
         <tr><td><code>SkillStatus</code></td><td>Enum</td><td>DRAFT / ACTIVE / DEPRECATED</td></tr>
         <tr><td><code>RetrievalInput</code></td><td>VO</td><td>检索入参：<code>planId</code> + 每个 step 的简要描述（<strong>不传 <code>Plan</code> 聚合</strong>）</td></tr>
+        <tr><td><code>StepBrief</code></td><td>VO</td><td>检索入参的一步：<code>stepId</code> + <code>description</code>；检索子代理靠它匹配经验</td></tr>
         <tr><td><code>DistillationInput</code></td><td>VO</td><td>沉淀入参：<code>planId</code>、<code>sessionId</code>、<code>goal</code>、计划结局、每步的 <code>StepTrace</code></td></tr>
         <tr><td><code>RecordRange</code></td><td>VO</td><td>指向 <code>Session.Record</code> 流水的一段连续区间（<code>startRecordId → endRecordId</code>）；定义见 6.4.1，本章复用以保持自包含</td></tr>
         <tr><td><code>StepTrace</code></td><td>VO</td><td>一个 step 的执行事实摘要（描述 / 结局 / <code>RecordRange</code> / 子会话 ID / 失败原因 / 反思结论），<strong>带轨迹区间</strong>供归纳子代理读取原始对话</td></tr>
