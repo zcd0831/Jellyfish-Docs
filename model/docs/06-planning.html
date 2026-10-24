@@ -59,6 +59,8 @@ classDiagram
             +assignExperiences(StepId, List~ExperienceId~)
             +markStepSucceeded(StepId, String, VerificationReportId)
             +markStepFailed(StepId, VerificationReportId)
+            +markAttemptFailed(StepId, int)
+            +retryStep(StepId) Attempt
             +markAttemptInterrupted(StepId, int)
             +applyReplan(List~PlanStep~)
             +terminate(String)
@@ -170,7 +172,8 @@ classDiagram
         class VerificationChain {
             &lt;&lt;DomainService&gt;&gt;
             +orderedLayers(Set~VerificationType~) List~VerificationType~
-            +merge(VerificationOutcome, VerificationType) VerificationReport
+            +passed(VerificationReportId, PlanId, StepId, int, long) VerificationReport
+            +rejected(VerificationReportId, PlanId, StepId, int, VerificationOutcome, VerificationType, String, long) VerificationReport
         }
         class PlanFactory {
             &lt;&lt;DomainService&gt;&gt;
@@ -196,34 +199,33 @@ classDiagram
     Plan "1" *-- "1..*" PlanStep
     PlanStep "1" *-- "0..*" Attempt
     Attempt *-- RecordRange
-    Plan --> PlanStatus
-    PlanStep --> StepStatus
-    Attempt --> AttemptOutcome
-    PlanStep ..> VerificationType
-    Attempt ..> VerificationReport : verificationReportId
-    Attempt ..> Reflection : reflectionId（记忆模块）
-    Attempt ..> Session : childSessionIds（感知模块）
-    PlanStep ..> Experience : assignedExperienceIds（记忆模块）
-    VerificationReport --> VerificationOutcome
-    VerificationReport --> VerificationType
+    Plan --&gt; PlanStatus
+    PlanStep --&gt; StepStatus
+    Attempt --&gt; AttemptOutcome
+    PlanStep ..&gt; VerificationType
+    Attempt ..&gt; VerificationReport : verificationReportId
+    Attempt ..&gt; Reflection : reflectionId（记忆模块）
+    Attempt ..&gt; Session : childSessionIds（感知模块）
+    PlanStep ..&gt; Experience : assignedExperienceIds（记忆模块）
+    VerificationReport --&gt; VerificationOutcome
+    VerificationReport --&gt; VerificationType
 
-    ExecutionLoop ..> Plan
-    ExecutionLoop ..> ReActLoop
-    ExecutionLoop ..> VerificationRunner
-    ExecutionLoop ..> RuntimePolicy
-    ReActLoop ..> IterationResult
-    VerificationRunner ..> VerificationReport
-    VerificationRunner ..> RuntimePolicy
-    VerificationRunner ..> VerificationChain
-    PlanFactory ..> Plan
-    PlanFactory ..> RuntimePolicy
-
-    Plan ..> PlanCreated : raises
-    Plan ..> PlanCompleted : raises
-    Plan ..> PlanFailed : raises
-    Plan ..> StepFailed : raises
-    VerificationReport ..> VerificationRejected : raises
-    </pre>
+    ExecutionLoop ..&gt; Plan
+    ExecutionLoop ..&gt; ReActLoop
+    ExecutionLoop ..&gt; VerificationRunner
+    ExecutionLoop ..&gt; RuntimePolicy
+    ReActLoop ..&gt; IterationResult
+    VerificationRunner ..&gt; VerificationReport
+    VerificationRunner ..&gt; RuntimePolicy
+    VerificationRunner ..&gt; VerificationChain
+    PlanFactory ..&gt; Plan
+    PlanFactory ..&gt; RuntimePolicy
+    Plan ..&gt; PlanCreated : raises
+    Plan ..&gt; PlanCompleted : raises
+    Plan ..&gt; PlanFailed : raises
+    Plan ..&gt; StepFailed : raises
+    VerificationReport ..&gt; VerificationRejected : raises
+        </pre>
     <p class="diagram-note">图 6-1　规划模块总览</p>
 
     <h2><span class="sec">6.3</span>对象操作图</h2>
@@ -420,6 +422,18 @@ flowchart LR
         </tr>
       </tbody>
     </table>
+
+    <h4>四层的判定口径</h4>
+    <table>
+      <thead><tr><th>层</th><th>验什么</th><th>判定方式</th></tr></thead>
+      <tbody>
+        <tr><td><code>DETERMINISTIC</code></td><td>非空、数据结构、边界与阈值</td><td>纯代码：提交摘要非空；摘要形似 JSON 时必须能解析；声明的 artifact 结构/数量按 step 声明的边界检查</td></tr>
+        <tr><td><code>ENV_FEEDBACK</code></td><td>外部系统的实际返回</td><td><strong>预留钩子</strong>：step 若声明"调用某系统 API 推送/变更"，调用后校验其返回；本期无此类 step，钩子未配置时返回 <code>UNDETERMINED</code>（不假装通过）</td></tr>
+        <tr><td><code>LLM_JUDGE</code></td><td>自然语言类产出（报告、文章）或无法写死规则的结果</td><td>内置裁判代理，输入<strong>三要素</strong>：<code>goal</code>（原定目标）、<code>expectedOutcome</code>（结果期望）、<code>verificationCriteria</code>（验证标准）+ 执行结果摘要。<strong>不得</strong>把执行者的推理过程交给裁判（父子包庇：谁执行谁判 = 自证）</td></tr>
+        <tr><td><code>HUMAN_APPROVAL</code></td><td>高危操作（转账、删库、发正式邮件）或模型无法判定的节点</td><td><strong>预留钩子</strong>：<code>ask_user</code>，同意 ⇒ <code>PASSED</code>；不同意 + 必填原因 ⇒ <code>FAILED</code></td></tr>
+      </tbody>
+    </table>
+    <blockquote><p><strong>父子包庇</strong>：裁判只拿到"目标 / 期望 / 标准 / 结果"，拿不到子步骤自述的推理链；且裁判用<strong>独立代理</strong>（<code>builtin.judge</code>）的提示词，不复用执行代理的身份。</p></blockquote>
 
     <h4>规则清单（7 条）</h4>
     <ol>

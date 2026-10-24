@@ -309,7 +309,7 @@ flowchart LR
         <tr><td>重试与反思</td><td><code>maxRetries</code>、<code>reflectionThreshold</code>、<code>maxReplanGeneration</code>、<code>maxReActRounds</code></td><td>规划</td></tr>
         <tr><td>上下文</td><td><code>summarizationTokenThreshold</code>、<code>inputSafetyMargin</code>、<code>contextWindowRecordCount</code>、<code>systemRecordRatioLimit</code>、<code>toolResultTruncateLength</code></td><td>感知（本模块）</td></tr>
         <tr><td>经验</td><td><code>experienceCapacity</code>、<code>experienceTopN</code>、<code>experiencePerPlan</code>、<code>experienceInitialConfidence</code>、<code>experienceConfidenceStep</code>、<code>experienceRetireThreshold</code></td><td>记忆</td></tr>
-        <tr><td>预算与执行</td><td><code>budgetWarnRatio</code>、<code>subagentExecutionTimeoutMillis</code>、<code>modelFallbackChain</code>、<code>trustedToolIds</code></td><td>行动</td></tr>
+        <tr><td>预算与执行</td><td><code>budgetWarnRatio</code>、<code>budgetLimitTokens</code>、<code>subagentExecutionTimeoutMillis</code>、<code>modelFallbackChain</code>、<code>trustedToolIds</code></td><td>行动</td></tr>
       </tbody>
     </table>
 
@@ -534,14 +534,14 @@ sequenceDiagram
     <p>把"记录流水"推导为"本次发给模型的窗口 + 用量"。它是<strong>纯函数式的推导行为</strong>：不改状态、不落库、不读配置聚合。</p>
     <pre class="mermaid">
 flowchart TD
-    A[入参：ContextWindowPolicy] --> B[① 取全部 role=SYSTEM 记录&lt;br/>系统提示词渲染 / SOP 注入 / 工具注入 / 经验注入]
-    B --> C[② 取最新一条 SUMMARY 记录（若有）]
-    C --> D[③ 取最近 policy.recordCount 条&lt;br/>非 SYSTEM 记录]
-    D --> E[④ 计算 usedTokens / systemTokens / summaryTokens]
-    E --> F{systemTokens / usedTokens&lt;br/>大于 policy.systemRatioLimit ?}
-    F -- 否 --> H[输出 ContextWindow]
-    F -- 是 --> G[退化为：只保留系统提示词快照&lt;br/>丢弃 SOP 与工具注入] --> H
-    </pre>
+    A[入参：ContextWindowPolicy] --&gt; B[① 取全部 role=SYSTEM 记录&lt;br/&gt;仅运行期注入：SOP / 工具 / 经验&lt;br/&gt;系统提示词来自快照，不落 Record]
+    B --&gt; C[② 取最新一条 SUMMARY 记录（若有）]
+    C --&gt; D[③ 取最近 policy.recordCount 条&lt;br/&gt;非 SYSTEM 记录]
+    D --&gt; E[④ 计算 usedTokens / systemTokens / summaryTokens]
+    E --&gt; F{systemTokens / usedTokens&lt;br/&gt;大于 policy.systemRatioLimit ?}
+    F -- 否 --&gt; H[输出 ContextWindow]
+    F -- 是 --&gt; G[退化为：只保留系统提示词快照&lt;br/&gt;丢弃 SOP 与工具注入] --&gt; H
+        </pre>
 
     <h4>四条 DDD 约束</h4>
     <table>

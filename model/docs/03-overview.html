@@ -126,6 +126,7 @@ classDiagram
             +double experienceConfidenceStep
             +double experienceRetireThreshold
             +double budgetWarnRatio
+            +long budgetLimitTokens
             +List~ModelId~ modelFallbackChain
             +List~ToolId~ trustedToolIds
             +isToolTrusted(ToolId) boolean
@@ -217,6 +218,7 @@ classDiagram
             -ProviderId id
             -String name
             -String apiEndpoint
+            -ChatProtocol protocol
             -ApiCredential credential
             -ProviderStatus status
             +updateCredential(ApiCredential)
@@ -252,6 +254,12 @@ classDiagram
             &lt;&lt;Enumeration&gt;&gt;
             ACTIVE
             DEPRECATED
+        }
+        class ChatProtocol {
+            &lt;&lt;Enumeration&gt;&gt;
+            OPENAI_CHAT
+            ANTHROPIC_MESSAGES
+            GEMINI
         }
         class ModelStatus {
             &lt;&lt;Enumeration&gt;&gt;
@@ -299,7 +307,7 @@ classDiagram
             -SessionId sessionFamilyRootId
             -long consumedTokens
             -boolean warned
-            +recordUsage(long tokens)
+            +recordUsage(long tokens, RuntimePolicy policy)
             +shouldWarn(RuntimePolicy) boolean
         }
         class ToolExecOutcome {
@@ -311,14 +319,36 @@ classDiagram
         class ModelInvocationRequest {
             &lt;&lt;ValueObject&gt;&gt;
             -ModelId targetModelId
-            -List~String~ messages
+            -String systemPrompt
+            -List~ChatMessage~ messages
+            -List~ToolSchemaSnapshot~ tools
             -int estimatedPromptTokens
             -ModelCapability requiredCapability
         }
         class ModelInvocationResult {
             &lt;&lt;ValueObject&gt;&gt;
             -String text
-            -long usageTokens
+            -List~ToolCall~ toolCalls
+            -ModelUsage usage
+            -ModelId servedModelId
+        }
+        class ChatMessage {
+            &lt;&lt;ValueObject&gt;&gt;
+            -RecordRole role
+            -String content
+            -List~ToolCall~ toolCalls
+            -String toolCallId
+        }
+        class ToolCall {
+            &lt;&lt;ValueObject&gt;&gt;
+            -String callId
+            -String name
+            -String argumentsJson
+        }
+        class ModelUsage {
+            &lt;&lt;ValueObject&gt;&gt;
+            -long inputTokens
+            -long outputTokens
         }
         class ToolExecutor {
             &lt;&lt;DomainService&gt;&gt;
@@ -357,6 +387,9 @@ classDiagram
             -StepId id
             -int sequence
             -String description
+            -String goal
+            -String expectedOutcome
+            -String verificationCriteria
             -Set~VerificationType~ requiredVerifications
             -StepStatus status
             -List~Attempt~ attempts
@@ -611,77 +644,84 @@ classDiagram
     Record *-- ToolResultPayload
     SystemPromptSnapshot *-- ToolSchemaSnapshot
     SystemPromptSnapshot *-- SkillSummarySnapshot
-    Session --> SessionStatus
-    Record --> RecordRole
-    Session ..> ContextWindow : buildContextForLlm 推导
+    Session --&gt; SessionStatus
+    Record --&gt; RecordRole
+    Session ..&gt; ContextWindow : buildContextForLlm 推导
     ContextWindow *-- ContextUsage
-    ContextWindow ..> ContextWindowPolicy
+    ContextWindow ..&gt; ContextWindowPolicy
 
     %% ---------- 跨模块 ID 引用 ----------
-    Session "0..1" --> "0..*" Session : parentSessionId
-    Session ..> AgentDefinition : agentId
-    Session ..> Model : activeModelId
-    Plan ..> Session : sessionId
-    Budget ..> Session : sessionFamilyRootId
-    Model ..> Provider : providerId
-    AgentDefinition ..> ToolDefinition : toolIds
-    AgentDefinition ..> SkillDefinition : skillIds
-    Attempt ..> Session : childSessionIds
-    Attempt ..> Reflection : reflectionId
-    Attempt ..> VerificationReport : verificationReportId
-    PlanStep ..> Experience : assignedExperienceIds
+    Session "0..1" --&gt; "0..*" Session : parentSessionId
+    Session ..&gt; AgentDefinition : agentId
+    Session ..&gt; Model : activeModelId
+    Plan ..&gt; Session : sessionId
+    Budget ..&gt; Session : sessionFamilyRootId
+    Model ..&gt; Provider : providerId
+    AgentDefinition ..&gt; ToolDefinition : toolIds
+    AgentDefinition ..&gt; SkillDefinition : skillIds
+    Attempt ..&gt; Session : childSessionIds
+    Attempt ..&gt; Reflection : reflectionId
+    Attempt ..&gt; VerificationReport : verificationReportId
+    PlanStep ..&gt; Experience : assignedExperienceIds
 
     %% ---------- 规划内部 ----------
     Plan "1" *-- "1..*" PlanStep
     PlanStep "1" *-- "0..*" Attempt
     Attempt *-- RecordRange
-    Plan --> PlanStatus
-    PlanStep --> StepStatus
-    Attempt --> AttemptOutcome
-    PlanStep ..> VerificationType
-    VerificationReport --> VerificationOutcome
-    VerificationReport --> VerificationType
+    Plan --&gt; PlanStatus
+    PlanStep --&gt; StepStatus
+    Attempt --&gt; AttemptOutcome
+    PlanStep ..&gt; VerificationType
+    VerificationReport --&gt; VerificationOutcome
+    VerificationReport --&gt; VerificationType
 
     %% ---------- 行动内部 ----------
     ToolDefinition *-- ToolSchema
     ToolDefinition *-- ToolSource
-    ToolDefinition --> SideEffectLevel
-    ToolDefinition --> ToolStatus
-    ToolSource --> SourceType
+    ToolDefinition --&gt; SideEffectLevel
+    ToolDefinition --&gt; ToolStatus
+    ToolSource --&gt; SourceType
     Provider *-- ApiCredential
-    Provider --> ProviderStatus
+    Provider --&gt; ProviderStatus
+    Provider --&gt; ChatProtocol
     Model *-- ContextLimit
     Model *-- ModelCapability
-    Model --> ModelStatus
+    Model --&gt; ModelStatus
     AgentDefinition *-- PromptTemplate
-    AgentDefinition --> AgentSource
-    AgentDefinition --> AgentStatus
+    AgentDefinition --&gt; AgentSource
+    AgentDefinition --&gt; AgentStatus
+
+    ModelInvocationRequest *-- ChatMessage
+    ModelInvocationResult *-- ToolCall
+    ModelInvocationResult *-- ModelUsage
+    ChatMessage *-- ToolCall
+    ChatMessage ..&gt; RecordRole : role（复用流水角色）
 
     %% ---------- 记忆内部 ----------
     Experience *-- LessonLearned
     Experience *-- ConfidenceScore
-    Experience --> ExperienceStatus
+    Experience --&gt; ExperienceStatus
     SkillDefinition *-- InstructionTemplate
-    SkillDefinition --> SkillStatus
+    SkillDefinition --&gt; SkillStatus
     DistillationInput *-- StepTrace
 
     %% ---------- 事件 raise ----------
-    Plan ..> PlanCreated : raises
-    Plan ..> PlanCompleted : raises
-    Plan ..> PlanFailed : raises
-    Plan ..> StepFailed : raises
-    VerificationReport ..> VerificationRejected : raises
-    Reflection ..> ReflectionRecorded : raises
-    Experience ..> ExperienceCreated : raises
-    Experience ..> ExperienceReinforced : raises
-    Experience ..> ExperiencePenalized : raises
-    Budget ..> BudgetWarning : raises
-    Session ..> SummarizationCompleted : raises
-    Session ..> SessionCancelled : raises
-    Session ..> ModelSwitched : raises
-    RuntimePolicy ..> PolicyAdjusted : raises
-    ToolDefinition ..> ToolDefinitionUpdatedEvent : raises
-    </pre>
+    Plan ..&gt; PlanCreated : raises
+    Plan ..&gt; PlanCompleted : raises
+    Plan ..&gt; PlanFailed : raises
+    Plan ..&gt; StepFailed : raises
+    VerificationReport ..&gt; VerificationRejected : raises
+    Reflection ..&gt; ReflectionRecorded : raises
+    Experience ..&gt; ExperienceCreated : raises
+    Experience ..&gt; ExperienceReinforced : raises
+    Experience ..&gt; ExperiencePenalized : raises
+    Budget ..&gt; BudgetWarning : raises
+    Session ..&gt; SummarizationCompleted : raises
+    Session ..&gt; SessionCancelled : raises
+    Session ..&gt; ModelSwitched : raises
+    RuntimePolicy ..&gt; PolicyAdjusted : raises
+    ToolDefinition ..&gt; ToolDefinitionUpdatedEvent : raises
+        </pre>
     <p class="diagram-note">图 3-1　领域模型总图（按模块分组；虚线 = 引用，只存 ID）</p>
 
     <h2><span class="sec">3.3</span>服务与端口协作图</h2>

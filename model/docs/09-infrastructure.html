@@ -315,6 +315,8 @@ sequenceDiagram
     <ol>
       <li><strong>适配器不记账</strong>：只返回 <code>usage</code>，由调用方交给 <code>BudgetService</code> —— 否则会出现"基础设施 → 应用层"的反向依赖。</li>
       <li><strong>降级要重新硬校验</strong>：备用链里可能是小上下文模型，<code>maxInputTokens</code> 必须按<strong>实际要用的模型</strong>重新比较。</li>
+      <li><strong>线协议由 <code>Provider.protocol</code> 选择</strong>：<code>ModelInvoker</code> 按协议查实现（<code>ChatProtocol</code> → <code>ChatCompletionsProtocol</code> 等），共享同一个 OkHttp 客户端（D16-5、M14）；本期只实现 <code>OPENAI_CHAT</code>，新增协议只加一个实现类与一个枚举常量。映射细则（技术决策 D16）：<code>request.systemPrompt</code> → 首条 <code>role=system</code> 消息；<code>ChatMessage</code> → <code>messages</code>；<code>ToolCall</code> → <code>tool_calls</code>；<code>usage.prompt_tokens / completion_tokens</code> → <code>ModelUsage</code>；<code>servedModelId</code> 回填实际模型（降级后与目标不同）。</li>
+      <li><strong>不碰聚合</strong>：<code>ModelInvoker</code> 只回填 <code>servedModelId</code>，<code>switchModel</code> 由调用方在收到结果后执行（见《模块-行动》§8.2）。</li>
     </ol>
 
     <h2><span class="sec">9.12</span>与其他文档的对应</h2>
