@@ -44,8 +44,6 @@ PENDING_CLASSES = {
 PENDING = {
     "RuntimePolicy": ["adjust"],                      # S5 策略调整
     "Experience": ["reinforce", "penalize", "archive", "mergeWith"],   # S4 经验闭环
-    "SkillDefinition": ["updateSop", "renderDetailedSop"],             # S5 技能
-    "InstructionTemplate": ["render"],                                 # S5 技能
 }
 
 

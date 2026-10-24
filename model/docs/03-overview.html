@@ -531,15 +531,12 @@ classDiagram
             -InstructionTemplate sopTemplate
             -SkillStatus status
             +activate()
-            +updateSop(InstructionTemplate)
             +deprecate()
-            +renderDetailedSop(Map) String
         }
         class InstructionTemplate {
             &lt;&lt;ValueObject&gt;&gt;
             -String rawMarkdown
             -List~String~ variables
-            +render(Map) String
         }
         class SkillStatus {
             &lt;&lt;Enumeration&gt;&gt;

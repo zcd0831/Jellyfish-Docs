@@ -105,15 +105,12 @@ classDiagram
             +InstructionTemplate sopTemplate
             +SkillStatus status
             +activate()
-            +updateSop(InstructionTemplate)
             +deprecate()
-            +renderDetailedSop(Map) String
         }
         class InstructionTemplate {
             &lt;&lt;ValueObject&gt;&gt;
             +String rawMarkdown
             +List~String~ variables
-            +render(Map) String
         }
         class SkillStatus {
             &lt;&lt;Enumeration&gt;&gt;
@@ -404,7 +401,7 @@ flowchart LR
 
     <h4>规则清单（6 条）</h4>
     <ol>
-      <li><strong>纯提示词资产</strong>：只有描述、触发条件、SOP 模板；<strong>不含工具依赖</strong>（<code>toolIds</code> 已删除）。</li>
+      <li><strong>纯提示词资产</strong>：只有描述、触发条件、SOP 模板；<strong>不含工具依赖</strong>（<code>toolIds</code> 已删除）。 <strong>SOP 由人编辑</strong>（<code>skills/&lt;id&gt;/SKILL.md</code> + 重启生效，D12），系统只读不写；<code>load_skill</code> 注入原文，不做变量渲染。</li>
       <li><strong>渐进披露</strong>：系统提示只挂 <code>name + description</code>；SOP 正文只能通过 <code>load_skill</code> 注入。</li>
       <li><strong>注入形态</strong>：SOP 注入为一条 <code>role = SYSTEM</code> 的 <code>Record</code>，此后不参与滑窗（除非 SYSTEM 占比超限被整体裁剪）。</li>
       <li><strong>只有 <code>ACTIVE</code> 技能</strong>进入新会话快照。</li>
