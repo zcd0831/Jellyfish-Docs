@@ -503,7 +503,7 @@ sequenceDiagram
     <table>
       <thead><tr><th>条件</th><th>结果</th></tr></thead>
       <tbody>
-        <tr><td>无 Plan 且内循环收敛</td><td>本次交互结束，会话转 <code>RESUMABLE</code></td></tr>
+        <tr><td>无 Plan 且内循环收敛</td><td>本次交互结束，会话停在原处（会话没有状态，D22）</td></tr>
         <tr><td>内循环里 <code>generate_plan</code> 成功</td><td>本轮收敛后，下一次迭代 <code>hasExecutablePlan()</code> 为真，转入计划执行</td></tr>
         <tr><td>计划 <code>COMPLETED</code></td><td>再跑一轮自由内循环，由模型产出<strong>最终答复</strong>（这就是"结论交付"）</td></tr>
         <tr><td>计划 <code>FAILED</code>（外循环判定重划用尽 → <code>terminate()</code>）</td><td>循环收敛退出，触发沉淀</td></tr>

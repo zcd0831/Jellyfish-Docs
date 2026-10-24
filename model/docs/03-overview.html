@@ -45,7 +45,6 @@ classDiagram
             -SessionId parentSessionId
             -AgentId agentId
             -ModelId activeModelId
-            -SessionStatus status
             -String title
             -Date createdDate
             -List~Record~ records
@@ -55,7 +54,6 @@ classDiagram
             +markSummarized(String summary)
             +switchModel(ModelId)
             +cancel()
-            +archive()
         }
         class Record {
             &lt;&lt;Entity&gt;&gt;
@@ -132,12 +130,6 @@ classDiagram
             +isToolTrusted(ToolId) boolean
             +needsReflection(int) boolean
             +adjust(...)
-        }
-        class SessionStatus {
-            &lt;&lt;Enumeration&gt;&gt;
-            RUNNING
-            RESUMABLE
-            ARCHIVED
         }
         class RecordRole {
             &lt;&lt;Enumeration&gt;&gt;
@@ -647,7 +639,6 @@ classDiagram
     Record *-- ToolResultPayload
     SystemPromptSnapshot *-- ToolSchemaSnapshot
     SystemPromptSnapshot *-- SkillSummarySnapshot
-    Session --&gt; SessionStatus
     Record --&gt; RecordRole
     Session ..&gt; ContextWindow : buildContextForLlm 推导
     ContextWindow *-- ContextUsage
@@ -897,7 +888,7 @@ flowchart LR
     <table>
       <thead><tr><th>聚合</th><th>模块</th><th>一句话</th><th>不变量（红线）</th></tr></thead>
       <tbody>
-        <tr><td><code>Session</code></td><td>感知</td><td>会话上下文事实流</td><td>① 记录只追加，被引用的区间永不删改；② 快照创建即冻结；③ Agent 不可切换；④ 父取消级联子；⑤ 状态仅 RUNNING/RESUMABLE/ARCHIVED</td></tr>
+        <tr><td><code>Session</code></td><td>感知</td><td>会话上下文事实流</td><td>① 记录只追加，被引用的区间永不删改；② 快照创建即冻结；③ Agent 不可切换；④ 父取消级联子；⑤ <strong>没有状态</strong>：存在即可用（D22）</td></tr>
         <tr><td><code>RuntimePolicy</code></td><td>感知</td><td>运行环境策略单例</td><td>① 全局唯一；② 不进会话快照；③ 只有用户可改</td></tr>
         <tr><td><code>ToolDefinition</code></td><td>行动</td><td>一个可调用的动作定义</td><td>① 入参须过 inputSchema；② INTERNAL 必须指向已注册处理器</td></tr>
         <tr><td><code>Provider</code></td><td>行动</td><td>供应商与凭据持有者</td><td>① 凭据只存于此；② 一 Provider 多 Model</td></tr>
@@ -959,7 +950,7 @@ flowchart LR
     <table>
       <thead><tr><th>条件</th><th>结果</th></tr></thead>
       <tbody>
-        <tr><td>无计划 + 内循环收敛</td><td>本轮交互结束，会话转为 RESUMABLE</td></tr>
+        <tr><td>无计划 + 内循环收敛</td><td>本轮交互结束，会话停在原处（会话没有状态，D22）</td></tr>
         <tr><td>内循环里 generate_plan 成功</td><td>本轮收敛后，下一轮迭代发现"有计划了",转入计划执行</td></tr>
         <tr><td>计划 COMPLETED</td><td>再跑一轮自由内循环，由模型产出最终答复（结论交付）</td></tr>
         <tr><td>计划 FAILED（外循环判定重划用尽）</td><td>循环收敛退出，触发经验沉淀</td></tr>

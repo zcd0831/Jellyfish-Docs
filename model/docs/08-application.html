@@ -292,7 +292,7 @@ flowchart LR
       <thead><tr><th>端口</th><th>职责</th><th>关键方法</th><th>实现方</th></tr></thead>
       <tbody>
         <tr><td><code>CommitScope</code></td><td>一次状态转移的写入作用域，<strong>固定按「事实 → 追加 → 替换」执行并 fsync</strong></td><td><code>stageFact</code> / <code>stageAppend</code> / <code>stageReplace</code> / <code>commit</code></td><td>基础设施</td></tr>
-        <tr><td><code>SessionRepository</code></td><td>会话头与状态</td><td><code>load</code> / <code>save</code> / <code>listResumable</code> / <code>archive</code> / <code>delete</code></td><td>基础设施</td></tr>
+        <tr><td><code>SessionRepository</code></td><td>会话头与存放策略（会话无状态，D22）；<code>list</code> 返回 <code>SessionSummary</code></td><td><code>load</code> / <code>save</code> / <code>list</code> / <code>archive</code> / <code>delete</code> / <code>cleanupArchiveResidue</code></td><td>基础设施</td></tr>
         <tr><td><code>RecordStore</code></td><td>流水追加与读取</td><td><code>append</code> / <code>last(n)</code> / <code>range(startSeq, endSeq)</code></td><td>基础设施</td></tr>
         <tr><td><code>PlanRepository</code></td><td>计划聚合</td><td><code>load</code> / <code>save</code> / <code>findRunning</code></td><td>基础设施</td></tr>
         <tr><td><code>VerificationReportRepository</code></td><td>不可变报告</td><td><code>save</code> / <code>get</code> / <code>findByStep</code></td><td>基础设施</td></tr>
@@ -474,13 +474,13 @@ sequenceDiagram
     alt 取消
         UI-&gt;&gt;U4: cancel(sessionId)
         U4-&gt;&gt;C: cancel()（唤醒阻塞中的 ask / join）
-        U4-&gt;&gt;CS: stageReplace(meta：RESUMABLE)；stageReplace(plan 中 RUNNING 的 attempt → INTERRUPTED)；commit
+        U4-&gt;&gt;CS: stageReplace(plan 中 RUNNING 的 attempt → INTERRUPTED)；commit
         U4-&gt;&gt;EP: publishAfterCommit(SessionCancelled)
-        Note over U4: 级联取消所有子会话（同一事务内逐个 replace meta）；运行中的循环由外壳用取消令牌打断
+        Note over U4: 级联取消所有子会话（同一事务内逐个 replace）；会话没有状态，取消不写 meta（D22）；运行中的循环由外壳用取消令牌打断
     else 归档
         UI-&gt;&gt;U4: archive(sessionId)
-        U4-&gt;&gt;R: archive(sessionId)（目录移动到 archive/，只读）
-        Note over U4: 不 raise 事件，不可 resume
+        U4-&gt;&gt;R: archive(sessionId)（压成 archive/&lt;id&gt;.zip 后删原目录）
+        Note over U4: 不 raise 事件；归档后应用不再认识它（D22）
     else 删除
         UI-&gt;&gt;U4: delete(sessionId)
         U4-&gt;&gt;R: delete(sessionId)（递归删除目录，含 records/plans/reports/artifacts/budget）
@@ -491,7 +491,7 @@ sequenceDiagram
     <h3><span class="sec">8.9.4.1</span>取消令牌怎么到阻塞点</h3>
     <p>外壳创建并持有唯一实现（本期 <code>ShellCancellationToken</code>，每轮开始复位）；<code>ManageSessionUseCase.cancel</code> 与 Ctrl-C 都调它的 <code>cancel()</code>。令牌只下传到<strong>轮次边界</strong>：<code>RunSessionUseCase.run(..., token)</code> → <code>ExecutionLoop</code> 每轮开头检查，命中即抛 <code>CancellationException</code>，走 8.9.4 的 <code>Cancelled</code> 分支。</p>
     <p>重试的终止<strong>不靠令牌</strong>，而靠<strong>传输层的取消标记</strong>：<code>Call.cancel()</code> 之后 <code>HttpJsonClient</code> 记下“本次调用被用户取消”，<code>ModelInvoker</code> 见到这个标记直接抛 <code>CancellationException</code>（不重试、不降级）。这样令牌不必穿进 <code>ContextWindowService</code>、<code>VerificationRunner</code>、<code>ExperienceRetriever</code>、<code>ExperienceDistillationService</code>——它们都在轮次内，在途请求同样被立刻打断，只是“不再重试”由传输层保证。轮次外的调用（<code>SessionTitleGenerator</code>、测试复跑）拿不到令牌，用“永不取消”的 <code>CancellationToken.never()</code>。</p>
-    <p>取消是终态：<strong>不进重试、不降级、不弹错误</strong>（D10 第 4 节、“取消不是错误”），落 <code>RESUMABLE</code>（M21）。</p>
+    <p>取消是终态：<strong>不进重试、不降级、不弹错误</strong>（D10 第 4 节、“取消不是错误”）。会话没有状态，取消只把 plan 里 RUNNING 的 attempt 置 <code>INTERRUPTED</code>（D22）。</p>
     <pre class="mermaid">
 flowchart LR
     K["Ctrl-C / ManageSession.cancel"] --&gt;|cancel| T["ShellCancellationToken（外壳持有，每轮复位）"]
@@ -502,7 +502,7 @@ flowchart LR
     H --&gt;|传输层取消标记| M["ModelInvoker：不重试、不降级"]
     M --&gt; X
     X --&gt; C["Cancelled 分支：不弹错误"]
-    C --&gt; S["meta = RESUMABLE + SessionCancelled"]
+    C --&gt; S["attempt = INTERRUPTED + SessionCancelled"]
     </pre>
 
     <h3>8.9.5 <code>AdjustPolicyUseCase.adjust(changes)</code></h3>
@@ -546,7 +546,7 @@ sequenceDiagram
         <tr><td>1</td><td>有 <code>PASSED</code> 报告，但 step 仍 <code>RUNNING</code> / <code>VERIFYING</code></td><td>按报告里的 <code>attemptNo</code> 补 <code>markStepSucceeded</code></td></tr>
         <tr><td>2</td><td>有 <code>FAILED</code> 报告，但 step 仍 <code>RUNNING</code></td><td>补 <code>markStepFailed</code></td></tr>
         <tr><td>3</td><td>流水末尾有 <code>TOOL_REQUEST</code> 无 <code>TOOL_RESULT</code></td><td>该 attempt 判失败（按"半截工具调用视为失败"计一次重试）</td></tr>
-        <tr><td>4</td><td>会话已被标记删除 / 已存在于 <code>archive/</code></td><td>完成删除或归档（幂等）</td></tr>
+        <tr><td>4</td><td>归档中间态（<code>.zip.tmp</code> 残留 / 包已完整但原目录还在）</td><td>丢弃半截包；包完整则补删原目录（幂等，D22）</td></tr>
         <tr><td>5</td><td><code>budget.json</code> 缺失或损坏</td><td>重建为 0 并写告警（预算不精确可接受）</td></tr>
       </tbody>
     </table>

@@ -55,7 +55,6 @@ classDiagram
             -SessionId parentSessionId
             -AgentId agentId
             -ModelId activeModelId
-            -SessionStatus status
             -String title
             -Date createdDate
             -List~Record~ records
@@ -65,7 +64,6 @@ classDiagram
             +markSummarized(String summary)
             +switchModel(ModelId)
             +cancel()
-            +archive()
         }
         class Record {
             &lt;&lt;Entity>>
@@ -116,12 +114,6 @@ classDiagram
             &lt;&lt;ValueObject>>
             -int recordCount
             -double systemRatioLimit
-        }
-        class SessionStatus {
-            &lt;&lt;Enumeration>>
-            RUNNING
-            RESUMABLE
-            ARCHIVED
         }
         class RecordRole {
             &lt;&lt;Enumeration>>
@@ -212,7 +204,6 @@ classDiagram
     Record *-- ToolResultPayload
     SystemPromptSnapshot *-- ToolSchemaSnapshot
     SystemPromptSnapshot *-- SkillSummarySnapshot
-    Session --> SessionStatus
     Record --> RecordRole
     Session "0..1" --> "0..*" Session : parentSessionId
     Session ..> ContextWindow : buildContextForLlm 产出（推导，不落库）
@@ -260,7 +251,7 @@ flowchart LR
     end
 
     APP -->|start| SF
-    SF -->|new Session RUNNING| S
+    SF -->|new Session| S
     SF -->|assemble| SA
     SA -->|快照| S
     SF -->|generate| TG
@@ -273,7 +264,7 @@ flowchart LR
 
     S -->|appendRecord| R
     APP -->|buildContextForLlm| S
-    APP -->|switchModel / cancel / archive| S
+    APP -->|switchModel / cancel| S
     APP -->|adjust| RP
     </pre>
     <p class="diagram-note">图 4-2　对象之间的操作关系（箭头 = 调用；标注 = 调用的操作）</p>
@@ -285,7 +276,7 @@ flowchart LR
         <tr>
           <td><code>Session</code></td>
           <td>一次会话（可嵌套）的全部上下文事实：记录流水、系统提示词快照、窗口与摘要。由 <code>parentSessionId</code> 组成会话树</td>
-          <td>① <code>Record</code> 只追加，被 <code>Attempt.recordRange</code> 引用的记录永不删除/改写；② 快照在会话开启时冻结，运行中不再变；③ Agent 不可切换，Model 可切换；④ 父子会话一致（父取消级联）；⑤ 状态迁移只在 RUNNING / RESUMABLE / ARCHIVED 之间</td>
+          <td>① <code>Record</code> 只追加，被 <code>Attempt.recordRange</code> 引用的记录永不删除/改写；② 快照在会话开启时冻结，运行中不再变；③ Agent 不可切换，Model 可切换；④ 父子会话一致（父取消级联）；⑤ <strong>没有状态</strong>：会话是持久化容器，存在即可用（D22）</td>
         </tr>
         <tr>
           <td><code>RuntimePolicy</code></td>
@@ -365,7 +356,6 @@ flowchart LR
         <tr><td><code>ContextWindowPolicy</code></td><td>VO</td><td>组装策略入参（来自 <code>RuntimePolicy</code> 的两个值）：窗口条数、SYSTEM 占比上限</td></tr>
         <tr><td><code>AgentSnapshotInput</code></td><td>VO</td><td><code>SystemPromptAssembler</code> 的入参：<code>agentId</code>、<code>basePrompt</code>、<code>promptVariables</code>、<strong>已过滤 <code>ACTIVE</code></strong> 的 <code>activeTools</code> / <code>activeSkills</code>、<code>sopReferencedToolNames</code>（一致性告警用，本期恒空）</td></tr>
         <tr><td><code>ModelProfile</code></td><td>VO</td><td>端口返回的模型档案：<code>maxInputTokens / maxOutputTokens</code>（感知据此算有效上限，<strong>不直接引用 <code>Model</code> 聚合</strong>）</td></tr>
-        <tr><td><code>SessionStatus</code></td><td>Enum</td><td>RUNNING / RESUMABLE / ARCHIVED（进程退出不是状态迁移；删除 = 物理消失）</td></tr>
         <tr><td><code>ModelInvocationPort</code></td><td>Port</td><td>模型调用的唯一出口（选模型、降级、调用、计 token、提供模型档案）；由【行动】<code>ModelInvoker</code> 实现</td></tr>
       </tbody>
     </table>
@@ -392,7 +382,7 @@ flowchart LR
           <td><strong>会话开启</strong>（用户发起对话）<br><strong>子代理派遣</strong>（spawn_subagents）</td>
           <td>迭代中不断追加 Record；上下文折叠；模型降级；取消</td>
           <td><strong>会话封存</strong>（ARCHIVED，不可续跑）<br><strong>会话销毁</strong>（物理删除）</td>
-          <td><strong>会话续跑</strong>（程序重启后按 sessionId 加载为 RESUMABLE）</td>
+          <td><strong>会话续跑</strong>（按 sessionId 加载，<code>StartupReconciler</code> 先对账）</td>
         </tr>
       </tbody>
     </table>
@@ -405,7 +395,7 @@ flowchart LR
       <li><strong>快照冻结</strong>：<code>SystemPromptSnapshot</code> 在会话开启时生成并冻结（<strong>内容</strong>快照）；运行中工具/技能定义变更<strong>不影响</strong>进行中的会话。</li>
       <li><strong>流水只追加</strong>：<code>Record</code> 不得修改；被 <code>Attempt.recordRange</code> 引用的区间<strong>永不删除、永不改写</strong>（本地应用的磁盘控制只能靠归档/导出）。</li>
       <li><strong>会话树</strong>：<code>parentSessionId</code> 组树；<strong>父会话取消 ⇒ 级联取消所有子会话</strong>；<strong>子代理不得再开子代理</strong>（深度恒为 1）。</li>
-      <li><strong>状态</strong>：RUNNING（在跑）/ RESUMABLE（持久化、未运行）/ ARCHIVED（封存、不可续跑）。<strong>"关终端"不是状态迁移</strong>，只是运行态消失。</li>
+      <li><strong>没有状态</strong>：<code>sessions/&lt;id&gt;/</code> 存在即可用，不存在即不可用（含已归档，D22）。“在跑”是进程内事实，不落盘；归档 = 压成包移走，此后应用不再认识它。删除 = 物理消失。</li>
       <li><strong>销毁</strong>：物理删除该会话族的 <code>Record</code>、<code>Plan</code>、<code>Budget</code>；<strong>已沉淀的 <code>Experience</code> 保留</strong>（记忆模块全局资产）。</li>
       <li><strong>上下文组装</strong>（<code>buildContextForLlm(policy)</code>）为<strong>三步推导 + 一次降级</strong>：
         ① 取全部 <code>role = SYSTEM</code> 的记录（<strong>运行期注入</strong>：SOP 注入 + 工具注入 + 经验注入）；经验注入由外循环在<strong>步骤启动前</strong>写一条带 <code>step=&lt;id&gt;</code> 标记的 SYSTEM 记录，正文来自 <code>ExperienceRepository.find(id)</code>，同一步只注入一次；系统提示词来自 <code>SystemPromptSnapshot</code>，<strong>不落 <code>Record</code></strong>，由调用方作为 <code>systemPrompt</code> 单独传给模型；

@@ -143,7 +143,7 @@ flowchart LR
       <thead><tr><th>端口</th><th>适配器</th><th>落点</th><th>要点</th></tr></thead>
       <tbody>
         <tr><td><code>CommitScope</code></td><td><code>FileCommitScope</code></td><td>各目标目录</td><td><strong>固定顺序执行</strong>：事实 → 追加 → 替换；每条走原子写</td></tr>
-        <tr><td><code>SessionRepository</code></td><td><code>FileSessionRepository</code></td><td><code>sessions/&lt;id&gt;/meta.json</code></td><td>原子替换；<code>archive</code> = 移动目录；<code>delete</code> = 递归删除</td></tr>
+        <tr><td><code>SessionRepository</code></td><td><code>FileSessionRepository</code></td><td><code>sessions/&lt;id&gt;/meta.json</code></td><td>原子替换；<code>list</code> = 扫 <code>sessions/*/meta.json</code>；<code>archive</code> = 压成 <code>archive/&lt;id&gt;.zip</code> 后删原目录（D22）；<code>delete</code> = 递归删除</td></tr>
         <tr><td><code>RecordStore</code></td><td><code>FileRecordStore</code></td><td><code>sessions/&lt;…&gt;/records-NNNN.jsonl</code>（含 <code>sub/</code>）</td><td>追加 + fsync；<strong>超过 32 MiB 滚动</strong>；<code>range</code> 基于 <code>seq</code></td></tr>
         <tr><td><code>PlanRepository</code></td><td><code>FilePlanRepository</code></td><td><code>sessions/&lt;id&gt;/plans/</code></td><td>原子替换；<code>findRunning</code> 扫目录（对账用）</td></tr>
         <tr><td><code>VerificationReportRepository</code></td><td><code>FileReportRepository</code></td><td><code>sessions/&lt;id&gt;/reports/</code></td><td><strong>只新建，不覆盖</strong></td></tr>
@@ -207,7 +207,7 @@ flowchart LR
 │       ├── records-0001.jsonl
 │       └── plans/ reports/ reflections/ artifacts/
 ├── experience/&lt;experienceId&gt;.json    # 全局资产
-├── archive/&lt;sessionId&gt;/              # 归档：明文、只读、不可 resume
+├── archive/&lt;sessionId&gt;.zip           # 归档包：应用只写不读，解档交给用户（D22）
 ├── logs/                             # 运行日志（按天滚动）
 └── locks/jellyfish.lock</code></pre>
     <p><code>cache</code>（会话路径索引、流水索引、经验索引、分词缓存）在 <code>$TMPDIR/jellyfish/</code>，<strong>可整目录删除并重建</strong>。</p>
@@ -264,7 +264,7 @@ status: active
         <tr><td><code>records-NNNN.jsonl</code> 末尾半行（无换行）</td><td>截断到最后一条完整行</td></tr>
         <tr><td><code>locks/jellyfish.lock</code> 存在但无人持锁</td><td>由 <code>FileChannel.tryLock</code> 判定（进程退出由 OS 释放），可直接重新获取</td></tr>
         <tr><td><code>sub/</code> 下出现第二层 <code>sub/</code></td><td>违反"子代理不得再开子代理"，告警并忽略该目录</td></tr>
-        <tr><td><code>archive/&lt;id&gt;/</code> 存在但 <code>sessions/&lt;id&gt;/</code> 仍存在</td><td>删除 <code>sessions/&lt;id&gt;/</code>（归档已完成，含其 <code>sub/</code>）</td></tr>
+        <tr><td><code>archive/&lt;id&gt;.zip</code> 存在但 <code>sessions/&lt;id&gt;/</code> 仍存在</td><td>删除 <code>sessions/&lt;id&gt;/</code>（归档已完成，含其 <code>sub/</code>）</td></tr>
         <tr><td><code>cache/</code></td><td>启动时视为不可信，必要时整目录清空重建</td></tr>
       </tbody>
     </table>
