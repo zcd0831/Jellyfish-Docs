@@ -232,6 +232,14 @@
           <td>会话不存在（幂等）</td>
         </tr>
         <tr>
+          <td><code>SwitchModelUseCase</code></td>
+          <td>用户在会话内显式切换模型（含跨厂商）</td>
+          <td><code>sessionId</code>、<code>modelId</code></td>
+          <td>无</td>
+          <td>1</td>
+          <td>模型不存在/不可调用；<strong>工具轮未闭合</strong>（存在无结果的 <code>TOOL_REQUEST</code>）时拒绝</td>
+        </tr>
+        <tr>
           <td><code>AdjustPolicyUseCase</code></td>
           <td>用户改设置</td>
           <td>新参数</td>
@@ -412,7 +420,8 @@
     <div class="callout">
       <div class="ct">全局资产写段</div>
       T11 / T13 / T14 都在 <code>CommitScope</code> 的<strong>全局资产写段</strong>内执行：并行子会话可能同时沉淀，容量"读—判—写"必须在该段内完成。一次计划完结中，T11 与 T13/T14 <strong>至多发生一个</strong>（同一件事只进一边）。<br/>
-      <strong>环境故障时的 T4</strong>：本轮已发出、还没拿到结果的工具调用，由 <code>ReActLoop</code> 在异常上抛前补一条 <code>TOOL_RESULT</code>（内容为“本轮中止：…”）；它是流水事实，不是状态推进，因此不占用 T7，也不消耗重试。
+      <strong>环境故障时的 T4</strong>：本轮已发出、还没拿到结果的工具调用，由 <code>ReActLoop</code> 在异常上抛前补一条 <code>TOOL_RESULT</code>（内容为“本轮中止：…”）；它是流水事实，不是状态推进，因此不占用 T7，也不消耗重试。<br/>
+      <strong>T12（会话状态）也承接模型切换</strong>：<code>SwitchModelUseCase</code> 只改 <code>meta.json</code> 里的 <code>activeModelId</code> 并派发 <code>ModelSwitched</code>；它<strong>不动流水</strong>——旧模型的 reasoning 靠 <code>producerModelId</code> 在回放时自动失效。
     </div>
 
     <h3>8.8.3 三条纪律</h3>
@@ -635,6 +644,7 @@ sequenceDiagram
         <tr><td><strong>模型不可用</strong>（备用链全挂）</td><td>环境故障</td><td><code>RunSession</code> 立即返回；不触发反思/重划/重试；<strong>把本轮未闭合的工具调用补记为中止 <code>TOOL_RESULT</code></strong></td><td><strong>不推进 <code>plan</code> / <code>budget</code></strong>；<code>Attempt</code> 不落终态；流水多一条中止事实</td></tr>
         <tr><td><strong>请求超限</strong></td><td>业务预算问题</td><td>强制折叠一次后重试；仍失败按模型不可用处理</td><td>追加 <code>SUMMARY</code>，不动 <code>plan</code></td></tr>
         <tr><td>用户中断</td><td>用户主动</td><td><code>ask</code> 返回 <code>CANCELLED</code>；当前 attempt 收尾</td><td><code>Attempt.outcome = INTERRUPTED</code>（不耗重试）</td></tr>
+        <tr><td><strong>切换模型被拒</strong>（工具轮未闭合）</td><td>用户操作与回合边界冲突</td><td>返回 <code>S_TOOL_ROUND_OPEN</code>，不改任何状态；提示等本轮收尾后再切</td><td>无</td></tr>
         <tr><td>崩溃残留</td><td>进程非正常退出</td><td><code>StartupReconciler</code> 按下列 5 条补齐</td><td>视规则而定</td></tr>
       </tbody>
     </table>

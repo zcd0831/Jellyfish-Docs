@@ -61,6 +61,8 @@ classDiagram
             -RecordRole role
             -String content
             -String reasoning
+            -String turnId
+            -String producerModelId
             -ToolResultPayload toolPayload
             -int summaryCoversUpTo
             -int sequence
@@ -169,6 +171,10 @@ classDiagram
             &lt;&lt;DomainService&gt;&gt;
             +ensureWithinLimit(Session) void
             +forceCollapse(Session) void
+        }
+        class SwitchModelUseCase {
+            &lt;&lt;ApplicationService&gt;&gt;
+            +switchTo(SessionId, ModelId) Result
         }
     }
 
@@ -1056,8 +1062,9 @@ flowchart LR
         <tr><td>内循环里 generate_plan 成功</td><td>本轮收敛后，下一轮迭代发现"有计划了",转入计划执行</td></tr>
         <tr><td>计划 COMPLETED</td><td>再跑一轮自由内循环，由模型产出最终答复（结论交付）</td></tr>
         <tr><td>计划 FAILED（外循环判定重划用尽）</td><td>循环收敛退出，触发经验沉淀</td></tr>
-        <tr><td>模型不可用</td><td><code>run()</code> 立即返回；不改状态、不耗重试、不触发反思/重划；仅提示</td></tr>
+        <tr><td>模型不可用</td><td><code>run()</code> 立即返回；不推进状态、不耗重试、不触发反思/重划；<strong>未闭合的工具调用补一条中止结果</strong>；仅提示</td></tr>
         <tr><td>请求超限</td><td>强制折叠一次后重试；不耗重试；仍超限按模型不可用处理</td></tr>
+        <tr><td>模型切换（降级 / 用户显式）</td><td>只允许在工具轮闭合后；新模型不再接收旧模型的 reasoning/thinking</td></tr>
       </tbody>
     </table>
 
@@ -1089,7 +1096,7 @@ flowchart LR
         <tr><td><strong>步骤重试</strong></td><td>失败后新建尝试；达阈值产生反思</td><td>Attempt、Reflection</td></tr>
         <tr><td><strong>计划重划</strong></td><td>代次 +1，未执行的步骤置为 SUPERSEDED 并重分配经验</td><td>Plan、Experience</td></tr>
         <tr><td><strong>计划完结</strong></td><td>成功或失败，触发经验沉淀；成功且本次未用技能时另判技能沉淀</td><td>Plan、Experience、SkillDefinition</td></tr>
-        <tr><td><strong>上下文折叠</strong></td><td>token 超阈值 → 生成摘要 → 窗口收窄</td><td>Session</td></tr>
+        <tr><td><strong>上下文折叠</strong></td><td>token 超阈值 → 生成摘要（记覆盖边界）→ 窗口收窄</td><td>Session</td></tr>
         <tr><td><strong>模型降级</strong></td><td>故障命中备用模型链</td><td>Session</td></tr>
         <tr><td><strong>归档 / 会话销毁</strong></td><td>归档（压成 zip 移走，应用不再认识）/ 物理删除（经验保留）</td><td>Session、Budget</td></tr>
       </tbody>

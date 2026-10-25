@@ -356,7 +356,7 @@ flowchart LR
     <table>
       <thead><tr><th>对象</th><th>类型</th><th>简介</th></tr></thead>
       <tbody>
-        <tr><td><code>Record</code></td><td>Entity（<code>Session</code> 内）</td><td>上下文流水的一条：<code>role</code> 决定它在窗口里的地位；<code>sequence</code> 保证全序；<code>reasoning</code> 只在 <code>TOOL_REQUEST</code> 上承载“产出该工具调用请求的 assistant 消息的 <code>reasoning_content</code>”（回放硬要求）；<code>summaryCoversUpTo</code> 只在 <code>SUMMARY</code> 上承载“该摘要覆盖到哪条记录的 <code>sequence</code>”</td></tr>
+        <tr><td><code>Record</code></td><td>Entity（<code>Session</code> 内）</td><td>上下文流水的一条：<code>role</code> 决定它在窗口里的地位；<code>sequence</code> 保证全序；<code>turnId</code> 标识“同一次模型响应”（<code>ASSISTANT</code> + 各 <code>TOOL_REQUEST</code>/<code>TOOL_RESULT</code> 共享，<code>USER</code>/<code>SYSTEM</code>/<code>SUMMARY</code> 为空各自成轮）；<code>reasoning</code> + <code>producerModelId</code> 承载模型私有思维状态及其产者（只回放给产者模型）；<code>summaryCoversUpTo</code> 只在 <code>SUMMARY</code> 上承载“该摘要覆盖到哪条记录的 <code>sequence</code>”</td></tr>
         <tr><td><code>RecordRole</code></td><td>Enum</td><td>SYSTEM / USER / ASSISTANT / TOOL_REQUEST / TOOL_RESULT / SUMMARY</td></tr>
         <tr><td><code>ToolResultPayload</code></td><td>VO</td><td>工具结果的附属信息：是否被截断、完整内容的本地归档位置</td></tr>
         <tr><td><code>SystemPromptSnapshot</code></td><td>VO</td><td>会话开启时冻结的内容快照：渲染后的提示词 + 工具 schema 列表 + 技能摘要列表</td></tr>
@@ -398,10 +398,10 @@ flowchart LR
       </tbody>
     </table>
 
-    <h4>规则清单（16 条）</h4>
+    <h4>规则清单（17 条）</h4>
     <ol>
       <li><strong>唯一创建入口</strong>：只有应用层 <code>StartSessionUseCase</code> 能创建会话；两个触发点——用户发起对话、主会话发起子代理。</li>
-      <li><strong>创建时必须指定</strong> <code>agentId</code> 与 <code>modelId</code>（缺省取默认）；<strong>Agent 在会话内不可切换</strong>，Model 可切换（仅降级）。</li>
+      <li><strong>创建时必须指定</strong> <code>agentId</code> 与 <code>modelId</code>（缺省取默认）；<strong>Agent 在会话内不可切换</strong>，Model 可切换（<strong>降级或用户显式切换</strong>）。切换只允许在<strong>工具轮已闭合</strong>之后：存在未拿到结果的 <code>TOOL_REQUEST</code> 时拒绝切换（模型私有状态无法跨模型/跨厂商续接）。</li>
       <li><strong>标题</strong>：由 LLM 依据首次输入的意图生成；失败则用首句截断兜底。</li>
       <li><strong>快照冻结</strong>：<code>SystemPromptSnapshot</code> 在会话开启时生成并冻结（<strong>内容</strong>快照）；运行中工具/技能定义变更<strong>不影响</strong>进行中的会话。
         <strong>技能有两层，冻结的只有浅层</strong>：可见清单（哪些 <code>skillId</code>）+ 三件套（<code>name / description / triggerCondition</code>）冻结；<strong>SOP 正文不冻结</strong>——<code>load_skill</code> 每次现读 <code>SKILL.md</code>，因此同一会话前后两次 <code>load_skill</code> 可能拿到不同正文（技能被改进时）。这是有意接受的漂移（S3）：<strong>正文是外部资产，不是会话事实</strong>，也不受 <code>Record</code> 的 append-only 约束。会话中途新沉淀的技能<strong>不进</strong>当前清单，下个会话才可见。</li>
@@ -412,14 +412,15 @@ flowchart LR
       <li><strong>上下文组装</strong>（<code>buildContextForLlm(policy)</code>）为<strong>三步推导 + 一次降级</strong>：
         ① 取全部 <code>role = SYSTEM</code> 的记录（<strong>运行期注入</strong>：SOP 注入 + 工具注入 + 经验注入）；经验注入由外循环在<strong>步骤启动前</strong>写一条带 <code>step=&lt;id&gt;</code> 标记的 SYSTEM 记录，正文来自 <code>ExperienceRepository.find(id)</code>，同一步只注入一次；系统提示词来自 <code>SystemPromptSnapshot</code>，<strong>不落 <code>Record</code></strong>，由调用方作为 <code>systemPrompt</code> 单独传给模型；
         ② 取最新一条 <code>SUMMARY</code> 记录（若有）；
-        ③ 取最近 <code>policy.recordCount</code> 条<strong>未被最新 <code>SUMMARY</code> 覆盖</strong>（<code>sequence &gt; summaryCoversUpTo</code>）、且非 SYSTEM、非 SUMMARY 的记录，并<strong>按模型输出轮对齐</strong>（规则 14）；<code>SUMMARY</code> 已由 ② 单独取出；若再计入，折叠会退化为往窗口里堆摘要；
+        ③ 取最近 <code>policy.recordCount</code> 条<strong>未被最新 <code>SUMMARY</code> 覆盖</strong>（<code>sequence &gt; summaryCoversUpTo</code>）、且非 SYSTEM、非 SUMMARY 的记录，并<strong>按 <code>turnId</code> 整轮对齐</strong>（规则 14）；<code>SUMMARY</code> 已由 ② 单独取出；若再计入，折叠会退化为往窗口里堆摘要；
         ④ 降级：若 <code>systemTokens / usedTokens &gt; policy.systemRatioLimit</code> ⇒ 只保留系统提示词快照，丢弃 SOP 与工具注入。</li>
       <li><strong><code>SYSTEM</code> / <code>SUMMARY</code> 不参与第 ③ 步计数</strong>：<code>role = SYSTEM</code> 的记录不被第 ③ 步的"最近 n 条"挤出，只能被第 ④ 步<strong>整体</strong>裁剪；<code>SUMMARY</code> 只取最新一条（由 ② 负责）。</li>
       <li><strong>可推导状态不落库</strong>：窗口边界与用量都是推导结果，不持久化；会话续跑时重新推导。<strong>例外</strong>：<code>SUMMARY.summaryCoversUpTo</code> 是“这份摘要覆盖了哪些记录”的事实，不可重算，必须落库。</li>
       <li><strong>聚合不依赖配置聚合</strong>：策略以 <code>ContextWindowPolicy</code> <strong>值对象入参</strong>传入，<code>Session</code> 不引用 <code>RuntimePolicy</code>，也不读取任何阈值。</li></li>
       <li><strong>系统提示词与流水分离</strong>：基础提示词只存在于 <code>SystemPromptSnapshot</code>（会话开启时冻结），<code>SYSTEM</code> 记录只承载运行期注入（<code>load_skill</code> 的 SOP、工具/经验注入）；发给模型时前者走 <code>systemPrompt</code>、后者并入同一 <code>system</code> 字段，二者都不进 <code>messages</code>。第 ④ 步降级只保留快照，即丢弃全部注入。</li>
       <li><strong>模型输出轮是窗口的原子单位</strong>：一轮 = <code>[ASSISTANT] + (TOOL_REQUEST + TOOL_RESULT)⁺</code>（无工具调用则只有 <code>ASSISTANT</code>）。第 ③ 步的裁剪<strong>不得切在轮中间</strong>：首条落在一轮中间 ⇒ 把该轮起点整轮拉进窗口（<code>recordCount</code> 是软上限）；尾部出现未闭合的 <code>TOOL_REQUEST</code> ⇒ <strong>不变量违反</strong>（不静默修补）。理由：请求合法性的最小单位是这个轮，不是单条记录。</li>
-      <li><strong><code>reasoning</code> 是模型的原始事实，只用于回放</strong>：思维模式要求“带 <code>tool_calls</code> 的 assistant 消息必须原样回传 <code>reasoning_content</code>”，而消息每轮都从流水重建，所以它必须挂在同轮的 <code>TOOL_REQUEST</code> 上。它<strong>计入 token 计量</strong>（真占输入），但<strong>不进摘要、不进沉淀、不进展示</strong>（理由见《模块-记忆》8.6）；半截输出不落（流式中断 ⇒ 整条 assistant 输出连同 <code>reasoning</code> 都不落）。</li>
+      <li><strong>模型私有状态只回放给产者</strong>：<code>reasoning</code>（DeepSeek 的 <code>reasoning_content</code>；Anthropic 的签名 thinking、Gemini 的 thoughtSignature 同理）是模型私有状态，必须与 <code>producerModelId</code> 一起记录。回放规则：<strong>只有目标模型 == <code>producerModelId</code> 时才回传</strong>；切换模型后旧状态一律丢弃（签名/语义都不可跨模型搬运）。它<strong>计入 token 计量</strong>（真占输入），但<strong>不进摘要、不进沉淀、不进展示</strong>（理由见《模块-记忆》8.6）；半截输出不落（流式中断 ⇒ 整条 assistant 输出连同 <code>reasoning</code> 都不落）。</li>
+      <li><strong>一个响应 = 一条 assistant 消息</strong>：同一 <code>turnId</code> 的 <code>content</code>（若有）与<strong>全部</strong> <code>tool_calls</code> 在回放时必须合成<strong>一条</strong> assistant 消息，其 <code>TOOL_RESULT</code> 按 callId 顺序紧随其后；不得把一个响应拆成“文本一条 + 每个调用一条”。这是 OpenAI / Anthropic / Gemini 共同的原生形态，拆开会被端点拒绝（错误文案可能完全与形态无关）。</li>
       <li><strong>最新 <code>SUMMARY</code> 必须真的发给模型</strong>：它由第 ② 步进入窗口，调用方（<code>ReActLoop</code>）把它作为一条 <code>user</code> 消息放在 <code>messages</code> 最前；只参与计量不发出去，等于折叠后模型完全丢失历史。</li>
     </ol>
 
