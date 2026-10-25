@@ -30,7 +30,7 @@
       <thead><tr><th>方向</th><th>内容</th></tr></thead>
       <tbody>
         <tr><td>本模块聚合</td><td><code>ToolDefinition</code>、<code>Provider</code>、<code>Model</code>、<code>AgentDefinition</code>、<code>Budget</code></td></tr>
-        <tr><td>本模块对象所在的层</td><td><strong>领域层</strong>：5 个聚合及其规则；<strong>应用层</strong>：<code>ToolExecutor</code>、<code>BudgetService</code>；<strong>基础设施层</strong>：<code>ModelInvoker</code>、<code>SkillSopProvider</code></td></tr>
+        <tr><td>本模块对象所在的层</td><td><strong>领域层</strong>：5 个聚合及其规则；<strong>应用层</strong>：<code>ToolExecutor</code>、<code>BudgetService</code>；<strong>基础设施层</strong>：<code>ModelInvoker</code>（<code>SkillSopProvider</code> 是记忆模块声明的端口，由基础设施实现，不属于本模块对象）</td></tr>
         <tr><td>被本模块引用的外部 ID（仅 ID）</td><td><code>SessionId</code>（感知，<code>Budget.sessionFamilyRootId</code>、子会话创建）、<code>SkillId</code>（记忆，仅作为绑定 ID）</td></tr>
         <tr><td>被外部引用的本模块对象</td><td><code>RuntimePolicy</code> 的读取者（感知持有）、<code>ToolId</code> / <code>ModelId</code> / <code>AgentId</code> 被各模块引用</td></tr>
       </tbody>
@@ -44,8 +44,7 @@
     </div>
 
     <h2><span class="sec">5.2</span>模块总览图</h2>
-    <pre class="mermaid">
-classDiagram
+    <pre class="mermaid">classDiagram
     namespace 工具聚合 {
         class ToolDefinition {
             &lt;&lt;AggregateRoot&gt;&gt;
@@ -78,6 +77,7 @@ classDiagram
             NATIVE
             REST
             MCP
+            PLUGIN
         }
         class SideEffectLevel {
             &lt;&lt;Enumeration&gt;&gt;
@@ -90,6 +90,24 @@ classDiagram
             DRAFT
             ACTIVE
             DEPRECATED
+        }
+    }
+
+    namespace 插件 {
+        class PluginManifest {
+            &lt;&lt;AggregateRoot&gt;&gt;
+            +PluginId id
+            +String version
+            +int apiVersion
+            +boolean trusted
+            +Date grantedAt
+            +Set~ToolId~ toolIds
+            +Set~String~ declaredCapabilities
+            +Set~String~ grantedCapabilities
+            +create(PluginId, String, int, Set~ToolId~, Set~String~, boolean, Date) PluginManifest
+            +grant(String)
+            +revoke(String)
+            +isTrusted() boolean
         }
     }
 
@@ -268,6 +286,33 @@ classDiagram
             +int maxInputTokens
             +int maxOutputTokens
         }
+        class PluginRepository {
+            &lt;&lt;Port&gt;&gt;
+            +list() List~PluginManifest~
+            +load(PluginId) PluginManifest
+            +save(PluginManifest)
+        }
+        class PluginRuntimePort {
+            &lt;&lt;Port&gt;&gt;
+            +discover() List~PluginDescriptor~
+            +toolsOf(PluginId) List~ToolDefinition~
+            +start(PluginId)
+            +stop(PluginId)
+            +unload(PluginId)
+            +extension(PluginId, String) Object
+            +conflictsOf(PluginId) List~String~
+        }
+        class PluginDescriptor {
+            &lt;&lt;ValueObject&gt;&gt;
+            +PluginId id
+            +String version
+            +int apiVersion
+            +boolean loaded
+        }
+        class ToolInvoker {
+            &lt;&lt;ExtensionPoint&gt;&gt;
+            +execute(Session, String, Map, RecordId) ToolExecOutcome
+        }
     }
 
     namespace 领域事件 {
@@ -304,9 +349,11 @@ classDiagram
     ModelInvocationPort &lt;|.. ModelInvoker : 实现
     BudgetService ..&gt; Budget
 
+    PluginManifest --&gt; ToolDefinition : toolIds（只记归属）
+    PluginRuntimePort ..&gt; PluginDescriptor : 产出
+    ToolExecutor ..&gt; ToolInvoker : 实现
     ToolDefinition ..&gt; ToolDefinitionUpdatedEvent : raises
-    Budget ..&gt; BudgetWarning : raises
-        </pre>
+    Budget ..&gt; BudgetWarning : raises</pre>
     <p class="diagram-note">图 5-1　行动模块总览</p>
 
     <h2><span class="sec">5.3</span>对象操作图</h2>
@@ -377,6 +424,11 @@ flowchart LR
           <td>① 内置代理的 prompt 不可编辑；② 业务代理的工具 / 技能<strong>全部由用户绑定</strong>，不强制；③ 会话内 Agent 不可切换</td>
         </tr>
         <tr>
+          <td><code>PluginManifest</code></td>
+          <td>一个插件的授权意图：它带来哪些工具、能替换哪些端口、用户勾了哪些</td>
+          <td>① <code>id</code> 必须等于 jar 内 <code>Plugin-Id</code>；② <code>grantedCapabilities ⊆ declaredCapabilities</code>；③ 同一端口至多一个启用者（跨插件校验在应用层）；④ <code>apiVersion</code> 不符即不能安装或启用；⑤ <strong>不存"已加载/失败"</strong>——那是进程内事实</td>
+        </tr>
+        <tr>
           <td><code>Budget</code></td>
           <td>会话族的 token 台账与一次性预警标记</td>
           <td>① 一个会话族一个 <code>Budget</code>，以根 <code>sessionId</code> 标识；② 只累加、不预留、不分配额度、不中断；③ <code>warned</code> 一旦置真不再预警</td>
@@ -394,8 +446,20 @@ flowchart LR
         <tr><td><code>ask_user</code></td><td>问题文本</td><td>用户回答</td><td>阻塞同一 ReAct 循环；记 <code>TOOL_REQUEST</code> + <code>TOOL_RESULT</code></td><td>行动</td></tr>
         <tr><td><code>spawn_subagents</code></td><td><code>List&lt;SubagentRequest{agentId, modelId, task}&gt;</code></td><td><code>List&lt;SubagentResult{sessionId, conclusion}&gt;</code></td><td>并行创建子会话、join-all、各子独立超时</td><td>应用（<code>SubagentLauncher</code>，内部调 <code>StartSessionUseCase</code>）</td></tr>
         <tr><td><code>load_skill</code></td><td><code>skillName</code></td><td>SOP 全文</td><td>注入一条 <code>role=SYSTEM</code> 的 Record</td><td>基础设施（<code>SkillSopProvider</code>）</td></tr>
+        <tr><td><code>read_file</code></td><td><code>path</code>、<code>offset?</code>、<code>limit?</code></td><td>带行号的文本</td><td>无（只读）</td><td>基础设施（本地能力）</td></tr>
+        <tr><td><code>list_dir</code></td><td><code>path?</code>、<code>depth?</code>、<code>pattern?</code></td><td>条目清单</td><td>无（只读）</td><td>基础设施（本地能力）</td></tr>
+        <tr><td><code>grep</code></td><td><code>pattern</code>、<code>path?</code>、<code>glob?</code>、<code>ignoreCase?</code>、<code>context?</code></td><td><code>文件:行:文本</code></td><td>无（只读）</td><td>基础设施（本地能力）</td></tr>
+        <tr><td><code>fetch_url</code></td><td><code>url</code>、<code>maxChars?</code></td><td>纯文本</td><td>无（出站 GET）</td><td>基础设施（本地能力）</td></tr>
+        <tr><td><code>edit_file</code></td><td><code>path</code>、<code>oldText</code>、<code>newText</code></td><td>改动的行数</td><td>改工作区内文件</td><td>基础设施（本地能力）</td></tr>
+        <tr><td><code>write_file</code></td><td><code>path</code>、<code>content</code>、<code>overwrite?</code></td><td>写入字节数</td><td>写工作区内文件</td><td>基础设施（本地能力）</td></tr>
+        <tr><td><code>delete_file</code></td><td><code>path</code>、<code>recursive?</code></td><td>删除的项数</td><td>删工作区内文件/目录（<strong>不可逆</strong>）</td><td>基础设施（本地能力）</td></tr>
+        <tr><td><code>run_command</code></td><td><code>command</code>、<code>cwd?</code>、<code>timeoutMs?</code></td><td>尾部输出 + 退出码</td><td>任意副作用（<strong>不可逆</strong>）</td><td>基础设施（本地能力）</td></tr>
       </tbody>
     </table>
+    <div class="callout">
+      <div class="ct">本地能力（<code>NATIVE</code>）</div>
+      后 8 个工具与内置编排工具、插件工具<strong>共用同一张处理器注册表</strong>，区别只在来源标记。全部受 <strong>工作区根</strong>约束（5.8.1 规则 9），其中只有 <code>run_command</code> 受<strong>绊线</strong>约束（规则 10）。<code>delete_file</code> 存在的理由不是"锦上添花"，而是<strong>减少绕过动机</strong>：不给一条经过校验的删除路径，模型就会改用 <code>run_command</code> 里的 <code>rm</code>，那条路无法校验路径。
+    </div>
 
     <h3>5.4.2 <code>Provider</code> / <code>Model</code></h3>
     <ul>
@@ -450,8 +514,9 @@ flowchart LR
       <thead><tr><th>对象</th><th>类型</th><th>简介</th></tr></thead>
       <tbody>
         <tr><td><code>ToolSchema</code></td><td>VO</td><td>JSON Schema 文本（draft-07）；<code>inputSchema</code> 用于入参校验（<strong>完整校验，用 networknt 库</strong>，见 D17），<code>outputSchema</code> 用于结果描述（同时进入快照）</td></tr>
-        <tr><td><code>ToolSource</code></td><td>VO</td><td>工具来源：<code>SourceType</code> + 端点/标识</td></tr>
-        <tr><td><code>SourceType</code></td><td>Enum</td><td>INTERNAL（应用内实现）/ NATIVE（本地能力）/ REST / MCP</td></tr>
+        <tr><td><code>ToolSource</code></td><td>VO</td><td>工具来源：<code>SourceType</code> + 端点/标识。<code>INTERNAL</code> 存处理器名；<code>PLUGIN</code> 存 <code>&lt;pluginId&gt;/&lt;handlerId&gt;</code>；<code>NATIVE</code> 存处理器名（<code>INTERNAL</code> / <code>PLUGIN</code> / <code>NATIVE</code> <strong>共用同一张处理器注册表</strong>，来源只用于审计、界面与审批判定）</td></tr>
+        <tr><td><code>PluginDescriptor</code></td><td>VO</td><td>运行时读到的插件事实：<code>id / version / apiVersion / loaded</code>（<code>loaded</code> 不落盘）</td></tr>
+        <tr><td><code>SourceType</code></td><td>Enum</td><td>INTERNAL（应用内实现）/ NATIVE（本地能力：文件、目录、检索、命令，只在本工作区内动手，见 5.8.1 规则 9）/ REST / MCP</td></tr>
         <tr><td><code>SideEffectLevel</code></td><td>Enum</td><td>READ_ONLY / REPEATABLE / IRREVERSIBLE，决定是否触发执行前放行审批</td></tr>
         <tr><td><code>ToolStatus</code></td><td>Enum</td><td>DRAFT / ACTIVE / DEPRECATED</td></tr>
         <tr><td><code>ApiCredential</code></td><td>VO</td><td><strong>凭据引用 = 环境变量名</strong>（如 <code>OPENAI_API_KEY</code>）；真实密钥只从进程环境读取，不落盘</td></tr>
@@ -468,7 +533,7 @@ flowchart LR
         <tr><td><code>ChatMessage</code></td><td>VO</td><td>一条对话消息：<code>role</code>（复用 <code>RecordRole</code>）、<code>content</code>、模型请求的工具调用（ASSISTANT）、<code>toolCallId</code>（TOOL_RESULT 回填用）</td></tr>
         <tr><td><code>ToolCall</code></td><td>VO</td><td>模型请求的一次工具调用：<code>callId</code>（协议侧 id，用于回灌结果）、<code>name</code>、<code>argumentsJson</code></td></tr>
         <tr><td><code>ModelUsage</code></td><td>VO</td><td>一次调用的精确用量：<code>inputTokens</code> / <code>outputTokens</code>（D08 台账口径；厂商不给时由 <code>TokenCounter</code> 估算）</td></tr>
-        <tr><td><code>ExternalToolPort</code></td><td>Port</td><td>REST / MCP / NATIVE 出站调用；由基础设施实现</td></tr>
+        <tr><td><code>ExternalToolPort</code></td><td>Port</td><td>REST / MCP 出站调用；由基础设施实现。<strong><code>NATIVE</code> 不走这里</strong>（它是本层的处理器，不是出站调用）</td></tr>
         <tr><td><code>ModelInvocationPort</code></td><td>Port</td><td>模型调用端口；由 <code>ModelInvoker</code> 实现</td></tr>
       </tbody>
     </table>
@@ -481,6 +546,7 @@ flowchart LR
         <tr><td><code>BudgetWarning</code></td><td>Budget</td><td><code>recordUsage</code> 首次越过 <code>budgetWarnRatio</code>（<code>warned</code> 置真）</td><td>内循环 → <code>ask_user</code> 询问是否继续</td></tr>
       </tbody>
     </table>
+    <p>插件不新增领域事件：安装 / 授权 / 停用是<strong>用户操作</strong>，改的是 <code>PluginManifest</code> 的授权意图，界面自己刷新即可（与"事件只通知"一致）。</p>
     <p><strong>本模块订阅</strong> <code>PolicyAdjusted</code>（感知）：刷新备用模型链与信任清单的读取缓存（若有）。工具调用失败、模型调用失败<strong>都不是领域事件</strong>，它们是同步结果。</p>
 
     <h2><span class="sec">5.8</span>聚合生命周期与规则</h2>
@@ -490,7 +556,7 @@ flowchart LR
       <thead><tr><th>诞生</th><th>变更</th><th>终结</th><th>重建</th></tr></thead>
       <tbody>
         <tr>
-          <td><strong>平台初始化</strong>（5 个内置工具播种）/ 用户注册外部工具</td>
+          <td><strong>平台初始化</strong>（13 个内置工具播种：5 个编排 + 8 个本地能力）/ 用户注册外部工具</td>
           <td>元数据或 schema 更新、<code>activate</code> / <code>deprecate</code></td>
           <td><code>DEPRECATED</code>（不再进入新会话快照）</td>
           <td>应用启动时载入</td>
@@ -503,10 +569,20 @@ flowchart LR
       <li>一次模型响应里出现多个工具调用时，<strong>逐个执行、各自独立成败</strong>（可部分成功）。</li>
       <li><strong>工具失败不是领域状态</strong>：超时 / 异常 / 无返回都作为"一种工具结果"回灌模型，ReAct 继续。</li>
       <li><strong>超时由工具自带</strong>（<code>timeoutMillis</code>）；<code>ask_user</code> 可无限期等待。</li>
-      <li><strong>执行前放行审批</strong>：<code>sideEffect ≠ READ_ONLY</code> 且不在 <code>trustedToolIds</code> 中 ⇒ 先 <code>ask_user</code> 放行；信任清单可覆盖不可逆工具。</li>
+      <li><strong>执行前放行审批</strong>：<code>sideEffect ≠ READ_ONLY</code> 且不在 <code>trustedToolIds</code> 中 ⇒ 先 <code>ask_user</code> 放行；信任清单可覆盖不可逆工具。
+        <strong>插件来源的工具</strong>：<code>source.type = PLUGIN</code> 且其 <code>PluginManifest.trusted = true</code> ⇒ 视为已放行（<strong>安装时的一次同意 = 一次针对整包的放行审批</strong>）。
+        <strong>本地写入例外</strong>：<code>edit_file</code> / <code>write_file</code> / <code>delete_file</code> 首次问一次"允许本会话在此工作区内<strong>写入与删除</strong>文件？"，同意后该会话不再逐次问——这份信任记在<strong>运行期</strong>（按会话隔离、进程退出即失效，<strong>不落盘、不进 <code>RuntimePolicy</code></strong>）：持久信任一条写权限是用户自己该做的决定，不该由一次点击替他做。
+        <br/><strong>本地命令工具例外</strong>：<code>run_command</code> <strong>不走这条</strong>，改由规则 10 的绊线判定。</li>
       <li><strong>结果截断</strong>：超过 <code>toolResultTruncateLength</code> ⇒ 截断进上下文，完整内容落<strong>本地归档文件</strong>，<code>ToolExecOutcome.resourceUri</code> 指向它；<strong>会话销毁时一并删除</strong>。</li>
       <li><strong>重试语义</strong>：失败重试时，已成功的工具调用按"重放"处理，副作用风险由用户承担。</li>
       <li>入参必须通过 <code>inputSchema</code> 的<strong>完整 JSON Schema 校验</strong>（draft-07，networknt <code>json-schema-validator</code>，见 D17）；失败即返回<strong>错误结果</strong>（不执行，回灌模型自修复）。校验产出的是"违反项清单"而不是异常——校验失败是预期内结果，不是 bug。</li>
+      <li><strong>本地能力只在一个根里动手</strong>：工作区根 = <strong>进程启动时的工作目录</strong>（启动时求一次 <code>toRealPath()</code>；<strong>不做配置项</strong>——"我在哪个目录启动它，它就在哪儿干活"）。所有本地工具的路径都必须落在根内：相对路径拼到根下，绝对路径也接受但必须仍在根内；<strong>判定必须基于 real path</strong>（否则一个符号链接就能逃逸）；目标不存在时对<strong>父目录</strong>判定。越界<strong>不是异常</strong>，是普通工具错误结果（规则 3）。写/改文件先写 <code>*.tmp</code> 再原子改名；<code>run_command</code> 的 <code>cwd</code> 默认根、且只能是根内子目录；<code>delete_file</code> 不许删根本身。
+        <br/><strong>硬限制</strong>（超限一律走规则 6 截断 + 归档）：<code>read_file</code> 默认 2000 行，含 NUL 字节判为二进制并拒绝；<code>list_dir</code> 深度默认 2、最多 500 项，忽略 <code>.git</code>/<code>target</code>/<code>node_modules</code>/<code>.idea</code>；<code>grep</code> 最多 200 条、每条 ≤ 200 字符；<code>fetch_url</code> 只 <code>http</code>/<code>https</code>、默认 8000 字符、失败当普通结果；<code>run_command</code> 超时默认 120s、上限 600s、只回<strong>尾部 200 行 + 退出码</strong>、超时<strong>杀进程树</strong>；<code>edit_file</code> 的 <code>oldText</code> 必须<strong>恰好出现一次</strong>（0 次或多次都失败，并回报位置）；<code>write_file</code> 已存在且未 <code>overwrite</code> 即失败。</li>
+      <li><strong><code>run_command</code> 默认放行，命中毒性特征才审批</strong>（这是对 I3 的实质让渡，见 D25）：判定<strong>不靠正则</strong>，靠<strong>浅结构解析</strong>——引号消解后把命令行切成命令段，每段得到 <code>程序 / 参数集合 / 操作数 / 重定向</code>，段间保留 <code>;</code> <code>&amp;&amp;</code> <code>||</code> <code>|</code> 的拓扑；<code>sh -c</code> / <code>eval</code> 的<strong>实参文本再解析一遍</strong>（深度上限 2）。
+        <br/><strong>命中即审批，不是拒绝</strong>；<strong>解析失败、或嵌套超深 ⇒ 一律审批</strong>（fail-closed：看不懂就问）。审批文案带命中的规则名与原始命令。
+        <br/>判定项：整盘或家目录的递归删除；<code>mkfs</code> / <code>dd of=/dev/*</code> / <code>shred</code> / 写 <code>/dev/sd*</code>；<code>chmod -R 777 /</code>；<code>sudo</code> / <code>su</code> / <code>doas</code>；管道末端是 shell 且上游是 <code>curl</code>/<code>wget</code>/<code>base64 -d</code>/<code>eval</code>；<code>git push --force</code> / <code>git reset --hard</code> / <code>git clean -x</code>；<code>find -delete</code> / <code>find -exec</code> / <code>xargs</code> + 删除类命令；fork 炸弹 / <code>kill -9 -1</code> / <code>shutdown</code> / <code>reboot</code>；<code>drop database</code> / <code>drop table</code> / <code>truncate table</code>；把 <code>.env</code>、<code>.ssh/id_*</code>、<code>.aws/credentials</code> 读出或 POST 出去。
+        <br/><strong>它是绊线不是闸门</strong>：拦不住动态拼接（<code>$(...)</code>/<code>$VAR</code>/别名）、间接执行（<code>xargs</code>/<code>find -exec</code>）、以及<strong>项目自己的脚本</strong>（<code>npm run build</code>、<code>mvn clean</code>）——这几类恰好是最常见的真实事故，模型必须知道它没被保护。
+        <br/>同理：<strong>"信任工作区"只管 <code>edit_file</code>/<code>write_file</code>/<code>delete_file</code>，管不住 <code>run_command</code> 里的重定向与子进程</strong>（能跑 shell 就能写文件）。</li>
     </ol>
 
     <h3>5.8.2 <code>Provider</code></h3>
@@ -570,33 +646,71 @@ flowchart LR
       <li>子会话不自建 Budget，并发消耗先本地累计、结束后归集。</li>
     </ol>
 
+    <h3>5.8.6 <code>PluginManifest</code></h3>
+    <table>
+      <thead><tr><th>诞生</th><th>变更</th><th>终结</th><th>重建</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>安装</strong>（用户放 jar + 应用读 <code>plugin.json</code>；不存在则按默认创建：<code>trusted=false</code>、<code>grantedCapabilities=∅</code>）</td>
+          <td><code>grant(端口名)</code> / <code>revoke(端口名)</code>（按能力逐项勾选）；<code>trusted</code> 只在安装时确定</td>
+          <td><strong>卸载</strong>：删除 <code>plugins/&lt;id&gt;/</code> 目录（与"删 <code>skills/</code> 目录即淘汰"同构）；应用内不提供删除</td>
+          <td>应用启动时载入（<code>PluginRepository.list()</code>）</td>
+        </tr>
+      </tbody>
+    </table>
+    <h4>规则（8 条）</h4>
+    <ol>
+      <li><strong>落盘只存用户意图</strong>：<code>id / version / apiVersion / trusted / grantedAt / toolIds / declaredCapabilities / grantedCapabilities</code>。"已加载 / 加载失败"是<strong>进程内事实</strong>，不落盘（D22 的同一条理由：没人负责擦除的持久状态必然变脏）。</li>
+      <li><strong>目录名 = <code>Plugin-Id</code></strong>：不一致 ⇒ 拒绝安装（否则同 id 两个目录，卸载会漏）。</li>
+      <li><strong><code>grantedCapabilities ⊆ declaredCapabilities</code></strong>：勾选不能超出插件自报的可替换面。</li>
+      <li><strong>同一端口至多一个启用者</strong>：冲突在<strong>启用</strong>时判定（安装不判），第二次启用被拒绝并提示冲突方；不做"后装覆盖"、不做优先级链。</li>
+      <li><strong><code>apiVersion</code> 不符 / 重复打包宿主已提供的依赖</strong> ⇒ 拒绝安装或启用，<strong>不允许"跑起来试试"</strong>。</li>
+      <li><strong>工具清单不动</strong>：插件带来的工具就是 <code>source.type = PLUGIN</code> 的 <code>ToolDefinition</code>，<code>status</code> 始终 <code>ACTIVE</code>；停用插件时它们从目录里<strong>消失</strong>（不改 <code>ToolStatus</code>）。</li>
+      <li><strong>升级 = 换 jar</strong>：同一 <code>Plugin-Id</code> 重新加载会与旧 <code>ClassLoader</code> 撞车，<strong>要求重启进程</strong>。</li>
+      <li><strong>卸载不牵连历史</strong>：不删该插件产出过的 artifact（那些属于会话历史，随会话销毁清理）。</li>
+      <li><strong>能力名与"声明"的来源</strong>：能力名 = <strong>端口短名</strong>（<code>Clock</code> / <code>TokenCounter</code> / <code>ModelInvocationPort</code> / <code>ExternalToolPort</code> / <code>HumanInteractionPort</code> / <code>ProgressPort</code> / <code>SessionRunner</code>）<strong>+ 特殊能力 <code>tools</code></strong>；<code>declaredCapabilities</code> <strong>不靠插件自报</strong>，由装配层逐个探"该插件是否真的实现了它"，jar 内有工具声明即自动含 <code>tools</code>。</li>
+    </ol>
+
     <h2><span class="sec">5.9</span>领域服务的具体操作</h2>
 
     <h3>5.9.1 <code>ToolExecutor.execute(session, tool, args)</code>（应用层）</h3>
-    <pre class="mermaid">
-flowchart TD
-    A[收到工具调用] --> B{tool.status = ACTIVE&lt;br/>且已在 Agent 绑定内?}
-    B -- 否 --> X[返回错误结果&lt;br/>模型自行处理]
-    B -- 是 --> C{args 通过 inputSchema?}
-    C -- 否 --> X
-    C -- 是 --> D{sideEffect ≠ READ_ONLY&lt;br/>且不在 trustedToolIds?}
-    D -- 是 --> E[ask_user 放行审批]
-    E -- 不同意 --> X2[返回“用户拒绝执行”结果]
-    E -- 同意 --> F{按 source.type 分发}
-    D -- 否 --> F
-    F -->|INTERNAL| G[处理器注册表&lt;br/>generate_plan / submit_step / ask_user /&lt;br/>spawn_subagents / load_skill]
-    F -->|REST / MCP| H[出站调用（工具自带超时）]
-    F -->|NATIVE| I[内置本地能力]
-    G --> J{结果超长?}
-    H --> J
-    I --> J
-    J -- 是 --> K[截断 + 原文落本地归档&lt;br/>resourceUri 指向文件]
-    J -- 否 --> L[原样返回]
-    K --> M[返回 ToolExecOutcome]
-    L --> M
-    X --> M
-    X2 --> M
-    </pre>
+    <pre class="mermaid">flowchart TD
+    A[收到工具调用] --&gt; B{tool.status = ACTIVE&lt;br/&gt;且已在 Agent 绑定内?}
+    B -- 否 --&gt; X[返回错误结果&lt;br/&gt;模型自行处理]
+    B -- 是 --&gt; C{args 通过 inputSchema?}
+    C -- 否 --&gt; X
+    C -- 是 --&gt; D{sideEffect ≠ READ_ONLY&lt;br/&gt;且不在信任范围?&lt;br/&gt;（trustedToolIds，或来源=PLUGIN 且安装时已信任）&lt;br/&gt;run_command 不走这一步（规则 10）}
+    D -- 是 --&gt; E[ask_user 放行审批]
+    E -- 不同意 --&gt; X2[返回“用户拒绝执行”结果]
+    E -- 同意 --&gt; F{按 source.type 分发}
+    D -- 否 --&gt; F
+    F --&gt;|INTERNAL / PLUGIN / NATIVE| G[处理器注册表&lt;br/&gt;5 个编排 + 8 个本地能力 + 插件注册的处理器]
+    F --&gt;|REST / MCP| H[出站调用（工具自带超时）]
+    G --&gt; J{结果超长?}
+    H --&gt; J
+    J -- 是 --&gt; K[截断 + 原文落本地归档&lt;br/&gt;resourceUri 指向文件]
+    J -- 否 --&gt; L[原样返回]
+    K --&gt; M[返回 ToolExecOutcome]
+    L --&gt; M
+    X --&gt; M
+    X2 --&gt; M</pre>
+
+    <div class="callout">
+      <div class="ct">来源标记不是分叉</div>
+      <strong>插件来源</strong>（<code>PLUGIN</code>）与<strong>本地能力</strong>（<code>NATIVE</code>）都只是来源标记：执行仍然查同一个处理器注册表，区别只在"信任从哪来"。它们的路径一律先过<strong>工作区根</strong>校验（规则 9），越界是普通工具错误结果。
+    </div>
+
+    <h4><code>run_command</code> 的绊线判定（规则 10）</h4>
+    <pre class="mermaid">flowchart TD
+    A[run_command 入参] --&gt; B[浅结构解析&lt;br/&gt;引号消解 → 命令段]
+    B -- 解析失败 --&gt; ASK[ask_user 审批&lt;br/&gt;文案：无法安全解析]
+    B -- 成功 --&gt; C{"逐段匹配判定项&lt;br/&gt;（含 sh -c / eval 实参递归）"}
+    C -- 命中 --&gt; ASK2[ask_user 审批&lt;br/&gt;文案：命中规则名 + 原始命令]
+    C -- 未命中 --&gt; RUN[执行&lt;br/&gt;cwd 限根内、超时杀进程树]
+    ASK -- 同意 --&gt; RUN
+    ASK2 -- 同意 --&gt; RUN
+    ASK -- 拒绝 --&gt; X[返回“用户拒绝执行”结果]
+    ASK2 -- 拒绝 --&gt; X</pre>
 
     <h4><code>spawn_subagents</code> 的内部展开（全系统唯一并发点）</h4>
     <pre class="mermaid">
@@ -625,6 +739,10 @@ sequenceDiagram
     TE-->>TE: join-all 完成，返回 List&lt;SubagentResult&gt;
     </pre>
     <p><strong>要点</strong>：各子代理<strong>独立成败</strong>，不整体失败；中断时已完成的保留、未完成的按中断处理。</p>
+    <div class="callout">
+      <div class="ct">插件来源的工具走同一条路</div>
+      <code>source.type = PLUGIN</code> 只是来源标记（审计、界面、免审批判定）；执行仍然查同一个处理器注册表，<code>INTERNAL</code> 与 <code>PLUGIN</code> 的唯一差别是"信任从哪来"。
+    </div>
 
         <h3>5.9.2 模型调用的两层校验（规则）</h3>
     <p><code>ModelInvoker</code> 的<strong>完整时序见 <a href="09-infrastructure.html">第 9 章</a> 9.11</strong>；「模型不可用 / 请求超限」的<strong>处理结果见 <a href="08-application.html">第 8 章</a> 8.10</strong>。这里只保留跨层必须对齐的口径。</p>
@@ -679,6 +797,11 @@ sequenceDiagram
     </pre>
     <p><strong>要点</strong>：子会话并发时先各自累计，结束后 <code>settleFromSubSession</code> 一次性归集到根，避免并发写同一 <code>Budget</code> 聚合。</p>
 
+    <div class="callout">
+      <div class="ct"><code>BudgetWarning</code> 不是异步订阅</div>
+      它在 <code>Budget.recordUsage</code> 内 raise、由 <code>BudgetService</code> 在同一调用栈内交给内循环（等价于返回值），因此不需要事件总线就能落地"只预警一次"。
+    </div>
+
 
     <h2><span class="sec">附</span>生命周期节点词表（全站统一）</h2>
     <p>四份模块文档共用同一套节点词汇，便于横向对照；"节点 → 涉及聚合"的完整对照表见 <a href="03-overview.html">第 3 章 3.8</a>。</p>
@@ -699,7 +822,7 @@ sequenceDiagram
         <tr><td><strong>计划完结</strong></td><td><code>COMPLETED</code> / <code>FAILED</code>，触发经验沉淀</td></tr>
         <tr><td><strong>上下文折叠</strong></td><td>token 超阈值 → 生成 <code>SUMMARY</code> → 窗口收窄</td></tr>
         <tr><td><strong>模型降级</strong></td><td>故障命中备用模型链</td></tr>
-        <tr><td><strong>会话封存 / 会话销毁</strong></td><td>归档（不可 resume）/ 物理删除（连带 <code>Record</code> / <code>Plan</code> / <code>Budget</code>，经验保留）</td></tr>
+        <tr><td><strong>归档 / 会话销毁</strong></td><td>归档（压成 zip 移走，应用不再认识）/ 物理删除（连带 <code>Record</code> / <code>Plan</code> / <code>Budget</code>，经验保留）</td></tr>
       </tbody>
     </table>
 

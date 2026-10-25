@@ -44,8 +44,7 @@
     </div>
 
     <h2><span class="sec">6.2</span>模块总览图</h2>
-    <pre class="mermaid">
-classDiagram
+    <pre class="mermaid">classDiagram
     namespace 计划聚合 {
         class Plan {
             &lt;&lt;AggregateRoot&gt;&gt;
@@ -63,6 +62,7 @@ classDiagram
             +retryStep(StepId) Attempt
             +markAttemptInterrupted(StepId, int)
             +recordReflection(StepId, int, ReflectionId)
+            +recordSkillUsage(StepId, int, SkillId)
             +applyReplan(List~PlanStep~)
             +terminate(String)
         }
@@ -83,6 +83,7 @@ classDiagram
             +int attemptNo
             +RecordRange recordRange
             +List~SessionId~ childSessionIds
+            +List~SkillId~ usedSkillIds
             +VerificationReportId verificationReportId
             +ReflectionId reflectionId
             +AttemptOutcome outcome
@@ -158,9 +159,31 @@ classDiagram
     }
 
     namespace 领域服务 {
+        class SessionRunner {
+            &lt;&lt;ExtensionPoint&gt;&gt;
+            +run(Session, ChunkSink, CancellationToken, RunContext) RunOutcome
+        }
+        class RunOutcome {
+            &lt;&lt;Enumeration&gt;&gt;
+            CONVERGED
+            SUSPENDED
+            ROUNDS_EXHAUSTED
+        }
+        class RunContext {
+            &lt;&lt;ValueObject&gt;&gt;
+            +Session session
+            +ChunkSink sink
+            +CancellationToken cancellation
+            +ModelInvocationPort model
+            +ToolInvoker tools
+            +HumanInteractionPort human
+            +ProgressPort progress
+            +PlanRepository plans
+            +ContextWindowService contextWindow
+        }
         class ExecutionLoop {
             &lt;&lt;ApplicationService&gt;&gt;
-            +run(Session)
+            +run(Session, ChunkSink, CancellationToken, RunContext) RunOutcome
         }
         class ReActLoop {
             &lt;&lt;ApplicationService&gt;&gt;
@@ -185,7 +208,8 @@ classDiagram
             +boolean isConverged
             +boolean submitted
             +String submittedSummary
-            +int attemptNo
+            +int round
+            +List~SkillId~ usedSkillIds
         }
     }
 
@@ -211,6 +235,9 @@ classDiagram
     VerificationReport --&gt; VerificationOutcome
     VerificationReport --&gt; VerificationType
 
+    ExecutionLoop ..&gt; SessionRunner : 实现（默认编排）
+    SessionRunner ..&gt; RunContext : 入参
+    SessionRunner ..&gt; RunOutcome : 产出
     ExecutionLoop ..&gt; Plan
     ExecutionLoop ..&gt; ReActLoop
     ExecutionLoop ..&gt; VerificationRunner
@@ -225,8 +252,7 @@ classDiagram
     Plan ..&gt; PlanCompleted : raises
     Plan ..&gt; PlanFailed : raises
     Plan ..&gt; StepFailed : raises
-    VerificationReport ..&gt; VerificationRejected : raises
-        </pre>
+    VerificationReport ..&gt; VerificationRejected : raises</pre>
     <p class="diagram-note">图 6-1　规划模块总览</p>
 
     <h2><span class="sec">6.3</span>对象操作图</h2>
@@ -329,7 +355,8 @@ flowchart LR
     <table>
       <thead><tr><th>服务</th><th>层</th><th>简介</th><th>跨模块依赖</th></tr></thead>
       <tbody>
-        <tr><td><code>ExecutionLoop</code></td><td>应用</td><td>会话执行的总驱动（do-while）：每轮算上下文 → 取 step → 跑一次内循环 → 验证 → 按三条出口推进</td><td><code>ContextWindowService</code>、<code>ReActLoop</code>、<code>VerificationRunner</code>、经验三件套</td></tr>
+        <tr><td><code>SessionRunner</code></td><td>扩展点</td><td>交付一轮运行的统一入口；<strong>默认实现是 <code>ExecutionLoop</code></strong>，插件可实现自己的循环（L3，<code>experimental</code>）</td><td><code>RunContext</code>（把端口与上下文交给实现方）</td></tr>
+        <tr><td><code>ExecutionLoop</code></td><td>应用</td><td><code>SessionRunner</code> 的默认实现：会话执行的总驱动（do-while）：每轮算上下文 → 取 step → 跑一次内循环 → 验证 → 按三条出口推进</td><td><code>ContextWindowService</code>、<code>ReActLoop</code>、<code>VerificationRunner</code>、经验三件套</td></tr>
         <tr><td><code>ReActLoop</code></td><td>应用</td><td>单次 ReAct 迭代：组装上下文 → 让模型调工具 → 落记录 → 判定收敛与提交</td><td><code>ToolExecutor</code>、<code>BudgetService</code>、<code>HumanInteractionPort</code>、<code>SubagentLauncher</code></td></tr>
         <tr><td><code>VerificationRunner</code></td><td>应用</td><td>执行 <code>VerificationChain</code> 给出的有序层，产出 <code>VerificationReport</code></td><td><code>VerificationChain</code>（领域）、<code>ModelInvocationPort</code>、<code>HumanInteractionPort</code></td></tr>
         <tr><td><code>VerificationChain</code></td><td>领域</td><td>纯规则：<code>requiredVerifications</code> → 有序层列表；短路与三态合并</td><td>无</td></tr>
@@ -342,14 +369,16 @@ flowchart LR
       <thead><tr><th>对象</th><th>类型</th><th>简介</th></tr></thead>
       <tbody>
         <tr><td><code>PlanStep</code></td><td>Entity（<code>Plan</code> 内）</td><td>计划中的一步：描述、声明的验证类型集合、状态、尝试链、分配到的经验</td></tr>
-        <tr><td><code>Attempt</code></td><td>Entity（<code>PlanStep</code> 内）</td><td><strong>一个 step 的一次完整执行周期</strong>（可跨多段 ReAct，被多次用户输入切分，但不切分 attempt）；记录区间、期间开的子会话、报告与反思引用、结局</td></tr>
+        <tr><td><code>Attempt</code></td><td>Entity（<code>PlanStep</code> 内）</td><td><strong>一个 step 的一次完整执行周期</strong>（可跨多段 ReAct，被多次用户输入切分，但不切分 attempt）；记录区间、期间开的子会话、<strong>本次用到的技能</strong>、报告与反思引用、结局</td></tr>
         <tr><td><code>RecordRange</code></td><td>VO</td><td>指向 <code>Session.Record</code> 流水的一段连续区间（<code>startRecordId → endRecordId</code>），是"轨迹"的唯一载体</td></tr>
         <tr><td><code>PlanStatus</code></td><td>Enum</td><td>EXECUTING / REPLANNING / COMPLETED / FAILED</td></tr>
         <tr><td><code>StepStatus</code></td><td>Enum</td><td>PENDING / RUNNING / VERIFYING / SUCCEEDED / FAILED / SUPERSEDED / CANCELLED</td></tr>
         <tr><td><code>AttemptOutcome</code></td><td>Enum</td><td>SUCCEEDED / FAILED / INTERRUPTED（只有这三个是 attempt 的边界）</td></tr>
         <tr><td><code>VerificationOutcome</code></td><td>Enum</td><td>PASSED / FAILED / UNDETERMINED（<code>UNDETERMINED</code> → 转人工）</td></tr>
         <tr><td><code>VerificationType</code></td><td>Enum</td><td>DETERMINISTIC / ENV_FEEDBACK / LLM_JUDGE / HUMAN_APPROVAL，固定顺序即链序</td></tr>
-        <tr><td><code>IterationResult</code></td><td>VO</td><td>内循环一次迭代的输出：是否收敛、是否提交、提交摘要、attempt 序号</td></tr>
+        <tr><td><code>RunOutcome</code></td><td>Enum</td><td>一轮运行的出口：<code>CONVERGED / SUSPENDED / ROUNDS_EXHAUSTED</code>（原本嵌在 <code>ExecutionLoop</code> 里，M42 提升为独立类型）</td></tr>
+        <tr><td><code>RunContext</code></td><td>VO</td><td>交给 <code>SessionRunner</code> 的运行上下文：<code>Session</code>、<code>ChunkSink</code>、<code>CancellationToken</code> + 6 个端口/服务（模型、工具、人机、进度、计划仓储、上下文窗口）</td></tr>
+        <tr><td><code>IterationResult</code></td><td>VO</td><td>内循环一次迭代的输出：是否收敛、是否提交、提交摘要、<strong>内循环轮次 <code>round</code></strong>（<strong>不是 attempt 序号</strong>——attempt 由外循环自己跟踪）、<strong>本次 load 过的技能</strong>（内循环拿不到 <code>Plan</code>，靠它把技能使用交回外循环）</td></tr>
       </tbody>
     </table>
 
@@ -357,17 +386,18 @@ flowchart LR
     <table>
       <thead><tr><th>事件</th><th>谁发出</th><th>什么时候</th><th>谁关心</th></tr></thead>
       <tbody>
-        <tr><td><code>PlanCreated</code></td><td>Plan</td><td><code>PlanFactory</code> 校验通过并创建计划（<code>generate_plan</code> 成功）</td><td><code>ExperienceRetriever</code>（记忆）→ 为每个 step 分配经验</td></tr>
-        <tr><td><code>PlanCompleted</code></td><td>Plan</td><td>全部 step 达到 <code>SUCCEEDED</code></td><td><code>ExperienceDistillationService</code>（记忆）</td></tr>
-        <tr><td><code>PlanFailed</code></td><td>Plan</td><td><strong>外循环判定重划用尽</strong>后调用 <code>terminate()</code>（或显式终止）</td><td><code>ExperienceDistillationService</code>（记忆，终局失败也沉淀）、界面</td></tr>
-        <tr><td><code>StepFailed</code></td><td>Plan</td><td><code>markStepFailed()</code> 状态转换成功</td><td><code>ExecutionLoop</code>（重试 / 反思 / 重划决策）</td></tr>
-        <tr><td><code>VerificationRejected</code></td><td>VerificationReport</td><td>报告结论为 <code>FAILED</code> 或 <code>UNDETERMINED</code></td><td><code>ExecutionLoop</code></td></tr>
+        <tr><td><code>PlanCreated</code></td><td>Plan</td><td><code>PlanFactory</code> 校验通过并创建计划（<code>generate_plan</code> 成功）</td><td><strong>无功能性订阅方</strong>：经验分配由 <code>ExecutionLoop</code> 显式调用 <code>ExperienceRetriever</code>；事件只供界面 / 审计</td></tr>
+        <tr><td><code>PlanCompleted</code></td><td>Plan</td><td>全部 step 达到 <code>SUCCEEDED</code></td><td><strong>无功能性订阅方</strong>：沉淀由 <code>ExecutionLoop</code> 显式调用 <code>ExperienceDistillationService</code></td></tr>
+        <tr><td><code>PlanFailed</code></td><td>Plan</td><td><strong>外循环判定重划用尽</strong>后调用 <code>terminate()</code>（或显式终止）</td><td><strong>无功能性订阅方</strong>：沉淀由 <code>ExecutionLoop</code> 显式调用（终局失败也沉淀）；界面 / 审计</td></tr>
+        <tr><td><code>StepFailed</code></td><td>Plan</td><td><code>markStepFailed()</code> 状态转换成功</td><td><strong>无功能性订阅方</strong>：外循环读标记后的聚合状态做重试 / 反思 / 重划决策</td></tr>
+        <tr><td><code>VerificationRejected</code></td><td>VerificationReport</td><td>报告结论为 <code>FAILED</code> 或 <code>UNDETERMINED</code></td><td><strong>无功能性订阅方</strong>：外循环直接用 <code>VerificationRunner.verify()</code> 的返回值</td></tr>
       </tbody>
     </table>
     <div class="callout">
       <div class="ct">说明</div>
       <p><code>Plan</code> 卷起的 <code>Attempt</code> 结束（SUCCEEDED / FAILED / INTERRUPTED）不单独发事件，
       统一由 <code>StepFailed</code> 与 <code>PlanCompleted</code> / <code>PlanFailed</code> 表达。</p>
+      <p>「订阅方」一律为<strong>无功能性订阅方</strong>：领域事件<strong>只通知</strong>（见<a href="03-overview.html">第 3 章</a>总口径），需要记忆模块做事时由 <code>ExecutionLoop</code> 显式调用，不经事件驱动。</p>
     </div>
 
     <h2><span class="sec">6.8</span>聚合生命周期与规则</h2>
@@ -505,7 +535,7 @@ sequenceDiagram
       <tbody>
         <tr><td>无 Plan 且内循环收敛</td><td>本次交互结束，会话停在原处（会话没有状态，D22）</td></tr>
         <tr><td>内循环里 <code>generate_plan</code> 成功</td><td>本轮收敛后，下一次迭代 <code>hasExecutablePlan()</code> 为真，转入计划执行</td></tr>
-        <tr><td>计划 <code>COMPLETED</code></td><td>再跑一轮自由内循环，由模型产出<strong>最终答复</strong>（这就是"结论交付"）</td></tr>
+        <tr><td>计划 <code>COMPLETED</code></td><td>再跑一轮自由内循环，由模型产出<strong>最终答复</strong>（这就是"结论交付"）；完结时由 <code>PlanCompletionCurator</code> <strong>一次判定</strong>产出「经验? / 技能?」（用过技能 ⇒ 判改进；没用过 ⇒ 判沉淀）</td></tr>
         <tr><td>计划 <code>FAILED</code>（外循环判定重划用尽 → <code>terminate()</code>）</td><td>循环收敛退出，触发沉淀</td></tr>
         <tr><td><strong>模型不可用</strong>（<code>ModelInvoker</code> 抛出）</td><td><code>run()</code> <strong>立即返回</strong>，不迁移任何聚合状态、不消耗重试、不触发反思/重划；step 保持 RUNNING、<code>Attempt</code> 不结束；仅提示用户（不自动重试）</td></tr>
         <tr><td>收敛但<strong>未提交</strong></td><td>本轮 <code>run()</code> 直接返回；<code>Attempt</code> <strong>挂起</strong>（不落终态）、不消耗重试；plan 仍 EXECUTING、step 仍 RUNNING；用户下次输入后取<strong>同一步、同一 Attempt</strong> 继续（<code>recordRange</code> 继续延伸）</td></tr>
@@ -516,8 +546,7 @@ sequenceDiagram
 
     <h3>6.9.2 <code>ReActLoop.runIteration(Session, PlanStep)</code>（应用层）</h3>
     <p>跑一次 ReAct 迭代；<strong>唯一出口是"模型不再调用工具"</strong>。它不判断 step 是否完成，只识别模型是否调用了 <code>submit_step</code>。</p>
-    <pre class="mermaid">
-sequenceDiagram
+    <pre class="mermaid">sequenceDiagram
     autonumber
     participant IL as ReActLoop
     participant S as Session（感知）
@@ -525,20 +554,20 @@ sequenceDiagram
     participant BS as BudgetService（行动）
     participant RP as RuntimePolicy（感知）
 
-    IL->>S: buildContextForLlm(ContextWindowPolicy)
-    S-->>IL: ContextWindow
-    IL->>RP: maxReActRounds
+    IL-&gt;&gt;S: buildContextForLlm(ContextWindowPolicy)
+    S--&gt;&gt;IL: ContextWindow
+    IL-&gt;&gt;RP: maxReActRounds
     loop 直到模型不再调工具 或 达到 maxReActRounds
-        IL->>TE: execute(session, tool, args)
-        TE-->>IL: 工具结果（成功/失败都只是“结果”）
-        IL->>S: appendRecord(TOOL_REQUEST)
-        IL->>S: appendRecord(TOOL_RESULT, payload)
-        IL->>BS: recordUsage(会话族根, tokens)
+        IL-&gt;&gt;TE: execute(session, tool, args)
+        TE--&gt;&gt;IL: 工具结果（成功/失败都只是“结果”）
+        IL-&gt;&gt;S: appendRecord(TOOL_REQUEST)
+        IL-&gt;&gt;S: appendRecord(TOOL_RESULT, payload)
+        IL-&gt;&gt;BS: recordUsage(会话族根, tokens)
         alt 工具 == submit_step
             Note over IL: 记录 submitted = true、submittedSummary；本轮收敛
         else 工具 == ask_user
             Note over IL: 阻塞等待用户回答（同一 ReAct 循环内）
-            IL->>S: appendRecord(TOOL_RESULT, 用户回答)
+            IL-&gt;&gt;S: appendRecord(TOOL_RESULT, 用户回答)
         else 工具 == load_skill
             Note over IL: 把返回的 SOP 注入为一条 role=SYSTEM 的 Record
         end
@@ -546,9 +575,8 @@ sequenceDiagram
     alt 达到 maxReActRounds
         Note over IL: attempt 判失败（交回外循环）
     else 模型不再调工具
-        IL-->>IL: IterationResult(isConverged = true, submitted, submittedSummary, attemptNo)
-    end
-    </pre>
+        IL--&gt;&gt;IL: IterationResult(isConverged = true, submitted, submittedSummary, round)
+    end</pre>
 
     <h3>6.9.3 <code>VerificationRunner.verify(PlanStep, Attempt)</code>（应用层）</h3>
     <p>链序与短路/三态合并的规则由领域服务 <code>VerificationChain</code> 给出；<code>VerificationRunner</code> 只负责按序真的执行。</p>
@@ -625,7 +653,7 @@ flowchart TD
         <tr><td><strong>计划完结</strong></td><td><code>COMPLETED</code> / <code>FAILED</code>，触发经验沉淀</td></tr>
         <tr><td><strong>上下文折叠</strong></td><td>token 超阈值 → 生成 <code>SUMMARY</code> → 窗口收窄</td></tr>
         <tr><td><strong>模型降级</strong></td><td>故障命中备用模型链</td></tr>
-        <tr><td><strong>会话封存 / 会话销毁</strong></td><td>归档（不可 resume）/ 物理删除（连带 <code>Record</code> / <code>Plan</code> / <code>Budget</code>，经验保留）</td></tr>
+        <tr><td><strong>归档 / 会话销毁</strong></td><td>归档（压成 zip 移走，应用不再认识）/ 物理删除（连带 <code>Record</code> / <code>Plan</code> / <code>Budget</code>，经验保留）</td></tr>
       </tbody>
     </table>
 

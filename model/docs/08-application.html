@@ -30,8 +30,8 @@
     <table>
       <thead><tr><th>方向</th><th>内容</th></tr></thead>
       <tbody>
-        <tr><td>本层对象</td><td>6 个用例服务 + 12 个应用内组件</td></tr>
-        <tr><td>本层依赖</td><td>领域层（聚合方法、领域服务、领域策略）——只读调用，不实现规则；21 个端口（只认接口）</td></tr>
+        <tr><td>本层对象</td><td>7 个用例服务 + 15 个应用内组件</td></tr>
+        <tr><td>本层依赖</td><td>领域层（聚合方法、领域服务、领域策略）——只读调用，不实现规则；23 个端口（只认接口）</td></tr>
         <tr><td>谁依赖本层</td><td>外壳（本期只做 TUI；端口契约不变）只调用例服务</td></tr>
         <tr><td>本层<strong>不</strong>负责</td><td>状态机与不变量（领域层）、文件与网络与终端（基础设施层）</td></tr>
       </tbody>
@@ -47,19 +47,16 @@
     </div>
 
     <h2><span class="sec">8.2</span>分层视图</h2>
-    <pre class="mermaid">
-flowchart TD
-    SHELL["外壳&lt;br/>TUI / CLI / Server"] --> UC["应用层&lt;br/>6 个用例 + 12 个组件"]
-    UC --> DOM["领域层&lt;br/>12 聚合 + 领域服务 + 领域策略"]
-    UC --> PORT["21 个端口"]
-    PORT --> INFRA["基础设施层&lt;br/>文件 / 模型 / 终端 / 时钟"]
-    INFRA -.实现.-> PORT
-    </pre>
+    <pre class="mermaid">flowchart TD
+    SHELL["外壳&lt;br/&gt;TUI / CLI / Server"] --&gt; UC["应用层&lt;br/&gt;7 个用例 + 15 个组件"]
+    UC --&gt; DOM["领域层&lt;br/&gt;12 聚合 + 领域服务 + 领域策略"]
+    UC --&gt; PORT["23 个端口"]
+    PORT --&gt; INFRA["基础设施层&lt;br/&gt;文件 / 模型 / 终端 / 时钟"]
+    INFRA -.实现.-&gt; PORT</pre>
     <p class="diagram-note">图 8-1　依赖方向：外壳 → 应用层 → 领域层 / 端口 ← 基础设施层；反向不存在</p>
 
     <h2><span class="sec">8.3</span>用例总览图</h2>
-    <pre class="mermaid">
-flowchart LR
+    <pre class="mermaid">flowchart LR
     subgraph 外壳
         TUI["终端 TUI"]
         CLI["CLI 命令"]
@@ -71,6 +68,7 @@ flowchart LR
         U4[ManageSessionUseCase]
         U5[AdjustPolicyUseCase]
         U6[ManageCatalogUseCase]
+        U7[ManagePluginsUseCase]
     end
     subgraph 应用组件
         EL[ExecutionLoop]
@@ -79,26 +77,27 @@ flowchart LR
         TE[ToolExecutor]
         VR[VerificationRunner]
         EX[ExperienceRetriever]
+        PC[PlanCompletionCurator]
         DS[ExperienceDistillationService]
+        SDS[SkillDistillationService]
         FB[ExperienceFeedbackService]
         TG[SessionTitleGenerator]
         BS[BudgetService]
         SL[SubagentLauncher]
         SR[StartupReconciler]
+        PA[PluginAssembler]
     end
-    TUI --> U1 & U2 & U3 & U4 & U5 & U6
-    CLI --> U1 & U2 & U3 & U4 & U5 & U6
-    U1 --> TG & EL
-    U2 --> EL
-    U3 --> SR & EL
-    U2 --> CW & RL & TE & VR & EX & DS & FB & BS
-    RL --> SL
-    </pre>
+    TUI --&gt; U1 &amp; U2 &amp; U3 &amp; U4 &amp; U5 &amp; U6 &amp; U7
+    CLI --&gt; U1 &amp; U2 &amp; U3 &amp; U4 &amp; U5 &amp; U6 &amp; U7
+    U1 --&gt; TG &amp; EL
+    U2 --&gt; EL
+    U3 --&gt; SR &amp; EL
+    U2 --&gt; CW &amp; RL &amp; TE &amp; VR &amp; EX &amp; PC &amp; DS &amp; SDS &amp; FB &amp; BS
+    RL --&gt; SL</pre>
     <p class="diagram-note">图 8-2　外壳只认识用例；用例持有应用组件</p>
 
     <h2><span class="sec">8.4</span>对象操作图</h2>
-    <pre class="mermaid">
-flowchart LR
+    <pre class="mermaid">flowchart LR
     subgraph 用例
         U1[StartSession]
         U2[RunSession]
@@ -106,6 +105,7 @@ flowchart LR
         U4[ManageSession]
         U5[AdjustPolicy]
         U6[ManageCatalog]
+        U7[ManagePlugins]
     end
     subgraph 组件
         EL[ExecutionLoop]
@@ -117,9 +117,12 @@ flowchart LR
         TG[SessionTitleGenerator]
         BS[BudgetService]
         EX[ExperienceRetriever]
+        PC[PlanCompletionCurator]
         DS[ExperienceDistillationService]
+        SDS[SkillDistillationService]
         FB[ExperienceFeedbackService]
         SR[StartupReconciler]
+        PA[PluginAssembler]
     end
     subgraph 端口
         R1[(SessionRepository)]
@@ -135,55 +138,61 @@ flowchart LR
         P5[(ProgressPort)]
         P6[(DomainEventPublisher)]
         P7[(Clock / TokenCounter / InstanceLock / SchemaMigrator / ArtifactStore)]
+        P8[(PluginRepository / PluginRuntimePort)]
     end
 
-    U1 -->|"Session.create → save"| R1
-    U1 -->|save| R5
-    U1 -->|generate| TG
-    U1 -->|commit| C1
-    TG -->|invoke| P1
-    TG -->|recordUsage| BS
+    U1 --&gt;|"Session.create → save"| R1
+    U1 --&gt;|save| R5
+    U1 --&gt;|generate| TG
+    U1 --&gt;|commit| C1
+    TG --&gt;|invoke| P1
+    TG --&gt;|recordUsage| BS
 
-    U2 -->|run| EL
-    EL -->|ensureWithinLimit| CW
-    EL -->|runIteration| RL
-    EL -->|verify| VR
-    EL -->|"retrieveAndAssign / distill"| EX & DS
-    EL -->|"onStepSucceeded / onStepFailed"| FB
-    EL -->|getCurrentStep / markStep*| R3
-    EL -->|"load / save"| R1 & R3
-    EL -->|publishAfterCommit| P6
-    EL -->|"emit（进度）"| P5
+    U2 --&gt;|run| EL
+    EL --&gt;|ensureWithinLimit| CW
+    EL --&gt;|runIteration| RL
+    EL --&gt;|verify| VR
+    EL --&gt;|"retrieveAndAssign"| EX
+    EL --&gt;|"curate（一次子代理）"| PC
+    PC --&gt;|经验产物| DS
+    PC --&gt;|技能产物| SDS
+    SDS --&gt;|"saveSkill"| R5
+    EL --&gt;|"onStepSucceeded / onStepFailed"| FB
+    EL --&gt;|getCurrentStep / markStep*| R3
+    EL --&gt;|"load / save"| R1 &amp; R3
+    EL --&gt;|publishAfterCommit| P6
+    EL --&gt;|"emit（进度）"| P5
 
-    CW -->|count| P7
-    CW -->|"invoke（摘要）"| P1
-    CW -->|append SUMMARY| R2
+    CW --&gt;|count| P7
+    CW --&gt;|"invoke（摘要）"| P1
+    CW --&gt;|append SUMMARY| R2
 
-    RL -->|execute| TE
-    RL -->|buildContextForLlm / appendRecord| R1 & R2
-    RL -->|recordUsage| BS
-    RL -->|"ask（ask_user）"| P4
-    RL -->|launch| SL
+    RL --&gt;|execute| TE
+    RL --&gt;|buildContextForLlm / appendRecord| R1 &amp; R2
+    RL --&gt;|recordUsage| BS
+    RL --&gt;|"ask（ask_user）"| P4
+    RL --&gt;|launch| SL
 
-    TE -->|invoke| P2
-    TE -->|sop| P3
-    TE -->|"ask（放行审批）"| P4
-    TE -->|put| P7
-    TE -->|count / fetch usage| BS
+    TE --&gt;|invoke| P2
+    TE --&gt;|sop| P3
+    TE --&gt;|"ask（放行审批）"| P4
+    TE --&gt;|put| P7
+    TE --&gt;|count / fetch usage| BS
 
-    VR -->|"ask（人工层）"| P4
-    VR -->|"invoke（LLM 裁判）"| P1
-    VR -->|save| R3
+    VR --&gt;|"ask（人工层）"| P4
+    VR --&gt;|"invoke（LLM 裁判）"| P1
+    VR --&gt;|save| R3
 
-    SL -->|startSubSession| U1
-    SL -->|publishAfterCommit| P6
+    SL --&gt;|startSubSession| U1
+    SL --&gt;|publishAfterCommit| P6
 
-    BS -->|load / save| R5
-    SR -->|"findRunning / findByStep / save"| R1 & R3
-    U4 -->|"cancel / archive / delete"| R1 & R3 & R2
-    U5 -->|load / save| R5
-    U6 -->|"tools / agents / providers / models / skills"| R5
-    </pre>
+    BS --&gt;|load / save| R5
+    SR --&gt;|"findRunning / findByStep / save"| R1 &amp; R3
+    U4 --&gt;|"cancel / archive / delete"| R1 &amp; R3 &amp; R2
+    U5 --&gt;|load / save| R5
+    U6 --&gt;|"tools / agents / providers / models / skills"| R5
+    U7 --&gt;|"install / grant / revoke"| P8
+    PA --&gt;|"启停 ⇒ 处理器注册表 + 端口路由表"| P8</pre>
     <p class="diagram-note">图 8-3　用例 → 组件 → 端口（虚线省略了部分只读关系）</p>
 
     <h2><span class="sec">8.5</span>用例清单</h2>
@@ -238,6 +247,14 @@ flowchart LR
           <td>1</td>
           <td>内置代理不可改；id 冲突（<code>builtin.</code> 前缀保留）</td>
         </tr>
+        <tr>
+          <td><code>ManagePluginsUseCase</code></td>
+          <td>安装 / 授权 / 停用 / 卸载插件</td>
+          <td><code>pluginId</code>、动作、勾选的能力</td>
+          <td>插件清单</td>
+          <td>1</td>
+          <td><code>apiVersion</code> 不符或依赖重复打包 ⇒ 拒绝安装；端口冲突 ⇒ 拒绝启用；目录名与 <code>Plugin-Id</code> 不一致 ⇒ 拒绝</td>
+        </tr>
       </tbody>
     </table>
 
@@ -247,6 +264,7 @@ flowchart LR
     </div>
 
     <h2><span class="sec">8.6</span>应用内组件清单</h2>
+    <p><strong>核心组件（15 个）</strong></p>
     <table>
       <thead><tr><th>组件</th><th>职责</th><th>关键协作</th></tr></thead>
       <tbody>
@@ -257,17 +275,33 @@ flowchart LR
         <tr><td><code>VerificationRunner</code></td><td>执行 <code>VerificationChain</code> 给出的有序层</td><td><code>VerificationChain</code>（领域）、<code>ModelInvocationPort</code>、<code>HumanInteractionPort</code></td></tr>
         <tr><td><code>SubagentLauncher</code></td><td>并行发起子会话（即 <code>spawn_subagents</code> 工具的实现）：各自独立超时、join-all、预算归集</td><td><code>StartSessionUseCase</code>、<code>BudgetService</code>、<code>ProgressPort</code></td></tr>
         <tr><td><code>ExperienceRetriever</code></td><td>计划诞生/重划时：全库 <code>ACTIVE</code> → 语义筛选 → 返回 <code>Map&lt;StepId, List&lt;ExperienceId&gt;&gt;</code></td><td><code>ExperienceRepository</code>、<code>SubagentLauncher</code></td></tr>
-        <tr><td><code>ExperienceDistillationService</code></td><td>计划完结时：读轨迹 + 归纳子代理 → 新建/合并经验</td><td><code>RecordStore</code>、<code>ReflectionRepository</code>、<code>ExperienceRepository</code></td></tr>
+        <tr><td><code>PlanCompletionCurator</code></td><td><strong>计划完结的唯一归纳入口</strong>：起一次子代理，产出「经验? / 技能?」（至多一个），按"同一件事只进一边"分派</td><td><code>SubagentLauncher</code>、<code>ExperienceDistillationService</code>、<code>SkillDistillationService</code>、<code>RecordStore</code></td></tr>
+        <tr><td><code>ExperienceDistillationService</code></td><td><strong>只做写入</strong>：接收经验产物 → 与库内经验去重（合并 + 提置信度）或新建</td><td><code>ExperienceRepository</code>、<code>CommitScope</code></td></tr>
+        <tr><td><code>SkillDistillationService</code></td><td>接收技能产物：校验四件套 → <code>CREATE / MERGE</code> 判定（<code>mutable</code>、<code>ACTIVE</code>、容量）→ <code>create</code> / <code>revise</code> → 写 <code>SKILL.md</code></td><td><code>SkillDefinition</code>、<code>CatalogRepository</code>、<code>RuntimePolicy</code>、<code>CommitScope</code></td></tr>
         <tr><td><code>ExperienceFeedbackService</code></td><td>step 结束后回写奖惩（规则在 <code>Experience</code> 聚合内）</td><td><code>ExperienceRepository</code></td></tr>
         <tr><td><code>SessionTitleGenerator</code></td><td>首条输入 → 标题（失败降级首句截断）</td><td><code>ModelInvocationPort</code>、<code>BudgetService</code></td></tr>
         <tr><td><code>BudgetService</code></td><td>把会话族内任意消耗归集到根 <code>Budget</code>，越过阈值 raise <code>BudgetWarning</code></td><td><code>BudgetRepository</code>、<code>PolicyRepository</code></td></tr>
         <tr><td><code>StartupReconciler</code></td><td>启动时按 5 条规则补齐崩溃残留（见 8.10）</td><td>各仓储、<code>CommitScope</code></td></tr>
-        <tr><td><code>GeneratePlanHandler</code></td><td><code>generate_plan</code> 的处理器：草案校验通过才建计划，失败转工具错误结果</td><td><code>PlanFactory</code>、<code>PlanRepository</code>、<code>CommitScope</code></td></tr>
-        <tr><td><code>InternalToolHandlers</code></td><td>内置工具处理器注册表（按工具 id 索引），由 <code>ToolExecutor</code> 分发</td><td><code>InternalToolHandler</code></td></tr>
-        <tr><td><code>EnvironmentFeedbackVerifier</code></td><td>验证第二层（<code>ENV_FEEDBACK</code>）的钩子：校验外部系统返回；未配置时返回 <code>UNDETERMINED</code></td><td><code>VerificationRunner</code></td></tr>
-        <tr><td><code>SpawnSubagentsHandler</code></td><td><code>spawn_subagents</code> 的处理器：<strong>拒绝子会话再开子代理</strong>，解析请求后交给启动器</td><td><code>SubagentLauncher</code></td></tr>
+        <tr><td><code>PluginAssembler</code></td><td>插件启停的唯一落点：装载/卸载 jar，把扩展对象注册进处理器注册表与端口路由表（<strong>只换实现，不动声明</strong>）</td><td><code>PluginRuntimePort</code>、<code>PluginRepository</code>、端口路由表</td></tr>
       </tbody>
     </table>
+
+    <p><strong>内置工具处理器与验证钩子（5 个）</strong>（统一注册在 <code>InternalToolHandlers</code>，由 <code>ToolExecutor</code> / <code>VerificationRunner</code> 分发）</p>
+    <table>
+      <thead><tr><th>组件</th><th>职责</th><th>关键协作</th></tr></thead>
+      <tbody>
+        <tr><td><code>GeneratePlanHandler</code></td><td><code>generate_plan</code> 的处理器：草案校验通过才建计划，失败转工具错误结果</td><td><code>PlanFactory</code>、<code>PlanRepository</code>、<code>CommitScope</code></td></tr>
+        <tr><td><code>SpawnSubagentsHandler</code></td><td><code>spawn_subagents</code> 的处理器：<strong>拒绝子会话再开子代理</strong>，解析请求后交给启动器</td><td><code>SubagentLauncher</code></td></tr>
+        <tr><td><code>LoadSkillHandler</code></td><td><code>load_skill</code> 的处理器：取 SOP 文本；注入为 <code>SYSTEM</code> 记录是内循环的职责</td><td><code>SkillSopProvider</code></td></tr>
+        <tr><td><code>EnvironmentFeedbackVerifier</code></td><td>验证第二层（<code>ENV_FEEDBACK</code>）的钩子：校验外部系统返回；未配置时返回 <code>UNDETERMINED</code></td><td><code>VerificationRunner</code></td></tr>
+        <tr><td><code>InternalToolHandlers</code></td><td>内置工具处理器注册表（按工具 id 索引），由 <code>ToolExecutor</code> 分发</td><td><code>InternalToolHandler</code></td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <div class="ct">数字口径</div>
+      7 个用例 + <strong>15 个核心组件</strong> + <strong>13 个工具处理器 / 钩子</strong>（M37 增 <code>PlanCompletionCurator</code> / <code>SkillDistillationService</code>；M42 增 <code>PluginAssembler</code>；M45 增 8 个本地能力处理器）。后 13 个是被分发的处理单元（处理器 / 注册表 / 验证钩子），按职责单列一组，不改变用例编排。
+    </div>
 
     <h3><span class="sec">8.6.1</span>应用层的内部实现类</h3>
     <p>同样受"一个类在模型里都有出处"约束。</p>
@@ -280,18 +314,20 @@ flowchart LR
         <tr><td><code>ModelInvocationException</code></td><td>端口失败时抛出，携带上下文自己的 <code>DomainError</code>（<code>M_*</code>）</td></tr>
         <tr><td><code>Json</code> / <code>JsonText</code></td><td>应用层自带的极简 JSON 解析与转义：<strong>不引 JSON 库</strong>（D02 的模块边界）</td></tr>
         <tr><td><code>RunSessionProvider</code></td><td>延迟取 <code>RunSessionUseCase</code>：子代理启动器 → 用例 → 外循环 → 内循环 → 工具执行 → 启动器 是构造环，用"取的时候才要"打断它（应用层不引容器类型）</td></tr>
+        <tr><td><code>CommandParsing</code></td><td><code>run_command</code> 的<strong>浅结构解析</strong>（纯字符串、不碰文件与进程）：引号消解后得到每段的 <code>程序 / 参数 / 操作数 / 重定向</code> 与段间拓扑；<code>sh -c</code> / <code>eval</code> 的实参递归解析（深度上限 2）。<strong>解析失败要能被上层区分出来</strong>——fail-closed 的前提（行动 5.8.1 规则 10）</td></tr>
+        <tr><td><code>CommandRules</code></td><td>绊线判定项（结构化谓词，不是正则）与结论三态：<code>放行 / 需审批(原因) / 无法解析</code></td></tr>
         <tr><td><code>Approvals</code></td><td>人工审批的判定：<strong>先看否定再看肯定</strong>（"不同意"里含着"同意"），工具放行与结果验收共用</td></tr>
         <tr><td><code>TechnicalLog</code></td><td>技术事件出口（事件名 + 耗时 + key=value 字段），实现由基础设施注入；应用层不引日志库</td></tr>
-        <tr><td><code>LoadSkillHandler</code></td><td><code>load_skill</code> 的处理器：取 SOP 文本；注入为 <code>SYSTEM</code> 记录是内循环的职责</td></tr>
+        <tr><td><code>PortRoutes</code></td><td>端口路由表：<code>能力名 → 当前启用者</code>，并发安全、可原子替换（插件实现<strong>实时生效</strong>，D24-9）</td></tr>
       </tbody>
     </table>
     <blockquote><p><code>ProgressEvent</code> 是 <code>ProgressPort</code> 的入参值对象（<code>Kind</code> + <code>message</code>），面向界面、可丢弃，不属于领域事实。</p></blockquote>
 
-    <h2><span class="sec">8.7</span>端口清单（21 个）</h2>
+    <h2><span class="sec">8.7</span>端口清单（23 个）</h2>
     <table>
       <thead><tr><th>端口</th><th>职责</th><th>关键方法</th><th>实现方</th></tr></thead>
       <tbody>
-        <tr><td><code>CommitScope</code></td><td>一次状态转移的写入作用域，<strong>固定按「事实 → 追加 → 替换」执行并 fsync</strong></td><td><code>stageFact</code> / <code>stageAppend</code> / <code>stageReplace</code> / <code>commit</code></td><td>基础设施</td></tr>
+        <tr><td><code>CommitScope</code></td><td>一次状态转移的写入作用域，<strong>固定按「事实 → 追加 → 替换」执行并 fsync</strong>；另提供<strong>全局资产写段</strong>（<code>skills/</code>、<code>experience/</code>），进程内串行以保证容量判定原子（<code>globalWrite</code>）</td><td><code>stageFact</code> / <code>stageAppend</code> / <code>stageReplace</code> / <code>commit</code></td><td>基础设施</td></tr>
         <tr><td><code>SessionRepository</code></td><td>会话头与存放策略（会话无状态，D22）；<code>list</code> 返回 <code>SessionSummary</code></td><td><code>load</code> / <code>save</code> / <code>list</code> / <code>archive</code> / <code>delete</code> / <code>cleanupArchiveResidue</code></td><td>基础设施</td></tr>
         <tr><td><code>RecordStore</code></td><td>流水追加与读取</td><td><code>append</code> / <code>last(n)</code> / <code>range(startSeq, endSeq)</code></td><td>基础设施</td></tr>
         <tr><td><code>PlanRepository</code></td><td>计划聚合</td><td><code>load</code> / <code>save</code> / <code>findRunning</code></td><td>基础设施</td></tr>
@@ -300,10 +336,12 @@ flowchart LR
         <tr><td><code>ExperienceRepository</code></td><td>经验库</td><td><code>findActive</code> / <code>save</code> / <code>archive</code> / <code>count</code></td><td>基础设施</td></tr>
         <tr><td><code>BudgetRepository</code></td><td>会话族台账</td><td><code>load(rootSessionId)</code> / <code>save</code></td><td>基础设施</td></tr>
         <tr><td><code>PolicyRepository</code></td><td>单例策略</td><td><code>load</code> / <code>save</code></td><td>基础设施</td></tr>
-        <tr><td><code>CatalogRepository</code></td><td>工具 / 代理 / 供应商 / 模型 / 技能</td><td><code>tools</code> / <code>agents</code> / <code>providers</code> / <code>models</code> / <code>skills</code> / <code>save</code></td><td>基础设施</td></tr>
+        <tr><td><code>CatalogRepository</code></td><td>工具 / 代理 / 供应商 / 模型 / 技能</td><td><code>tools</code> / <code>agents</code> / <code>providers</code> / <code>models</code> / <code>skills</code> / <code>save</code> / <strong><code>saveSkill</code>（技能写入的唯一落点，原子重写 <code>SKILL.md</code>）</strong> / <strong><code>countActiveSkills</code></strong></td></tr>
         <tr><td><code>ArtifactStore</code></td><td>工具结果全文</td><td><code>put</code> / <code>deleteSession</code></td><td>基础设施</td></tr>
+        <tr><td><strong><code>PluginRepository</code></strong></td><td>插件授权意图（<code>plugins/&lt;id&gt;/plugin.json</code>）</td><td><code>list</code> / <code>load</code> / <code>save</code></td><td>基础设施</td></tr>
+        <tr><td><strong><code>PluginRuntimePort</code></strong></td><td>插件的发现与装载（PF4J）</td><td><code>discover</code> / <code>toolsOf</code> / <code>start</code> / <code>stop</code> / <code>unload</code> / <code>extension</code> / <strong><code>conflictsOf</code>（重复打包的宿主依赖）</strong></td><td>基础设施</td></tr>
         <tr><td><code>ModelInvocationPort</code></td><td>选模型、降级、调用、计量（流式与非流式双方法）</td><td><code>invoke</code> / <code>invokeStreaming(request, ChunkSink)</code> / <code>describe</code></td><td>基础设施</td></tr>
-        <tr><td><code>ExternalToolPort</code></td><td>REST / MCP / NATIVE 出站调用</td><td><code>invoke(tool, args)</code></td><td>基础设施</td></tr>
+        <tr><td><code>ExternalToolPort</code></td><td>REST / MCP 出站调用（<strong><code>NATIVE</code> 不在其中</strong>：本地能力是处理器，不是出站调用）</td><td><code>invoke(tool, args)</code></td><td>基础设施</td></tr>
         <tr><td><code>SkillSopProvider</code></td><td>按 id 读并渲染 SOP</td><td><code>sop(skillId)</code></td><td>基础设施</td></tr>
         <tr><td><code>HumanInteractionPort</code></td><td><strong>阻塞式</strong>提问（单队列、标来源、可取消）</td><td><code>ask(question) → answer</code></td><td>外壳（TUI）；CLI / Server 各自实现</td></tr>
         <tr><td><code>ProgressPort</code></td><td>非领域进度：压缩中、子代理并行、步骤推进、模型降级</td><td><code>emit(event)</code></td><td>外壳（TUI）</td></tr>
@@ -322,6 +360,11 @@ flowchart LR
 
     <div class="callout key">
       <div class="ct">相对早期设计的两处收缩</div>
+
+    <div class="callout">
+      <div class="ct"><code>NATIVE</code> 不进任何端口</div>
+      <code>NATIVE</code> 工具由基础设施实现 <code>InternalToolHandler</code> 并注册进同一张处理器注册表（行动 5.9.1）。路径能否落地由基础设施的 <code>Workspace</code> 保证，判定"要不要审批"由本层的 <code>CommandParsing</code> / <code>CommandRules</code> 负责——<strong>这是应用层唯一出现 shell 语义的地方</strong>。
+    </div>
       <ul>
         <li><strong>取消 <code>SubagentRunnerPort</code></strong>：检索与归纳已在本层，直接调 <code>SubagentLauncher</code>；</li>
         <li><strong><code>InternalToolHandler</code> 收窄为 <code>SkillSopProvider</code></strong>：其余四个内置工具的处理器就在本层，不需要端口。</li>
@@ -351,10 +394,18 @@ flowchart LR
         <tr><td>T9</td><td>计划重划</td><td><code>plan.json</code>（代次+1、<code>SUPERSEDED</code>）</td><td>调模型生成新计划</td></tr>
         <tr><td>T10</td><td>经验反馈</td><td><code>experience/*.json</code></td><td>—</td></tr>
         <tr><td>T11</td><td>经验沉淀</td><td><code>experience/*.json</code>（新建/合并）</td><td>读轨迹 + 归纳子代理</td></tr>
+        <tr><td>T13</td><td>技能沉淀</td><td><code>skills/&lt;id&gt;/SKILL.md</code>（新建）</td><td>归纳子代理</td></tr>
+        <tr><td>T14</td><td>技能改进</td><td><code>skills/&lt;id&gt;/SKILL.md</code>（原子重写）</td><td>归纳子代理</td></tr>
+        <tr><td>T15</td><td>安装插件</td><td><code>plugins/&lt;id&gt;/plugin.json</code></td><td>校验 jar（<code>apiVersion</code> / 依赖）</td></tr>
+        <tr><td>T16</td><td>授权 / 停用</td><td><code>plugins/&lt;id&gt;/plugin.json</code>（<code>grantedCapabilities</code>）</td><td>装载或卸载扩展</td></tr>
         <tr><td>T12</td><td>会话状态</td><td><code>meta.json</code>（归档/取消/<code>ModelSwitched</code>）</td><td>—</td></tr>
         <tr><td>TA</td><td>追加模型回复</td><td><code>RecordStore</code> +1 条 <code>ASSISTANT</code></td><td>模型调用（流式或非流式）<strong>结束后</strong></td></tr>
       </tbody>
     </table>
+    <div class="callout">
+      <div class="ct">全局资产写段</div>
+      T11 / T13 / T14 都在 <code>CommitScope</code> 的<strong>全局资产写段</strong>内执行：并行子会话可能同时沉淀，容量"读—判—写"必须在该段内完成。一次计划完结中，T11 与 T13/T14 <strong>至多发生一个</strong>（同一件事只进一边）。
+    </div>
 
     <h3>8.8.3 三条纪律</h3>
     <ol>
@@ -527,7 +578,48 @@ sequenceDiagram
     end
     </pre>
 
-    <h2><span class="sec">8.10</span>错误与恢复策略</h2>
+        <h3>8.9.6 <code>ManagePluginsUseCase</code>（安装 / 授权 / 停用 / 卸载）</h3>
+    <pre class="mermaid">sequenceDiagram
+    autonumber
+    participant UI as 外壳
+    participant U7 as ManagePluginsUseCase
+    participant PR as PluginRuntimePort
+    participant REP as PluginRepository
+    participant PA as PluginAssembler
+    participant CS as CommitScope
+
+    alt 安装
+        UI-&gt;&gt;U7: install(path)
+        U7-&gt;&gt;PR: discover()（读 jar 的 Plugin-Id / Version / Requires）
+        alt apiVersion 不符 / 目录名与 Plugin-Id 不一致 / 重复打包宿主依赖
+            U7--&gt;&gt;UI: 拒绝（说明原因）
+        else 通过
+            U7-&gt;&gt;CS: globalWrite { stageReplace(PluginManifest 默认：trusted=false、未授权) }
+            U7--&gt;&gt;UI: 已安装，等待授权
+        end
+    else 授权（勾选能力）
+        UI-&gt;&gt;U7: grant(pluginId, capabilities)
+        U7-&gt;&gt;REP: load(pluginId) ── 校验 granted ⊆ declared、端口不与他人冲突
+        U7-&gt;&gt;CS: stageReplace(manifest)；commit
+        U7-&gt;&gt;PA: assemble(pluginId)（装载扩展 → 注册处理器/路由表）
+    else 停用
+        UI-&gt;&gt;U7: revoke(pluginId)
+        U7-&gt;&gt;CS: stageReplace(manifest)；commit
+        U7-&gt;&gt;PA: disassemble(pluginId)（摘掉处理器与路由项）
+    else 卸载
+        UI-&gt;&gt;U7: uninstall(pluginId)
+        U7-&gt;&gt;PA: disassemble(pluginId)（只摘运行期）
+        Note over U7: 目录由用户自己删（§7.6 规则 1）；删完重启即彻底消失
+    end</pre>
+    <h4>要点</h4>
+    <ol>
+      <li><strong>"安装"与"授权"分开</strong>：装只落自己的 <code>plugin.json</code>（<code>trusted=false</code>、<code>granted=∅</code>），插件此时<strong>还没有任何效果</strong>；授权才让它进入世界。</li>
+      <li><strong>信任只发生在安装</strong>：<code>trusted</code> 一旦为真不再变（要收回就卸载重装），这是"安装时一次同意"的落点。</li>
+      <li><strong>冲突在授权时判</strong>，不在安装时判：两个插件可以都声明 <code>Clock</code>，但只有一个能被授权。</li>
+      <li><strong>真实生效靠 <code>PluginAssembler</code></strong>：用例只改"意图"，装载/卸载与路由表切换在装配层完成——所以插件<strong>崩溃或加载失败不会污染授权意图</strong>。</li>
+    </ol>
+
+<h2><span class="sec">8.10</span>错误与恢复策略</h2>
     <table>
       <thead><tr><th>情形</th><th>语义</th><th>应用层动作</th><th>聚合落点</th></tr></thead>
       <tbody>
@@ -562,6 +654,8 @@ sequenceDiagram
         <tr><td>子代理</td><td><code>SubagentLauncher</code> 内部并行；各自独立超时；join-all</td><td>子代理不得再开子代理</td></tr>
         <tr><td>人机交互</td><td><code>HumanInteractionPort</code> 单队列，所有来源排队逐个呈现</td><td>必须显示来源；<code>cancellation</code> 可唤醒</td></tr>
         <tr><td>持久化</td><td>单写者（<code>InstanceLock</code>）；<code>CommitScope</code> 串行</td><td>同一时刻只有一个实例写数据目录</td></tr>
+      <tr><td>全局资产</td><td><code>skills/</code>、<code>experience/</code>、<code>plugins/</code> 的写入走<strong>全局资产写段</strong>（进程内串行）</td><td>并行子会话会同时沉淀，容量判定与写入必须原子；这里不是"一个会话一个写者"</td></tr>
+      <tr><td>端口路由表</td><td>插件启停改的是<strong>共享可变表</strong>，必须原子替换（<code>AtomicReference</code> / <code>ConcurrentHashMap</code>）</td><td>插件实现<strong>实时生效</strong>，所以路由不能缓存 <code>final</code> 引用；与"每会话一个写者"无关</td></tr>
         <tr><td>UI 更新</td><td><code>ProgressPort</code> 单向推送</td><td>丢弃进度不影响业务</td></tr>
       </tbody>
     </table>

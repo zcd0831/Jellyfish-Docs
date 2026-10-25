@@ -36,8 +36,7 @@
       虚线箭头是"引用"（跨聚合/跨模块，只存 ID）。
     </p>
 
-    <pre class="mermaid">
-classDiagram
+    <pre class="mermaid">classDiagram
     namespace 感知模块 {
         class Session {
             &lt;&lt;AggregateRoot&gt;&gt;
@@ -125,6 +124,7 @@ classDiagram
             +double experienceRetireThreshold
             +double budgetWarnRatio
             +long budgetLimitTokens
+            +int skillCapacity
             +List~ModelId~ modelFallbackChain
             +List~ToolId~ trustedToolIds
             +isToolTrusted(ToolId) boolean
@@ -139,6 +139,15 @@ classDiagram
             TOOL_REQUEST
             TOOL_RESULT
             SUMMARY
+        }
+        class AgentSnapshotInput {
+            &lt;&lt;ValueObject&gt;&gt;
+            -AgentId agentId
+            -PromptTemplate basePrompt
+            -Map promptVariables
+            -List~ToolSchemaSnapshot~ activeTools
+            -List~SkillSummarySnapshot~ activeSkills
+            -List~String~ sopReferencedToolNames
         }
         class StartSessionUseCase {
             &lt;&lt;ApplicationService&gt;&gt;
@@ -192,6 +201,7 @@ classDiagram
             NATIVE
             REST
             MCP
+            PLUGIN
         }
         class SideEffectLevel {
             &lt;&lt;Enumeration&gt;&gt;
@@ -204,6 +214,21 @@ classDiagram
             DRAFT
             ACTIVE
             DEPRECATED
+        }
+        class PluginManifest {
+            &lt;&lt;AggregateRoot&gt;&gt;
+            -PluginId id
+            -String version
+            -int apiVersion
+            -boolean trusted
+            -Date grantedAt
+            -Set~ToolId~ toolIds
+            -Set~String~ declaredCapabilities
+            -Set~String~ grantedCapabilities
+            +create(PluginId, String, int, Set~ToolId~, Set~String~, boolean, Date) PluginManifest
+            +grant(String)
+            +revoke(String)
+            +isTrusted() boolean
         }
         class Provider {
             &lt;&lt;AggregateRoot&gt;&gt;
@@ -372,6 +397,7 @@ classDiagram
             +markStepFailed(StepId, VerificationReportId)
             +markAttemptInterrupted(StepId, int)
             +recordReflection(StepId, int, ReflectionId)
+            +recordSkillUsage(StepId, int, SkillId)
             +applyReplan(List~PlanStep~)
             +terminate(String)
         }
@@ -395,6 +421,7 @@ classDiagram
             -int attemptNo
             -RecordRange recordRange
             -List~SessionId~ childSessionIds
+            -List~SkillId~ usedSkillIds
             -VerificationReportId verificationReportId
             -ReflectionId reflectionId
             -AttemptOutcome outcome
@@ -456,11 +483,34 @@ classDiagram
             -boolean isConverged
             -boolean submitted
             -String submittedSummary
-            -int attemptNo
+            -int round
+            -List~SkillId~ usedSkillIds
+        }
+        class SessionRunner {
+            &lt;&lt;ExtensionPoint&gt;&gt;
+            +run(Session, ChunkSink, CancellationToken, RunContext) RunOutcome
+        }
+        class RunOutcome {
+            &lt;&lt;Enumeration&gt;&gt;
+            CONVERGED
+            SUSPENDED
+            ROUNDS_EXHAUSTED
+        }
+        class RunContext {
+            &lt;&lt;ValueObject&gt;&gt;
+            -Session session
+            -ChunkSink sink
+            -CancellationToken cancellation
+            -ModelInvocationPort model
+            -ToolInvoker tools
+            -HumanInteractionPort human
+            -ProgressPort progress
+            -PlanRepository plans
+            -ContextWindowService contextWindow
         }
         class ExecutionLoop {
             &lt;&lt;ApplicationService&gt;&gt;
-            +run(Session)
+            +run(Session, ChunkSink, CancellationToken, RunContext) RunOutcome
         }
         class ReActLoop {
             &lt;&lt;ApplicationService&gt;&gt;
@@ -522,13 +572,15 @@ classDiagram
             -String triggerCondition
             -InstructionTemplate sopTemplate
             -SkillStatus status
-            +activate()
-            +deprecate()
+            -boolean mutable
+            +create(SkillId, String, String, String, String) SkillDefinition
+            +revise(String, String, String, String)
+            +isActive() boolean
+            +isMutable() boolean
         }
         class InstructionTemplate {
             &lt;&lt;ValueObject&gt;&gt;
             -String rawMarkdown
-            -List~String~ variables
         }
         class SkillStatus {
             &lt;&lt;Enumeration&gt;&gt;
@@ -561,6 +613,7 @@ classDiagram
             -StepStatus outcome
             -RecordRange recordRange
             -List~SessionId~ childSessionIds
+            -List~SkillId~ usedSkillIds
             -String failureReason
             -String reflectionConclusion
         }
@@ -574,9 +627,17 @@ classDiagram
             &lt;&lt;ApplicationService&gt;&gt;
             +retrieveAndAssign(RetrievalInput) Map
         }
+        class PlanCompletionCurator {
+            &lt;&lt;ApplicationService&gt;&gt;
+            +curate(Session, DistillationInput) DistillationOutcome
+        }
         class ExperienceDistillationService {
             &lt;&lt;ApplicationService&gt;&gt;
-            +distill(DistillationInput)
+            +apply(ExperienceDraft, SessionId)
+        }
+        class SkillDistillationService {
+            &lt;&lt;ApplicationService&gt;&gt;
+            +apply(SkillDraft, SessionId)
         }
         class ExperienceFeedbackService {
             &lt;&lt;ApplicationService&gt;&gt;
@@ -584,7 +645,7 @@ classDiagram
             +onStepFailed(FeedbackInput)
         }
         class SkillSopProvider {
-            &lt;&lt;InfrastructureAdapter&gt;&gt;
+            &lt;&lt;Port&gt;&gt;
             +sop(String skillId) String
         }
     }
@@ -608,6 +669,33 @@ classDiagram
             &lt;&lt;Port&gt;&gt;
             +ask(Question) Answer
         }
+        class PluginRepository {
+            &lt;&lt;Port&gt;&gt;
+            +list() List~PluginManifest~
+            +load(PluginId) PluginManifest
+            +save(PluginManifest)
+        }
+        class PluginRuntimePort {
+            &lt;&lt;Port&gt;&gt;
+            +discover() List~PluginDescriptor~
+            +toolsOf(PluginId) List~ToolDefinition~
+            +start(PluginId)
+            +stop(PluginId)
+            +unload(PluginId)
+            +extension(PluginId, String) Object
+            +conflictsOf(PluginId) List~String~
+        }
+        class PluginDescriptor {
+            &lt;&lt;ValueObject&gt;&gt;
+            -PluginId id
+            -String version
+            -int apiVersion
+            -boolean loaded
+        }
+        class ToolInvoker {
+            &lt;&lt;ExtensionPoint&gt;&gt;
+            +execute(Session, String, Map, RecordId) ToolExecOutcome
+        }
     }
 
     namespace 领域事件 {
@@ -619,6 +707,8 @@ classDiagram
         class ReflectionRecorded
         class ExperienceCreated
         class ExperienceReinforced
+        class SkillLearned
+        class SkillRevised
         class ExperiencePenalized
         class BudgetWarning
         class SummarizationCompleted
@@ -643,6 +733,8 @@ classDiagram
     Session ..&gt; ContextWindow : buildContextForLlm 推导
     ContextWindow *-- ContextUsage
     ContextWindow ..&gt; ContextWindowPolicy
+    SystemPromptAssembler ..&gt; AgentSnapshotInput : 入参
+    SystemPromptAssembler ..&gt; SystemPromptSnapshot : 产出
 
     %% ---------- 跨模块 ID 引用 ----------
     Session "0..1" --&gt; "0..*" Session : parentSessionId
@@ -659,6 +751,9 @@ classDiagram
     PlanStep ..&gt; Experience : assignedExperienceIds
 
     %% ---------- 规划内部 ----------
+    ExecutionLoop ..&gt; SessionRunner : 实现（默认编排）
+    SessionRunner ..&gt; RunContext : 入参
+    SessionRunner ..&gt; RunOutcome : 产出
     Plan "1" *-- "1..*" PlanStep
     PlanStep "1" *-- "0..*" Attempt
     Attempt *-- RecordRange
@@ -670,6 +765,9 @@ classDiagram
     VerificationReport --&gt; VerificationType
 
     %% ---------- 行动内部 ----------
+    PluginManifest --&gt; ToolDefinition : toolIds（只记归属，不改工具定义）
+    PluginRuntimePort ..&gt; PluginDescriptor : 产出
+    ToolExecutor ..&gt; ToolInvoker : 实现
     ToolDefinition *-- ToolSchema
     ToolDefinition *-- ToolSource
     ToolDefinition --&gt; SideEffectLevel
@@ -709,13 +807,14 @@ classDiagram
     Experience ..&gt; ExperienceCreated : raises
     Experience ..&gt; ExperienceReinforced : raises
     Experience ..&gt; ExperiencePenalized : raises
+    SkillDefinition ..&gt; SkillLearned : raises
+    SkillDefinition ..&gt; SkillRevised : raises
     Budget ..&gt; BudgetWarning : raises
     Session ..&gt; SummarizationCompleted : raises
     Session ..&gt; SessionCancelled : raises
     Session ..&gt; ModelSwitched : raises
     RuntimePolicy ..&gt; PolicyAdjusted : raises
-    ToolDefinition ..&gt; ToolDefinitionUpdatedEvent : raises
-        </pre>
+    ToolDefinition ..&gt; ToolDefinitionUpdatedEvent : raises</pre>
     <p class="diagram-note">图 3-1　领域模型总图（按模块分组；虚线 = 引用，只存 ID）</p>
 
     <h2><span class="sec">3.3</span>服务与端口协作图</h2>
@@ -819,10 +918,10 @@ flowchart LR
         </tr>
         <tr>
           <td><strong>行动</strong></td>
-          <td>能做什么 / 用什么做 / 花多少钱：工具、模型、代理、预算</td>
-          <td><code>ToolDefinition</code>、<code>Provider</code>、<code>Model</code>、<code>AgentDefinition</code>、<code>Budget</code></td>
-          <td><code>ToolExecutor</code>、<code>BudgetService</code>（应用）；<code>ModelInvoker</code>、<code>SkillSopProvider</code>（基础设施）</td>
-          <td><code>ExternalToolPort</code></td>
+          <td>能做什么 / 用什么做 / 花多少钱：工具、模型、代理、预算、插件</td>
+          <td><code>ToolDefinition</code>、<code>Provider</code>、<code>Model</code>、<code>AgentDefinition</code>、<code>Budget</code>、<strong><code>PluginManifest</code></strong></td>
+          <td><code>ToolExecutor</code>、<code>BudgetService</code>（应用）；<code>ModelInvoker</code>（基础设施，实现 <code>ModelInvocationPort</code>）</td>
+          <td><code>ExternalToolPort</code>、<code>PluginRepository</code>、<code>PluginRuntimePort</code></td>
         </tr>
         <tr>
           <td><strong>规划</strong></td>
@@ -833,16 +932,16 @@ flowchart LR
         </tr>
         <tr>
           <td><strong>记忆</strong></td>
-          <td>学到的东西如何留存与复用</td>
+          <td>学到的东西如何留存与复用（经验 + 技能自动沉淀）</td>
           <td><code>Experience</code>、<code>Reflection</code>、<code>SkillDefinition</code></td>
-          <td><code>ExperienceRetriever</code>、<code>ExperienceDistillationService</code>、<code>ExperienceFeedbackService</code>（应用）</td>
-          <td>—</td>
+          <td><code>ExperienceRetriever</code>、<code>PlanCompletionCurator</code>、<code>ExperienceDistillationService</code>、<code>SkillDistillationService</code>、<code>ExperienceFeedbackService</code>（应用）</td>
+          <td>声明 <code>SkillSopProvider</code>（由基础设施 <code>FileSkillSopProvider</code> 实现）</td>
         </tr>
         <tr>
           <td><strong>应用层</strong></td>
           <td>用例编排、事务与提交顺序、端口契约、并发</td>
           <td>—（只编排，不持有聚合）</td>
-          <td>6 个用例 + 12 个组件（见 <a href="08-application.html">第 8 章</a>）</td>
+          <td>7 个用例 + 15 个组件（见 <a href="08-application.html">第 8 章</a>）</td>
           <td>定义并被基础设施实现</td>
         </tr>
         <tr>
@@ -850,7 +949,7 @@ flowchart LR
           <td>端口背后：文件、模型、终端、时钟</td>
           <td>—</td>
           <td>22 个适配器（见 <a href="09-infrastructure.html">第 9 章</a>）</td>
-          <td>实现 19 个端口（<code>HumanInteractionPort</code> / <code>ProgressPort</code> 由外壳实现，见 D19）</td>
+          <td>实现 21 个端口（<code>HumanInteractionPort</code> / <code>ProgressPort</code> 由外壳实现，见 D19）</td>
         </tr>
       </tbody>
     </table>
@@ -895,11 +994,12 @@ flowchart LR
         <tr><td><code>Model</code></td><td>行动</td><td>具体模型与能力</td><td>① 仅 ACTIVE 可调用；② 无价格概念</td></tr>
         <tr><td><code>AgentDefinition</code></td><td>行动</td><td>代理身份与能力边界</td><td>① 内置代理 prompt 不可改；② 会话内 Agent 不可切换</td></tr>
         <tr><td><code>Budget</code></td><td>行动</td><td>会话族 token 台账</td><td>① 一族一账；② 只累加，不预留不分配；③ warned 只置真一次</td></tr>
+        <tr><td><code>PluginManifest</code></td><td>行动</td><td>一个插件的授权意图（唯一落盘的东西）</td><td>① <code>id</code> 必须等于 jar 内 <code>Plugin-Id</code>；② <code>grantedCapabilities ⊆ declaredCapabilities</code>；③ 同一端口至多一个启用者；④ <code>apiVersion</code> 不符即不能安装/启用</td></tr>
         <tr><td><code>Plan</code></td><td>规划</td><td>一次工作分解</td><td>① steps 非空；② 同时至多一个 RUNNING 步骤；③ SUCCEEDED 不可变；④ 重划只替换未执行尾部；⑤ 单写者，无需乐观锁</td></tr>
         <tr><td><code>VerificationReport</code></td><td>规划</td><td>一次判定的结论</td><td>① 不可变；② 三态；③ 只留失败层与失败原因</td></tr>
         <tr><td><code>Experience</code></td><td>记忆</td><td>一条经验</td><td>① 置信度 [0,1]；② 不绑定任何维度；③ ARCHIVED 不参与检索；④ 不超容量</td></tr>
         <tr><td><code>Reflection</code></td><td>记忆</td><td>一次反思结论</td><td>① 不可变；② 唯一归属 (planId, stepId, attemptNo)</td></tr>
-        <tr><td><code>SkillDefinition</code></td><td>记忆</td><td>程序性知识（SOP）</td><td>① 仅 ACTIVE 进快照；② 不含工具依赖；③ SOP 不引用未绑定工具</td></tr>
+        <tr><td><code>SkillDefinition</code></td><td>记忆</td><td>程序性知识（SOP）：人写与机学同构，<code>mutable</code> 区分系统能否改</td><td>① 仅 ACTIVE 进快照；② 不含工具依赖；③ <strong><code>mutable = false</code> ⇒ <code>revise()</code> 必须失败</strong>；④ 四件套非空；⑤ <code>status</code> 只由 front-matter 决定</td></tr>
       </tbody>
     </table>
 
@@ -986,10 +1086,10 @@ flowchart LR
         <tr><td><strong>步骤固化 / 判败 / 中断</strong></td><td>步骤的三种结束</td><td>Plan、Attempt</td></tr>
         <tr><td><strong>步骤重试</strong></td><td>失败后新建尝试；达阈值产生反思</td><td>Attempt、Reflection</td></tr>
         <tr><td><strong>计划重划</strong></td><td>代次 +1，未执行的步骤置为 SUPERSEDED 并重分配经验</td><td>Plan、Experience</td></tr>
-        <tr><td><strong>计划完结</strong></td><td>成功或失败，触发经验沉淀</td><td>Plan、Experience</td></tr>
+        <tr><td><strong>计划完结</strong></td><td>成功或失败，触发经验沉淀；成功且本次未用技能时另判技能沉淀</td><td>Plan、Experience、SkillDefinition</td></tr>
         <tr><td><strong>上下文折叠</strong></td><td>token 超阈值 → 生成摘要 → 窗口收窄</td><td>Session</td></tr>
         <tr><td><strong>模型降级</strong></td><td>故障命中备用模型链</td><td>Session</td></tr>
-        <tr><td><strong>会话封存 / 会话销毁</strong></td><td>归档（不可续跑）/ 物理删除（经验保留）</td><td>Session、Budget</td></tr>
+        <tr><td><strong>归档 / 会话销毁</strong></td><td>归档（压成 zip 移走，应用不再认识）/ 物理删除（经验保留）</td><td>Session、Budget</td></tr>
       </tbody>
     </table>
 
@@ -1015,23 +1115,29 @@ flowchart LR
       领域事件由<strong>聚合根</strong>在状态真的改变后发出，代表"这件事已经发生了"。
       应用层在事务提交后才发布，订阅方只看 ID 和事件内容。
     </p>
+    <div class="callout">
+      <div class="ct">总口径：领域事件只通知</div>
+      事件不得驱动任何 IO，也不得作为跨模块协作的触发手段；需要别的模块做事时，由应用层<strong>显式调用</strong>（<code>ExecutionLoop</code> 调检索 / 沉淀 / 反馈，<code>ManageSessionUseCase</code> 做级联取消）。因此下表的「谁关心」一列只列界面 / 审计这类无副作用消费。
+    </div>
     <table>
       <thead><tr><th>事件</th><th>谁发出</th><th>什么时候</th><th>谁关心</th></tr></thead>
       <tbody>
         <tr><td><code>PlanCreated</code></td><td>Plan</td><td>计划校验通过并创建</td><td><strong>无功能性订阅方</strong>：经验分配由 <code>ExecutionLoop</code> 显式调用；事件只供界面/审计</td></tr>
         <tr><td><code>PlanCompleted</code></td><td>Plan</td><td>所有步骤成功</td><td><strong>无功能性订阅方</strong>：沉淀由 <code>ExecutionLoop</code> 显式调用；事件只供界面/审计</td></tr>
-        <tr><td><code>PlanFailed</code></td><td>Plan</td><td>外循环判定重划用尽并终止</td><td>同上：沉淀为显式调用；事件供界面/审计</td></tr>
-        <tr><td><code>StepFailed</code></td><td>Plan</td><td>标记步骤失败</td><td>规划·外循环</td></tr>
-        <tr><td><code>VerificationRejected</code></td><td>VerificationReport</td><td>结论为不通过 / 无法判定</td><td>规划·外循环</td></tr>
-        <tr><td><code>ReflectionRecorded</code></td><td>Reflection</td><td>反思结论落库</td><td>规划（回注）、记忆（素材）</td></tr>
+        <tr><td><code>PlanFailed</code></td><td>Plan</td><td>外循环判定重划用尽并终止</td><td><strong>无功能性订阅方</strong>：沉淀由 <code>ExecutionLoop</code> 显式调用；界面 / 审计</td></tr>
+        <tr><td><code>StepFailed</code></td><td>Plan</td><td>标记步骤失败</td><td><strong>无功能性订阅方</strong>：外循环读标记后的聚合状态</td></tr>
+        <tr><td><code>VerificationRejected</code></td><td>VerificationReport</td><td>结论为不通过 / 无法判定</td><td><strong>无功能性订阅方</strong>：外循环直接用验证返回值</td></tr>
+        <tr><td><code>ReflectionRecorded</code></td><td>Reflection</td><td>反思结论落库</td><td><strong>无功能性订阅方</strong>：回注与沉淀素材均由外循环显式读取</td></tr>
         <tr><td><code>ExperienceCreated</code></td><td>Experience</td><td>归纳产出新经验</td><td>界面</td></tr>
         <tr><td><code>ExperienceReinforced</code></td><td>Experience</td><td>加分成功 / 合并去重</td><td>界面</td></tr>
         <tr><td><code>ExperiencePenalized</code></td><td>Experience</td><td>减分成功</td><td>界面</td></tr>
-        <tr><td><code>BudgetWarning</code></td><td>Budget</td><td>首次越过预警阈值</td><td>内循环 → 问用户</td></tr>
+        <tr><td><code>SkillLearned</code></td><td>SkillDefinition</td><td>沉淀出新技能</td><td>界面 / 审计</td></tr>
+        <tr><td><code>SkillRevised</code></td><td>SkillDefinition</td><td>改写了可变技能</td><td>界面 / 审计</td></tr>
+        <tr><td><code>BudgetWarning</code></td><td>Budget</td><td>首次越过预警阈值</td><td>内循环 → 问用户（<strong>同一调用栈内的即时通知</strong>，等价于记账方法的返回值，不是异步订阅）</td></tr>
         <tr><td><code>SummarizationCompleted</code></td><td>Session</td><td>摘要记录已追加</td><td>界面 / 审计</td></tr>
-        <tr><td><code>SessionCancelled</code></td><td>Session</td><td>用户取消会话</td><td>级联取消子会话</td></tr>
+        <tr><td><code>SessionCancelled</code></td><td>Session</td><td>用户取消会话</td><td><strong>无功能性订阅方</strong>：级联取消由 <code>ManageSessionUseCase</code> 在同一事务内逐个处理</td></tr>
         <tr><td><code>ModelSwitched</code></td><td>Session</td><td>降级命中备用链</td><td>审计 / 界面</td></tr>
-        <tr><td><code>PolicyAdjusted</code></td><td>RuntimePolicy</td><td>用户修改策略成功</td><td>三个模块刷新读取缓存</td></tr>
+        <tr><td><code>PolicyAdjusted</code></td><td>RuntimePolicy</td><td>用户修改策略成功</td><td>只失效本地读取缓存（<strong>缓存必须可失效</strong>），不驱动任何动作</td></tr>
         <tr><td><code>ToolDefinitionUpdatedEvent</code></td><td>ToolDefinition</td><td>元数据或 schema 更新</td><td>运行中会话不订阅（快照已冻结）</td></tr>
       </tbody>
     </table>
@@ -1044,21 +1150,19 @@ flowchart LR
     </div>
 
     <h2><span class="sec">3.11</span>分层视图与端口全景</h2>
-    <pre class="mermaid">
-flowchart TD
-    SHELL["外壳&lt;br/>本期 TUI"] --> APP["应用层&lt;br/>6 用例 + 12 组件"]
-    APP --> DOM["领域层&lt;br/>12 聚合 + 领域服务 + 领域策略"]
-    APP --> PORTS["21 个端口"]
-    PORTS --> INF["基础设施层&lt;br/>22 个适配器"]
-    INF -.实现.-> PORTS
-    </pre>
+    <pre class="mermaid">flowchart TD
+    SHELL["外壳&lt;br/&gt;本期 TUI"] --&gt; APP["应用层&lt;br/&gt;6 用例 + 12 组件"]
+    APP --&gt; DOM["领域层&lt;br/&gt;12 聚合 + 领域服务 + 领域策略"]
+    APP --&gt; PORTS["23 个端口"]
+    PORTS --&gt; INF["基础设施层&lt;br/&gt;22 个适配器"]
+    INF -.实现.-&gt; PORTS</pre>
     <p class="diagram-note">图 3-4　三层依赖：应用层只认端口，基础设施只实现端口，领域层谁都不认</p>
 
     <table>
       <thead><tr><th>组</th><th>端口</th></tr></thead>
       <tbody>
-        <tr><td>持久化</td><td><code>CommitScope</code>、<code>SessionRepository</code>、<code>RecordStore</code>、<code>PlanRepository</code>、<code>VerificationReportRepository</code>、<code>ReflectionRepository</code>、<code>ExperienceRepository</code>、<code>BudgetRepository</code>、<code>PolicyRepository</code>、<code>CatalogRepository</code>、<code>ArtifactStore</code></td></tr>
-        <tr><td>模型与外部</td><td><code>ModelInvocationPort</code>（<code>invoke</code> / <code>invokeStreaming</code>）、<code>ExternalToolPort</code>、<code>SkillSopProvider</code></td></tr>
+        <tr><td>持久化</td><td><code>CommitScope</code>、<code>SessionRepository</code>、<code>RecordStore</code>、<code>PlanRepository</code>、<code>VerificationReportRepository</code>、<code>ReflectionRepository</code>、<code>ExperienceRepository</code>、<code>BudgetRepository</code>、<code>PolicyRepository</code>、<code>CatalogRepository</code>、<code>ArtifactStore</code>、<strong><code>PluginRepository</code></strong></td></tr>
+        <tr><td>模型与外部</td><td><code>ModelInvocationPort</code>（<code>invoke</code> / <code>invokeStreaming</code>）、<code>ExternalToolPort</code>、<code>SkillSopProvider</code>、<strong><code>PluginRuntimePort</code></strong></td></tr>
         <tr><td>人机与进度</td><td><code>HumanInteractionPort</code>、<code>ProgressPort</code>（<strong>实现方：外壳</strong>，见 D19）、<code>DomainEventPublisher</code></td></tr>
         <tr><td>时间与生命周期</td><td><code>Clock</code>、<code>TokenCounter</code>、<code>InstanceLock</code>、<code>SchemaMigrator</code></td></tr>
       </tbody>

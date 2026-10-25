@@ -30,8 +30,8 @@
     <table>
       <thead><tr><th>方向</th><th>内容</th></tr></thead>
       <tbody>
-        <tr><td>本层对象</td><td>20 个适配器（实现 19 个端口；<code>HumanInteractionPort</code> / <code>ProgressPort</code> 由外壳实现，见 D19）</td></tr>
-        <tr><td>本层依赖</td><td>只依赖<strong>端口接口</strong>与 JDK；不依赖应用层与领域层的具体类（值以 JSON 传递）</td></tr>
+        <tr><td>本层对象</td><td>22 个适配器（实现 21 个端口；<code>HumanInteractionPort</code> / <code>ProgressPort</code> 由外壳实现，见 D19）</td></tr>
+        <tr><td>本层依赖</td><td>只依赖<strong>端口接口</strong>（application）与 JDK。实现端口时可以使用<strong>领域类型</strong>（端口签名所必需）：允许<strong>重建与读取</strong>（<code>rehydrate</code> 工厂 / getter / Id）；<strong>不得驱动聚合的状态迁移</strong>（不调业务方法、不改不变量）。聚合 ↔ 文件的映射只在本层 <code>*Dto</code> / <code>*Mapper</code>，不在聚合上留存储痕迹</td></tr>
         <tr><td>谁依赖本层</td><td>启动装配（组装端口实现并注入应用层）</td></tr>
         <tr><td>本层<strong>不</strong>负责</td><td>业务判断、状态机、事务的"决定"（只执行既定的提交顺序）</td></tr>
       </tbody>
@@ -151,11 +151,13 @@ flowchart LR
         <tr><td><code>ExperienceRepository</code></td><td><code>FileExperienceRepository</code></td><td><code>experience/</code></td><td>只新建；合并 = 新版本 + 归档旧文件</td></tr>
         <tr><td><code>BudgetRepository</code></td><td><code>FileBudgetRepository</code></td><td><code>sessions/&lt;rootId&gt;/budget.json</code></td><td>原子替换（高频小文件）</td></tr>
         <tr><td><code>PolicyRepository</code></td><td><code>FilePolicyRepository</code></td><td><code>settings.json</code></td><td>原子替换；不存在时写默认值</td></tr>
-        <tr><td><code>CatalogRepository</code></td><td><code>FileCatalogRepository</code></td><td><code>agents/*.md</code>、<code>skills/*/SKILL.md</code>、<code>tools|providers|models/*.json</code></td><td><strong>合并两个来源</strong>：jar 内置代理 + 磁盘用户代理；<code>builtin.</code> 前缀保留</td></tr>
+        <tr><td><code>CatalogRepository</code></td><td><code>FileCatalogRepository</code></td><td><code>agents/*.md</code>、<code>skills/*/SKILL.md</code>、<code>tools|providers|models/*.json</code></td><td><strong>合并两个来源</strong>：jar 内置资产 + 磁盘用户资产；内置 id 前缀 <code>builtin.</code> 保留。<code>saveSkill</code> 是技能写入的<strong>唯一落点</strong>（原子重写 <code>SKILL.md</code>），<code>countActiveSkills</code> 供容量判定（在全局写段内调用）</td></tr>
         <tr><td><code>ArtifactStore</code></td><td><code>FileArtifactStore</code></td><td><code>sessions/&lt;id&gt;/artifacts/</code></td><td>只新建；随会话目录删除</td></tr>
         <tr><td><code>ModelInvocationPort</code></td><td><code>ModelInvoker</code></td><td>—（网络）</td><td>选模型 → 硬校验 → 调用 → <strong>降级链</strong>；<strong>只返回 usage，不记账</strong>。调用方是 <code>ReActLoop</code>、<code>ContextWindowService</code>、<code>SessionTitleGenerator</code> 与裁判</td></tr>
         <tr><td><code>ExternalToolPort</code></td><td><code>HttpToolAdapter</code> / <code>McpToolAdapter</code></td><td>—（网络）</td><td>工具自带超时；结果原样返回给应用层截断</td></tr>
-        <tr><td><code>SkillSopProvider</code></td><td><code>FileSkillSopProvider</code></td><td><code>skills/&lt;id&gt;/SKILL.md</code></td><td>解析 front-matter + 正文；缺失或非 active 返回"不可用"</td></tr>
+        <tr><td><code>SkillSopProvider</code></td><td><code>FileSkillSopProvider</code></td><td><code>skills/&lt;id&gt;/SKILL.md</code></td><td>解析 front-matter + 正文，<strong>原样返回正文、不渲染</strong>；缺失或非 active 返回"不可用"。每次调用都现读（正文不冻结，S3）</td></tr>
+        <tr><td><code>PluginRepository</code></td><td><code>FilePluginRepository</code></td><td><code>plugins/&lt;pluginId&gt;/plugin.json</code></td><td>只存用户意图（信任 / 勾选的能力）；"已加载"不落盘（M42）</td></tr>
+        <tr><td><code>PluginRuntimePort</code></td><td><code>Pf4jPluginRuntime</code></td><td><code>plugins/&lt;pluginId&gt;/*.jar</code></td><td>PF4J 3.16.0：扫描、装载、取扩展、启停、卸载；读 jar 内 <code>META-INF/jellyfish/tools/*.json</code></td></tr>
         
         
         <tr><td><code>DomainEventPublisher</code></td><td><code>InProcessEventPublisher</code></td><td>—（内存）</td><td>提交后同步派发；订阅方必须短、幂等、不阻塞</td></tr>
@@ -185,12 +187,24 @@ flowchart LR
       </tbody>
     </table>
 
+    <h3>3.2 本地能力（<code>NATIVE</code>）的落点与约束</h3>
+    <p>8 个本地工具的处理器都在本层（<code>infrastructure/local/</code>），实现 <code>InternalToolHandler</code> 并注册进同一张处理器注册表——<strong>它们不是端口适配器</strong>，因为本地能力不允许被替换。</p>
+    <table>
+      <thead><tr><th>类</th><th>承担的契约</th></tr></thead>
+      <tbody>
+        <tr><td><code>Workspace</code></td><td>工作区根：启动目录求一次 <code>toRealPath()</code>；<code>resolve(path)</code> 对 real path 判定是否在根内（目标不存在时判父目录）；越界返回"工具错误结果"而不是抛异常（行动 5.8.1 规则 9）</td></tr>
+        <tr><td><code>LocalToolHandlers</code></td><td>8 个本地能力处理器 + 硬限制（行数、条数、深度、字符数、超时），实现 <code>InternalToolHandler</code> 并注册进同一张处理器注册表——<strong>它们不是端口适配器</strong>，因为本地能力不允许被替换</td></tr>
+        <tr><td><code>UrlFetcher</code></td><td><code>fetch_url</code> 的出站 GET：只 <code>http</code>/<code>https</code>，HTML 去标签，超时与失败都当普通结果</td></tr>
+        <tr><td><code>builtin/tools/*.json</code></td><td>13 份工具声明随 jar 走：5 个编排（<code>INTERNAL</code>）+ 8 个本地能力（播种为 <code>NATIVE</code>，处理器名指向本层 <code>LocalToolHandlers</code>）</td></tr>
+      </tbody>
+    </table>
+
 <h2><span class="sec">9.5</span>目录布局与文件形态</h2>
     <pre><code>~/.jellyfish/
 ├── schema.version                    # 迁移版本（单行文本）
 ├── settings.json                     # RuntimePolicy
 ├── agents/&lt;agentId&gt;.md               # 人写：代理定义（markdown + YAML front-matter）
-├── skills/&lt;skillId&gt;/SKILL.md         # 人写：技能 SOP（单文件，front-matter + 正文）
+├── skills/&lt;skillId&gt;/SKILL.md         # 技能 SOP（人写或机学同构；front-matter + 五节正文）
 ├── tools/&lt;toolId&gt;.json               # 系统管
 ├── providers/&lt;providerId&gt;.json       # 系统管（凭据只存引用）
 ├── models/&lt;modelId&gt;.json             # 系统管
@@ -206,6 +220,9 @@ flowchart LR
 │       ├── meta.json                 #   parentId = &lt;rootId&gt;
 │       ├── records-0001.jsonl
 │       └── plans/ reports/ reflections/ artifacts/
+├── plugins/&lt;pluginId&gt;/               # 插件（目录名必须等于 jar 内 Plugin-Id）
+│   ├── plugin.json                   #   系统管：信任 / 勾选的能力（唯一落盘的意图）
+│   └── &lt;artifact&gt;.jar                #   PF4J 读 Plugin-Id / Plugin-Version / Plugin-Requires
 ├── experience/&lt;experienceId&gt;.json    # 全局资产
 ├── archive/&lt;sessionId&gt;.zip           # 归档包：应用只写不读，解档交给用户（D22）
 ├── logs/                             # 运行日志（按天滚动）
@@ -221,11 +238,27 @@ flowchart LR
     <table>
       <thead><tr><th>类别</th><th>谁写</th><th>形态</th></tr></thead>
       <tbody>
-        <tr><td><strong>人写资产</strong></td><td>用户 / 仓库</td><td>markdown + YAML front-matter（<code>agents/*.md</code>、<code>skills/*/SKILL.md</code>）</td></tr>
+        <tr><td><strong>人写资产</strong></td><td>用户 / 仓库</td><td>markdown + YAML front-matter（<code>agents/*.md</code>）</td></tr>
+        <tr><td><strong>人写 + 机写混合</strong></td><td>人写；<code>mutable: true</code> 时也可由系统改写</td><td><code>skills/&lt;id&gt;/SKILL.md</code>（front-matter + 五节正文）——<strong>技能没有单独的状态文件</strong>，<code>status</code> / <code>mutable</code> 都在 front-matter 里</td></tr>
         <tr><td><strong>系统配置</strong></td><td>界面 / 平台初始化</td><td>纯 JSON（<code>settings.json</code>、<code>tools|providers|models</code>）</td></tr>
         <tr><td><strong>内部状态</strong></td><td>应用</td><td>紧凑单行 JSON / JSONL</td></tr>
       </tbody>
     </table>
+
+    <p><code>skills/&lt;id&gt;/SKILL.md</code> 的 front-matter 固定字段：</p>
+    <pre><code>---
+name: 依赖升级
+description: 把一个依赖升到指定版本并验证回归
+triggerCondition: 当任务需要升级某个第三方依赖版本时使用
+status: active          # draft / active / deprecated
+mutable: true           # 系统是否有权改写正文；false = 锁死（jar 内置恒 false）
+---
+## 适用
+## 步骤
+## 每步的完成判据
+## 验证
+## 常见坑</code></pre>
+    <p>技能的<strong>正文是自由文本</strong>：系统不解析、不校验结构（五节骨架靠子代理 prompt 约定），<code>load_skill</code> 原样注入。<code>revise()</code> 整篇覆盖，<strong>不留版本历史</strong>。</p>
 
     <pre><code>---
 name: 代码审查员
@@ -254,6 +287,7 @@ status: active
 ② 所有 stageAppend → 追加 + fsync
 ③ 所有 stageReplace → 原子替换
 ④ fsync 涉及的目录</code></pre>
+    <p><strong>全局资产写段</strong>（<code>globalWrite</code>）：<code>skills/</code>、<code>experience/</code>、<code>plugins/</code> 不属于任何会话目录，会被<strong>并行子会话</strong>同时写入（每个会话都能沉淀）。因此这条路径在进程内串行执行，且"容量读—判—写"必须在同一段内完成，否则并行的两次 <code>CREATE</code> 会一起越过 <code>skillCapacity</code>。</p>
 
     <h2><span class="sec">9.7</span>启动技术清理</h2>
     <p>应用层的 <code>StartupReconciler</code> 管<strong>业务语义</strong>（报告与状态不一致等 5 条）；本节只管<strong>文件层面的残留</strong>，两者不重叠。</p>
@@ -266,6 +300,7 @@ status: active
         <tr><td><code>sub/</code> 下出现第二层 <code>sub/</code></td><td>违反"子代理不得再开子代理"，告警并忽略该目录</td></tr>
         <tr><td><code>archive/&lt;id&gt;.zip</code> 存在但 <code>sessions/&lt;id&gt;/</code> 仍存在</td><td>删除 <code>sessions/&lt;id&gt;/</code>（归档已完成，含其 <code>sub/</code>）</td></tr>
         <tr><td><code>cache/</code></td><td>启动时视为不可信，必要时整目录清空重建</td></tr>
+        <tr><td><code>plugins/&lt;id&gt;/</code> 目录名与 jar 内 <code>Plugin-Id</code> 不一致</td><td>告警并忽略该目录（不装载），避免同一 id 两个目录导致卸载漏删</td></tr>
       </tbody>
     </table>
 
@@ -274,7 +309,7 @@ status: active
       <thead><tr><th>点</th><th>机制</th></tr></thead>
       <tbody>
         <tr><td>多实例</td><td><code>InstanceLock</code>：<code>locks/jellyfish.lock</code> 上 <code>FileChannel.tryLock</code>（进程级互斥，进程退出由 OS 释放）；获取失败则拒绝启动并提示</td></tr>
-        <tr><td>写并发</td><td><strong>每个会话一个写者</strong>：主循环写主会话目录，子代理各自写 <code>sub/&lt;childId&gt;/</code>；同一会话内由 <code>CommitScope</code> 串行</td></tr>
+        <tr><td>写并发</td><td><strong>每个会话一个写者</strong>：主循环写主会话目录，子代理各自写 <code>sub/&lt;childId&gt;/</code>；同一会话内由 <code>CommitScope</code> 串行。<strong>全局资产（<code>skills/</code>、<code>experience/</code>）例外</strong>：走全局资产写段，进程内串行</td></tr>
         <tr><td>读并发</td><td>读操作无锁（依赖 rename 的原子性：读到的要么是旧版本、要么是新版本）</td></tr>
         <tr><td>终端输入</td><td><strong>由外壳的读取线程负责</strong>（应用层 §10）；本层不碰 stdin / stdout / ANSI</td></tr>
       </tbody>
@@ -332,7 +367,22 @@ sequenceDiagram
       <li><strong>不碰聚合</strong>：<code>ModelInvoker</code> 只回填 <code>servedModelId</code>，<code>switchModel</code> 由调用方在收到结果后执行（见《模块-行动》§8.2）。</li>
     </ol>
 
-    <h2><span class="sec">9.12</span>与其他文档的对应</h2>
+    <h2><span class="sec">9.12</span>插件运行时（PF4J）的实现要点</h2>
+    <table>
+      <thead><tr><th>#</th><th>约定</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td><strong>PF4J 3.16.0</strong>：实测其 class 文件 major version = 52（Java 8 字节码），JDK 8 可用；内部用 multi-release jar 把 <code>module-info</code> 放在 <code>META-INF/versions/9/</code></td></tr>
+        <tr><td>2</td><td><strong>关掉 PF4J 自带的状态持久化</strong>（默认会写一份启停状态）：否则与 <code>plugin.json</code> 形成两份真相，违反"落盘只存用户意图"（M42）</td></tr>
+        <tr><td>3</td><td><strong>动态装载可用</strong>：<code>loadPlugin(Path)</code> / <code>startPlugin(id)</code> / <code>stopPlugin(id)</code> / <code>unloadPlugin(id)</code> 都是运行期 API，装/启/停/卸<strong>不需要重启</strong></td></tr>
+        <tr><td>4</td><td><strong>同 id 升级要重启</strong>：重新装载同一 <code>Plugin-Id</code> 会与旧 <code>PluginClassLoader</code> 撞车；卸载后类可能仍被线程/静态缓存引用（泄漏），所以升级走"停进程 → 换 jar → 起进程"</td></tr>
+        <tr><td>5</td><td><strong>插件不得重复打包宿主已提供的依赖</strong>（Jackson / OkHttp / networknt / Log4j 等）：装了就在类加载器里打架。安装时检查 jar 内依赖清单，命中即拒绝</td></tr>
+        <tr><td>6</td><td><strong><code>apiVersion</code> 用 <code>Plugin-Requires</code> 校验</strong>：宿主版本由运行时提供，不匹配拒绝装载</td></tr>
+        <tr><td>7</td><td><strong>工具声明从 jar 内读</strong>：<code>META-INF/jellyfish/tools/*.json</code>，与 <code>BuiltinAssets</code> 同构（内存读、不落盘、卸载即消失）</td></tr>
+        <tr><td>8</td><td><strong>扩展实例由 <code>PluginAssembler</code> 注册</strong>：PF4J 的扩展对象不经过 DI 容器（"容器概念不渗入业务"仍成立——插件实现的是端口接口，装配只发生在 <code>di</code> 层）</td></tr>
+      </tbody>
+    </table>
+
+    <h2><span class="sec">9.13</span>与其他文档的对应</h2>
     <table>
       <thead><tr><th>关注点</th><th>唯一出处</th></tr></thead>
       <tbody>

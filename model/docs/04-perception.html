@@ -46,11 +46,10 @@
     </div>
 
     <h2><span class="sec">4.2</span>模块总览图</h2>
-    <pre class="mermaid">
-classDiagram
+    <pre class="mermaid">classDiagram
     namespace 会话聚合 {
         class Session {
-            &lt;&lt;AggregateRoot>>
+            &lt;&lt;AggregateRoot&gt;&gt;
             -SessionId id
             -SessionId parentSessionId
             -AgentId agentId
@@ -66,7 +65,7 @@ classDiagram
             +cancel()
         }
         class Record {
-            &lt;&lt;Entity>>
+            &lt;&lt;Entity&gt;&gt;
             -RecordId id
             -RecordRole role
             -String content
@@ -75,35 +74,36 @@ classDiagram
             -int sequence
         }
         class ToolResultPayload {
-            &lt;&lt;ValueObject>>
+            &lt;&lt;ValueObject&gt;&gt;
             -boolean isTruncated
             -String resourceUri
         }
         class SystemPromptSnapshot {
-            &lt;&lt;ValueObject>>
+            &lt;&lt;ValueObject&gt;&gt;
             -String renderedPrompt
             -List~ToolSchemaSnapshot~ toolList
             -List~SkillSummarySnapshot~ skillList
         }
         class ToolSchemaSnapshot {
-            &lt;&lt;ValueObject>>
+            &lt;&lt;ValueObject&gt;&gt;
             -String name
             -String description
             -String parametersJsonSchema
             -String outputDescription
         }
         class SkillSummarySnapshot {
-            &lt;&lt;ValueObject>>
+            &lt;&lt;ValueObject&gt;&gt;
             -String name
             -String description
+            -String triggerCondition
         }
         class ContextWindow {
-            &lt;&lt;ValueObject>>
+            &lt;&lt;ValueObject&gt;&gt;
             -List~Record~ records
             -ContextUsage usage
         }
         class ContextUsage {
-            &lt;&lt;ValueObject>>
+            &lt;&lt;ValueObject&gt;&gt;
             -int usedTokens
             -int inputCeiling
             -int systemTokens
@@ -111,12 +111,12 @@ classDiagram
             -int windowRecordCount
         }
         class ContextWindowPolicy {
-            &lt;&lt;ValueObject>>
+            &lt;&lt;ValueObject&gt;&gt;
             -int recordCount
             -double systemRatioLimit
         }
         class RecordRole {
-            &lt;&lt;Enumeration>>
+            &lt;&lt;Enumeration&gt;&gt;
             SYSTEM
             USER
             ASSISTANT
@@ -124,11 +124,20 @@ classDiagram
             TOOL_RESULT
             SUMMARY
         }
+        class AgentSnapshotInput {
+            &lt;&lt;ValueObject&gt;&gt;
+            -AgentId agentId
+            -PromptTemplate basePrompt
+            -Map promptVariables
+            -List~ToolSchemaSnapshot~ activeTools
+            -List~SkillSummarySnapshot~ activeSkills
+            -List~String~ sopReferencedToolNames
+        }
     }
 
     namespace 策略配置 {
         class RuntimePolicy {
-            &lt;&lt;AggregateRoot>>
+            &lt;&lt;AggregateRoot&gt;&gt;
             +int maxRetries
             +int reflectionThreshold
             +int maxReplanGeneration
@@ -145,6 +154,7 @@ classDiagram
             +double experienceInitialConfidence
             +double experienceConfidenceStep
             +double experienceRetireThreshold
+            +int skillCapacity
             +double budgetWarnRatio
             +List~ModelId~ modelFallbackChain
             +List~ToolId~ trustedToolIds
@@ -156,20 +166,20 @@ classDiagram
 
     namespace 领域服务 {
         class StartSessionUseCase {
-            &lt;&lt;ApplicationService>>
+            &lt;&lt;ApplicationService&gt;&gt;
             +start(AgentId, ModelId, String) Session
             +startSubSession(SessionId, AgentId, ModelId, String) Session
         }
         class SessionTitleGenerator {
-            &lt;&lt;ApplicationService>>
+            &lt;&lt;ApplicationService&gt;&gt;
             +generate(Session) String
         }
         class SystemPromptAssembler {
-            &lt;&lt;DomainService>>
+            &lt;&lt;DomainService&gt;&gt;
             +assemble(AgentSnapshotInput) SystemPromptSnapshot
         }
         class ContextWindowService {
-            &lt;&lt;ApplicationService>>
+            &lt;&lt;ApplicationService&gt;&gt;
             +ensureWithinLimit(Session) void
             +forceCollapse(Session) void
         }
@@ -177,12 +187,12 @@ classDiagram
 
     namespace 端口 {
         class ModelInvocationPort {
-            &lt;&lt;Port>>
+            &lt;&lt;Port&gt;&gt;
             +invoke(ModelInvocationRequest) ModelInvocationResult
             +describe(ModelId) ModelProfile
         }
         class ModelProfile {
-            &lt;&lt;ValueObject>>
+            &lt;&lt;ValueObject&gt;&gt;
             -int maxInputTokens
             -int maxOutputTokens
         }
@@ -204,25 +214,25 @@ classDiagram
     Record *-- ToolResultPayload
     SystemPromptSnapshot *-- ToolSchemaSnapshot
     SystemPromptSnapshot *-- SkillSummarySnapshot
-    Record --> RecordRole
-    Session "0..1" --> "0..*" Session : parentSessionId
-    Session ..> ContextWindow : buildContextForLlm 产出（推导，不落库）
+    Record --&gt; RecordRole
+    Session "0..1" --&gt; "0..*" Session : parentSessionId
+    Session ..&gt; ContextWindow : buildContextForLlm 产出（推导，不落库）
     ContextWindow *-- ContextUsage
-    ContextWindow ..> ContextWindowPolicy : 计算依据
+    ContextWindow ..&gt; ContextWindowPolicy : 计算依据
 
-    StartSessionUseCase ..> Session
-    StartSessionUseCase ..> SessionTitleGenerator
-    SessionTitleGenerator ..> ModelInvocationPort
-    SystemPromptAssembler ..> SystemPromptSnapshot
-    ContextWindowService ..> Session
-    ContextWindowService ..> RuntimePolicy
-    ContextWindowService ..> ModelInvocationPort
+    StartSessionUseCase ..&gt; Session
+    StartSessionUseCase ..&gt; SessionTitleGenerator
+    SessionTitleGenerator ..&gt; ModelInvocationPort
+    SystemPromptAssembler ..&gt; SystemPromptSnapshot
+    SystemPromptAssembler ..&gt; AgentSnapshotInput : 入参
+    ContextWindowService ..&gt; Session
+    ContextWindowService ..&gt; RuntimePolicy
+    ContextWindowService ..&gt; ModelInvocationPort
 
-    Session ..> SessionCancelled : raises
-    Session ..> ModelSwitched : raises
-    Session ..> SummarizationCompleted : raises
-    RuntimePolicy ..> PolicyAdjusted : raises
-    </pre>
+    Session ..&gt; SessionCancelled : raises
+    Session ..&gt; ModelSwitched : raises
+    Session ..&gt; SummarizationCompleted : raises
+    RuntimePolicy ..&gt; PolicyAdjusted : raises</pre>
     <p class="diagram-note">图 4-1　感知模块总览（本模块聚合 + 服务 + 端口 + 事件）</p>
 
     <h2><span class="sec">4.3</span>对象操作图</h2>
@@ -300,6 +310,7 @@ flowchart LR
         <tr><td>重试与反思</td><td><code>maxRetries</code>、<code>reflectionThreshold</code>、<code>maxReplanGeneration</code>、<code>maxReActRounds</code></td><td>规划</td></tr>
         <tr><td>上下文</td><td><code>summarizationTokenThreshold</code>、<code>inputSafetyMargin</code>、<code>contextWindowRecordCount</code>、<code>systemRecordRatioLimit</code>、<code>toolResultTruncateLength</code></td><td>感知（本模块）</td></tr>
         <tr><td>经验</td><td><code>experienceCapacity</code>、<code>experienceTopN</code>、<code>experiencePerPlan</code>、<code>experienceInitialConfidence</code>、<code>experienceConfidenceStep</code>、<code>experienceRetireThreshold</code></td><td>记忆</td></tr>
+        <tr><td>技能</td><td><code>skillCapacity</code>（<strong>ACTIVE 技能总数上限</strong>，含人写、不含 jar 内置；到限即停止自动沉淀并提醒）</td><td>记忆</td></tr>
         <tr><td>预算与执行</td><td><code>budgetWarnRatio</code>、<code>budgetLimitTokens</code>、<code>subagentExecutionTimeoutMillis</code>、<code>modelFallbackChain</code>、<code>trustedToolIds</code></td><td>行动</td></tr>
       </tbody>
     </table>
@@ -350,10 +361,10 @@ flowchart LR
         <tr><td><code>ToolResultPayload</code></td><td>VO</td><td>工具结果的附属信息：是否被截断、完整内容的本地归档位置</td></tr>
         <tr><td><code>SystemPromptSnapshot</code></td><td>VO</td><td>会话开启时冻结的内容快照：渲染后的提示词 + 工具 schema 列表 + 技能摘要列表</td></tr>
         <tr><td><code>ToolSchemaSnapshot</code></td><td>VO</td><td>工具 schema 的<strong>内容快照</strong>（不是 ID 引用）</td></tr>
-        <tr><td><code>SkillSummarySnapshot</code></td><td>VO</td><td>技能的 <code>name + description</code>（渐进披露的浅层；SOP 正文靠 <code>load_skill</code> 注入）</td></tr>
+        <tr><td><code>SkillSummarySnapshot</code></td><td>VO</td><td>技能的 <code>name + description + triggerCondition</code>（渐进披露的浅层，<strong>只有它被冻结</strong>；SOP 正文靠 <code>load_skill</code> 现读，接受漂移）</td></tr>
         <tr><td><code>ContextWindow</code></td><td>VO</td><td><code>buildContextForLlm()</code> 的产物：真正发给模型的那批记录（已排序）+ 用量</td></tr>
         <tr><td><code>ContextUsage</code></td><td>VO</td><td>只读投影：<code>usedTokens / inputCeiling / systemTokens / summaryTokens / windowRecordCount</code></td></tr>
-        <tr><td><code>ContextWindowPolicy</code></td><td>VO</td><td>组装策略入参（来自 <code>RuntimePolicy</code> 的两个值）：窗口条数、SYSTEM 占比上限</td></tr>
+        <tr><td><code>ContextWindowPolicy</code></td><td>VO</td><td>组装策略入参（来自 <code>RuntimePolicy</code> 的两个值）：窗口条数（<strong>只数非 SYSTEM、非 SUMMARY 的记录</strong>）、SYSTEM 占比上限</td></tr>
         <tr><td><code>AgentSnapshotInput</code></td><td>VO</td><td><code>SystemPromptAssembler</code> 的入参：<code>agentId</code>、<code>basePrompt</code>、<code>promptVariables</code>、<strong>已过滤 <code>ACTIVE</code></strong> 的 <code>activeTools</code> / <code>activeSkills</code>、<code>sopReferencedToolNames</code>（一致性告警用，本期恒空）</td></tr>
         <tr><td><code>ModelProfile</code></td><td>VO</td><td>端口返回的模型档案：<code>maxInputTokens / maxOutputTokens</code>（感知据此算有效上限，<strong>不直接引用 <code>Model</code> 聚合</strong>）</td></tr>
         <tr><td><code>ModelInvocationPort</code></td><td>Port</td><td>模型调用的唯一出口（选模型、降级、调用、计 token、提供模型档案）；由【行动】<code>ModelInvoker</code> 实现</td></tr>
@@ -381,18 +392,19 @@ flowchart LR
         <tr>
           <td><strong>会话开启</strong>（用户发起对话）<br><strong>子代理派遣</strong>（spawn_subagents）</td>
           <td>迭代中不断追加 Record；上下文折叠；模型降级；取消</td>
-          <td><strong>会话封存</strong>（ARCHIVED，不可续跑）<br><strong>会话销毁</strong>（物理删除）</td>
+          <td><strong>归档</strong>（压成 zip 移走，应用不再可见，D22）<br><strong>会话销毁</strong>（物理删除）</td>
           <td><strong>会话续跑</strong>（按 sessionId 加载，<code>StartupReconciler</code> 先对账）</td>
         </tr>
       </tbody>
     </table>
 
-    <h4>规则清单（12 条）</h4>
+    <h4>规则清单（13 条）</h4>
     <ol>
       <li><strong>唯一创建入口</strong>：只有应用层 <code>StartSessionUseCase</code> 能创建会话；两个触发点——用户发起对话、主会话发起子代理。</li>
       <li><strong>创建时必须指定</strong> <code>agentId</code> 与 <code>modelId</code>（缺省取默认）；<strong>Agent 在会话内不可切换</strong>，Model 可切换（仅降级）。</li>
       <li><strong>标题</strong>：由 LLM 依据首次输入的意图生成；失败则用首句截断兜底。</li>
-      <li><strong>快照冻结</strong>：<code>SystemPromptSnapshot</code> 在会话开启时生成并冻结（<strong>内容</strong>快照）；运行中工具/技能定义变更<strong>不影响</strong>进行中的会话。</li>
+      <li><strong>快照冻结</strong>：<code>SystemPromptSnapshot</code> 在会话开启时生成并冻结（<strong>内容</strong>快照）；运行中工具/技能定义变更<strong>不影响</strong>进行中的会话。
+        <strong>技能有两层，冻结的只有浅层</strong>：可见清单（哪些 <code>skillId</code>）+ 三件套（<code>name / description / triggerCondition</code>）冻结；<strong>SOP 正文不冻结</strong>——<code>load_skill</code> 每次现读 <code>SKILL.md</code>，因此同一会话前后两次 <code>load_skill</code> 可能拿到不同正文（技能被改进时）。这是有意接受的漂移（S3）：<strong>正文是外部资产，不是会话事实</strong>，也不受 <code>Record</code> 的 append-only 约束。会话中途新沉淀的技能<strong>不进</strong>当前清单，下个会话才可见。</li>
       <li><strong>流水只追加</strong>：<code>Record</code> 不得修改；被 <code>Attempt.recordRange</code> 引用的区间<strong>永不删除、永不改写</strong>（本地应用的磁盘控制只能靠归档/导出）。</li>
       <li><strong>会话树</strong>：<code>parentSessionId</code> 组树；<strong>父会话取消 ⇒ 级联取消所有子会话</strong>；<strong>子代理不得再开子代理</strong>（深度恒为 1）。</li>
       <li><strong>没有状态</strong>：<code>sessions/&lt;id&gt;/</code> 存在即可用，不存在即不可用（含已归档，D22）。“在跑”是进程内事实，不落盘；归档 = 压成包移走，此后应用不再认识它。删除 = 物理消失。</li>
@@ -400,9 +412,9 @@ flowchart LR
       <li><strong>上下文组装</strong>（<code>buildContextForLlm(policy)</code>）为<strong>三步推导 + 一次降级</strong>：
         ① 取全部 <code>role = SYSTEM</code> 的记录（<strong>运行期注入</strong>：SOP 注入 + 工具注入 + 经验注入）；经验注入由外循环在<strong>步骤启动前</strong>写一条带 <code>step=&lt;id&gt;</code> 标记的 SYSTEM 记录，正文来自 <code>ExperienceRepository.find(id)</code>，同一步只注入一次；系统提示词来自 <code>SystemPromptSnapshot</code>，<strong>不落 <code>Record</code></strong>，由调用方作为 <code>systemPrompt</code> 单独传给模型；
         ② 取最新一条 <code>SUMMARY</code> 记录（若有）；
-        ③ 取最近 <code>policy.recordCount</code> 条<strong>非 SYSTEM</strong> 记录；
+        ③ 取最近 <code>policy.recordCount</code> 条<strong>非 SYSTEM、非 SUMMARY</strong> 记录（<code>SUMMARY</code> 已由 ② 单独取出；若再计入，折叠会退化为往窗口里堆摘要）；
         ④ 降级：若 <code>systemTokens / usedTokens &gt; policy.systemRatioLimit</code> ⇒ 只保留系统提示词快照，丢弃 SOP 与工具注入。</li>
-      <li><strong>SYSTEM 类不参与淘汰</strong>：<code>role = SYSTEM</code> 的记录不被第 ③ 步的"最近 n 条"挤出，只能被第 ④ 步<strong>整体</strong>裁剪。</li>
+      <li><strong><code>SYSTEM</code> / <code>SUMMARY</code> 不参与第 ③ 步计数</strong>：<code>role = SYSTEM</code> 的记录不被第 ③ 步的"最近 n 条"挤出，只能被第 ④ 步<strong>整体</strong>裁剪；<code>SUMMARY</code> 只取最新一条（由 ② 负责）。</li>
       <li><strong>可推导状态不落库</strong>：窗口边界与用量都是推导结果，不持久化；会话续跑时重新推导。</li>
       <li><strong>聚合不依赖配置聚合</strong>：策略以 <code>ContextWindowPolicy</code> <strong>值对象入参</strong>传入，<code>Session</code> 不引用 <code>RuntimePolicy</code>，也不读取任何阈值。</li></li>
       <li><strong>系统提示词与流水分离</strong>：基础提示词只存在于 <code>SystemPromptSnapshot</code>（会话开启时冻结），<code>SYSTEM</code> 记录只承载运行期注入（<code>load_skill</code> 的 SOP、工具/经验注入）；发给模型时前者走 <code>systemPrompt</code>、后者并入同一 <code>system</code> 字段，二者都不进 <code>messages</code>。第 ④ 步降级只保留快照，即丢弃全部注入。
@@ -487,20 +499,18 @@ sequenceDiagram
     </ol>
 
     <h3>4.9.3 <code>SystemPromptAssembler.assemble(AgentSnapshotInput)</code>（领域）</h3>
-    <pre class="mermaid">
-flowchart TD
-    A[入参：agentId + 已解析的工具 schema 内容 + 技能摘要内容] --> B{工具/技能&lt;br/>是否全部 ACTIVE?}
-    B -- 否 --> C[排除非 ACTIVE 项]
-    B -- 是 --> D[保持全量]
-    C --> E{SOP 引用的工具&lt;br/>是否都在绑定内?}
-    D --> E
-    E -- 否 --> F[一致性告警：提示词不得出现未绑定工具]
-    E -- 是 --> G[渲染 basePrompt]
-    F --> G
-    G --> H[组装 ToolSchemaSnapshot 列表]
-    H --> I[组装 SkillSummarySnapshot 列表&lt;br/>仅 name + description]
-    I --> J[输出 SystemPromptSnapshot]
-    </pre>
+    <pre class="mermaid">flowchart TD
+    A[入参：agentId + 已解析的工具 schema 内容 + 技能摘要内容] --&gt; B{工具/技能&lt;br/&gt;是否全部 ACTIVE?}
+    B -- 否 --&gt; C[排除非 ACTIVE 项]
+    B -- 是 --&gt; D[保持全量]
+    C --&gt; E{SOP 引用的工具&lt;br/&gt;是否都在绑定内?}
+    D --&gt; E
+    E -- 否 --&gt; F[一致性告警：提示词不得出现未绑定工具]
+    E -- 是 --&gt; G[渲染 basePrompt]
+    F --&gt; G
+    G --&gt; H[组装 ToolSchemaSnapshot 列表]
+    H --&gt; I[组装 SkillSummarySnapshot 列表&lt;br/&gt;name + description + triggerCondition]
+    I --&gt; J[输出 SystemPromptSnapshot]</pre>
     <p><strong>要点</strong>：只做<strong>组装</strong>，不查任何定义——这样感知模块对行动 / 记忆零实现依赖；非 <code>ACTIVE</code> 的工具 / 技能不进入快照。</p>
 
     <h3>4.9.4 <code>SessionTitleGenerator.generate(session)</code>（应用层）</h3>
@@ -524,16 +534,14 @@ sequenceDiagram
 
     <h3>4.9.5 <code>Session.buildContextForLlm(policy) → ContextWindow</code>（领域）</h3>
     <p>把"记录流水"推导为"本次发给模型的窗口 + 用量"。它是<strong>纯函数式的推导行为</strong>：不改状态、不落库、不读配置聚合。</p>
-    <pre class="mermaid">
-flowchart TD
+    <pre class="mermaid">flowchart TD
     A[入参：ContextWindowPolicy] --&gt; B[① 取全部 role=SYSTEM 记录&lt;br/&gt;仅运行期注入：SOP / 工具 / 经验&lt;br/&gt;系统提示词来自快照，不落 Record]
     B --&gt; C[② 取最新一条 SUMMARY 记录（若有）]
-    C --&gt; D[③ 取最近 policy.recordCount 条&lt;br/&gt;非 SYSTEM 记录]
+    C --&gt; D[③ 取最近 policy.recordCount 条&lt;br/&gt;非 SYSTEM、非 SUMMARY 记录]
     D --&gt; E[④ 计算 usedTokens / systemTokens / summaryTokens]
     E --&gt; F{systemTokens / usedTokens&lt;br/&gt;大于 policy.systemRatioLimit ?}
     F -- 否 --&gt; H[输出 ContextWindow]
-    F -- 是 --&gt; G[退化为：只保留系统提示词快照&lt;br/&gt;丢弃 SOP 与工具注入] --&gt; H
-        </pre>
+    F -- 是 --&gt; G[退化为：只保留系统提示词快照&lt;br/&gt;丢弃 SOP 与工具注入] --&gt; H</pre>
 
     <h4>四条 DDD 约束</h4>
     <table>
@@ -570,7 +578,7 @@ flowchart TD
         <tr><td><strong>计划完结</strong></td><td><code>COMPLETED</code> / <code>FAILED</code>，触发经验沉淀</td></tr>
         <tr><td><strong>上下文折叠</strong></td><td>token 超阈值 → 生成 <code>SUMMARY</code> → 窗口收窄</td></tr>
         <tr><td><strong>模型降级</strong></td><td>故障命中备用模型链</td></tr>
-        <tr><td><strong>会话封存 / 会话销毁</strong></td><td>归档（不可 resume）/ 物理删除（连带 <code>Record</code> / <code>Plan</code> / <code>Budget</code>，经验保留）</td></tr>
+        <tr><td><strong>归档 / 会话销毁</strong></td><td>归档（压成 zip 移走，应用不再认识）/ 物理删除（连带 <code>Record</code> / <code>Plan</code> / <code>Budget</code>，经验保留）</td></tr>
       </tbody>
     </table>
 
