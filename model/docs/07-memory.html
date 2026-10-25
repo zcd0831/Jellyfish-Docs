@@ -33,7 +33,7 @@
       <thead><tr><th>方向</th><th>内容</th></tr></thead>
       <tbody>
         <tr><td>本模块聚合</td><td><code>Experience</code>、<code>Reflection</code>、<code>SkillDefinition</code></td></tr>
-        <tr><td>本模块端口</td><td>在 <strong><code>application.memory.port</code></strong> 声明 <strong><code>SkillSopProvider</code></strong>（只声明接口，由基础设施 <code>FileSkillSopProvider</code> 实现）；本模块<strong>不实现</strong>任何端口。检索/归纳所需的子代理能力由应用层 <code>SubagentLauncher</code> 提供</td></tr>
+        <tr><td>本模块端口</td><td>在 <strong><code>application.memory.port</code></strong> 声明 <strong><code>SkillSopProvider</code></strong>（只声明接口，由基础设施 <code>FileSkillSopProvider</code> 实现）；本模块<strong>不实现</strong>任何端口。检索/归纳所需的<strong>内置代理能力</strong>由 <code>ModelInvocationPort</code> 提供（<code>builtin.retrieve</code> / <code>builtin.distill</code> 的 prompt，<strong>不建子会话</strong>）</td></tr>
         <tr><td>被本模块引用的外部 ID（仅 ID）</td><td><code>PlanId</code>、<code>StepId</code>（规划）、<code>RecordRange</code> / <code>SessionId</code>（感知）</td></tr>
         <tr><td>被外部引用的本模块对象</td><td><code>ExperienceId</code>（规划 <code>PlanStep.assignedExperienceIds</code>）、<code>ReflectionId</code>（规划 <code>Attempt.reflectionId</code>）、<code>SkillId</code>（行动 <code>AgentDefinition.skillIds</code>）、<code>RuntimePolicy</code> 中的经验参数（只读）</td></tr>
         <tr><td>本模块对象所在的层</td><td><strong>领域层</strong>：<code>Experience</code>、<code>Reflection</code>、<code>SkillDefinition</code>（含其规则）；<strong>应用层</strong>：检索 / 沉淀 / 反馈三个服务；<strong>端口</strong>：<code>SkillSopProvider</code>（接口在 <code>application.memory.port</code>，实现 <code>FileSkillSopProvider</code> 在基础设施）</td></tr>
@@ -171,7 +171,6 @@
             +String description
             +StepStatus outcome
             +RecordRange recordRange
-            +List~SessionId~ childSessionIds
             +List~SkillId~ usedSkillIds
             +String failureReason
             +String reflectionConclusion
@@ -179,8 +178,7 @@
         class FeedbackInput {
             &lt;&lt;ValueObject&gt;&gt;
             +StepId stepId
-            +List~ExperienceId~ injectedExperienceIds
-            +List~ExperienceId~ suggestedExperienceIds
+            +List~ExperienceId~ experienceIds
         }
         class RecordRange {
             &lt;&lt;ValueObject&gt;&gt;
@@ -241,14 +239,13 @@
         OL[(规划·ExecutionLoop)]
         P[(规划·Plan)]
         TE[(行动·ToolExecutor)]
-        SR[(应用·SubagentLauncher)]
         MI[(行动·ModelInvocationPort)]
         RP[(感知·RuntimePolicy 只读)]
     end
 
     OL --&gt;|"retrieveAndAssign(RetrievalInput)"| R
     R --&gt;|全库筛选 ACTIVE| E
-    R --&gt;|语义筛选 Top-N| SR
+    R --&gt;|内置代理 prompt 一次调用| MI
     R --&gt;|返回 Map（StepId → ExperienceId）| OL
     OL --&gt;|Plan.assignExperiences| P
 
@@ -315,11 +312,11 @@
     <table>
       <thead><tr><th>服务</th><th>层</th><th>简介</th><th>依赖</th></tr></thead>
       <tbody>
-        <tr><td><code>ExperienceRetriever</code></td><td>应用</td><td><strong>计划诞生 / 计划重划</strong>时：取全库 <code>ACTIVE</code> 经验 → 交检索子代理做<strong>语义筛选</strong> → 返回每个 step 的 Top-N 经验 ID</td><td><code>Experience</code>、<code>SubagentLauncher</code>、<code>RuntimePolicy</code></td></tr>
-        <tr><td><code>PlanCompletionCurator</code></td><td>应用</td><td><strong>计划完结</strong>时的唯一编排：起<strong>一次</strong>归纳子代理，产出「经验? + 技能?」，按"同一件事只进一边"互斥分派</td><td><code>ExperienceDistillationService</code>、<code>SkillDistillationService</code>、<code>SubagentLauncher</code>、<code>RecordStore</code></td></tr>
+        <tr><td><code>ExperienceRetriever</code></td><td>应用</td><td><strong>计划诞生 / 计划重划</strong>时：取全库 <code>ACTIVE</code> 经验 → 调<strong>内置代理</strong>（<code>builtin.retrieve</code>）做<strong>语义筛选</strong> → 返回每个 step 的 Top-N 经验 ID</td><td><code>Experience</code>、<code>ModelInvocationPort</code>、<code>RuntimePolicy</code>、<code>BudgetService</code></td></tr>
+        <tr><td><code>PlanCompletionCurator</code></td><td>应用</td><td><strong>计划完结</strong>时的唯一编排：调<strong>内置代理</strong>（<code>builtin.distill</code> 的 prompt）<strong>一次</strong>，产出「经验? + 技能?」，按"同一件事只进一边"互斥分派</td><td><code>ModelInvocationPort</code>、<code>ExperienceDistillationService</code>、<code>SkillDistillationService</code>、<code>RecordStore</code>、<code>BudgetService</code></td></tr>
         <tr><td><code>ExperienceDistillationService</code></td><td>应用</td><td>接收经验产物：与库内经验去重（合并 + 提置信度）或新建</td><td><code>Experience</code>、<code>Reflection</code>、<code>ExperienceRepository</code></td></tr>
         <tr><td><code>SkillDistillationService</code></td><td>应用</td><td>接收技能产物：校验四件套 → 按 <code>CREATE / MERGE</code> 分支（含 <code>mutable</code>、<code>ACTIVE</code>、容量判定）→ <code>create</code> / <code>revise</code> → 写 <code>SKILL.md</code></td><td><code>SkillDefinition</code>、<code>CatalogRepository</code>、<code>RuntimePolicy</code></td></tr>
-        <tr><td><code>ExperienceFeedbackService</code></td><td>应用</td><td>step 结束时回写经验统计：成功 ⇒ 对"被建议的"经验 <code>reinforce</code>；失败 ⇒ 对"本次注入的全部"经验 <code>penalize</code>（<strong>规则在 <code>Experience</code> 聚合内</strong>）</td><td><code>Experience</code></td></tr>
+        <tr><td><code>ExperienceFeedbackService</code></td><td>应用</td><td>step 结束时回写经验统计：成功 ⇒ 对该 step <strong>本次分配的经验</strong> <code>reinforce</code>；失败 ⇒ 对<strong>同一份集合</strong> <code>penalize</code>（<strong>规则在 <code>Experience</code> 聚合内</strong>）</td><td><code>Experience</code></td></tr>
         <tr><td><code>SkillSopProvider</code></td><td>端口（基础设施实现）</td><td>按 id 现读 <code>skills/&lt;id&gt;/SKILL.md</code> 并返回正文（<strong>原样，不渲染</strong>）；供 <code>load_skill</code> 使用</td><td><code>SkillDefinition</code></td></tr>
       </tbody>
     </table>
@@ -336,11 +333,11 @@
         <tr><td><code>SkillDraft</code></td><td>VO</td><td>技能产物：<code>action</code>（<code>CREATE</code> / <code>MERGE</code>）、<code>targetSkillId</code>、<code>name</code>、<code>description</code>、<code>triggerCondition</code>、<code>sopBody</code>。<strong>MERGE 也要带全四件套</strong>：目标不可变时要能降级 <code>CREATE</code>（7.9.5），只有正文降不了</td></tr>
         <tr><td><code>DistillationOutcome</code></td><td>VO</td><td>一次归纳的产物：<code>experience?</code> + <code>skills?</code>（0..N 条）。<strong>经验与技能不能同时非空</strong>（同一件事只进一边）；技能侧可以多条，因为本次用到过的技能各判各的</td></tr>
         <tr><td><code>RetrievalInput</code></td><td>VO</td><td>检索入参：<code>planId</code> + 每个 step 的简要描述（<strong>不传 <code>Plan</code> 聚合</strong>）</td></tr>
-        <tr><td><code>StepBrief</code></td><td>VO</td><td>检索入参的一步：<code>stepId</code> + <code>description</code>；检索子代理靠它匹配经验</td></tr>
+        <tr><td><code>StepBrief</code></td><td>VO</td><td>检索入参的一步：<code>stepId</code> + <code>description</code>；内置检索代理靠它匹配经验（<code>builtin.retrieve</code>，不建子会话）</td></tr>
         <tr><td><code>DistillationInput</code></td><td>VO</td><td>沉淀入参：<code>planId</code>、<code>sessionId</code>、<code>goal</code>、计划结局、每步的 <code>StepTrace</code></td></tr>
         <tr><td><code>RecordRange</code></td><td>VO</td><td>指向 <code>Session.Record</code> 流水的一段连续区间（<code>startRecordId → endRecordId</code>）；定义见<a href="06-planning.html">第 6 章</a> §5 值对象清单，本章复用以保持自包含</td></tr>
-        <tr><td><code>StepTrace</code></td><td>VO</td><td>一个 step 的执行事实摘要（描述 / 结局 / <code>RecordRange</code> / 子会话 ID / 失败原因 / 反思结论），<strong>带轨迹区间</strong>供归纳子代理读取原始对话</td></tr>
-        <tr><td><code>FeedbackInput</code></td><td>VO</td><td>反馈入参：<code>stepId</code>、本次注入的经验集合、检索子代理建议的经验集合</td></tr>
+        <tr><td><code>StepTrace</code></td><td>VO</td><td>一个 step 的执行事实摘要（描述 / 结局 / <code>RecordRange</code> / 失败原因 / 反思结论），<strong>带轨迹区间</strong>供内置归纳代理读取原始对话</td></tr>
+        <tr><td><code>FeedbackInput</code></td><td>VO</td><td>反馈入参：<code>stepId</code> + 本次分配（= 注入）的经验集合 <code>experienceIds</code>。<strong>只有一个集合</strong>：分配与注入同源，没有独立的"建议"（规则 ⑦）</td></tr>
         <tr><td><code>SkillSopProvider</code></td><td>Port</td><td>按 id 读 <code>SKILL.md</code> 并渲染 SOP；由基础设施实现（本模块只是它的消费方之一）</td></tr>
       </tbody>
     </table>
@@ -352,7 +349,7 @@
         <tr><td><code>ReflectionRecorded</code></td><td>Reflection</td><td>反思结论落库（重试达阈值后）</td><td><strong>无功能性订阅方</strong>：回注由外循环读 <code>Reflection</code>；沉淀素材由 <code>DistillationInput</code> 组装时读</td></tr>
         <tr><td><code>ExperienceCreated</code></td><td>Experience</td><td>归纳产出<strong>新</strong>经验</td><td>无（界面可展示）</td></tr>
         <tr><td><code>ExperienceReinforced</code></td><td>Experience</td><td><code>reinforce()</code> 成功（step 成功回写 / 语义重复合并提置信度）</td><td>无（界面可展示）</td></tr>
-        <tr><td><code>ExperiencePenalized</code></td><td>Experience</td><td><code>penalize()</code> 成功（step 失败惩罚本次注入的全部经验）</td><td>无（界面可展示）</td></tr>
+        <tr><td><code>ExperiencePenalized</code></td><td>Experience</td><td><code>penalize()</code> 成功（step 失败惩罚本次分配的经验）</td><td>无（界面可展示）</td></tr>
         <tr><td><code>SkillLearned</code></td><td>SkillDefinition</td><td><code>create(...)</code> 产出<strong>新</strong>技能</td><td>无（界面 / 审计可展示）</td></tr>
         <tr><td><code>SkillRevised</code></td><td>SkillDefinition</td><td><code>revise(...)</code> 改写已有可变技能</td><td>无（界面 / 审计可展示）</td></tr>
       </tbody>
@@ -367,7 +364,7 @@
       <thead><tr><th>诞生</th><th>变更</th><th>终结</th><th>重建</th></tr></thead>
       <tbody>
         <tr>
-          <td><strong>计划完结</strong>（<code>PlanCompleted</code> / <code>PlanFailed</code> 后由归纳子代理产出）</td>
+          <td><strong>计划完结</strong>（<code>PlanCompleted</code> / <code>PlanFailed</code> 后由内置代理 <code>builtin.distill</code> 产出）</td>
           <td><strong>reinforce / penalize</strong>（step 结束回写）、<strong>合并</strong>（语义重复时提置信度）、<code>archive</code>（置信度 &lt; 阈值或容量淘汰）</td>
           <td><code>ARCHIVED</code>（不再参与检索，保留供审计）</td>
           <td>应用启动时载入</td>
@@ -383,8 +380,8 @@
       <li><strong>去重</strong>：与库内经验<strong>语义重复</strong> ⇒ <strong>合并 + 提置信度</strong>，不新建。</li>
       <li><strong>置信度</strong>：范围 [0,1]；初值统一为 <code>experienceInitialConfidence</code>（0.5，<strong>不为终局失败单独设参数</strong>）；<code>reinforce +step</code>、<code>penalize −step</code>（<code>experienceConfidenceStep</code> = 0.1）；<strong>低于 <code>experienceRetireThreshold</code>（0.2）淘汰</strong>。</li>
       <li><strong>容量与淘汰</strong>：总量上限 <code>experienceCapacity</code>；超限时<strong>优先淘汰"最早且最少被使用"</strong>（<code>createdAt</code> 升序 + <code>appliedCount</code> 升序）。</li>
-      <li><strong>"被应用"的判定</strong>：不靠"是否注入"猜测，而靠<strong>检索子代理的标注建议</strong>。</li>
-      <li><strong>回写不对称</strong>（有意为之）：成功 ⇒ 只奖励"被建议的"；失败 ⇒ 惩罚"本次注入的全部"（宁可错杀，防止垃圾经验滞留）。</li>
+      <li><strong>"被应用"的判定</strong>：检索为该 step 分配的经验<strong>即视为被应用</strong>——<strong>分配就是注入</strong>，两者是同一份集合，实现里没有独立的"标注"环节。</li>
+      <li><strong>回写范围</strong>：成功 <code>reinforce</code> 与失败 <code>penalize</code> 作用于<strong>同一份</strong>"本次分配的经验集合"（<code>FeedbackInput.experienceIds</code>）。<strong>不区分"建议"与"注入"</strong>——原设想的"奖惩不对称"（成功只奖励被建议的、失败惩罚全部注入的）在现实现里不成立，如实记录于此（M49）。</li>
       <li><strong>事件</strong>：新建 ⇒ <code>ExperienceCreated</code>；<code>reinforce()</code> 成功 ⇒ <code>ExperienceReinforced</code>；<code>penalize()</code> 成功 ⇒ <code>ExperiencePenalized</code>；语义重复的合并归入 <code>ExperienceReinforced</code>。</li>
       <li><strong>不绑定维度</strong>：不绑 Agent、不绑工具、不绑技能 —— 全局单一库，跨代理共用。</li>
       <li><strong>命中检测</strong>：检索走语义筛选，<strong>不做关键词匹配</strong>；经验只存"适用场景"自然语言 + 教训正文。</li>
@@ -406,7 +403,7 @@
     <h4>规则清单（6 条）</h4>
     <ol>
       <li><strong>触发条件</strong>：<code>reflectionThreshold ≤ maxRetries</code> 且<strong>有效重试次数</strong>达到阈值；<code>reflectionThreshold &gt; maxRetries</code> ⇒ <strong>永不反思</strong>（直接回注验证失败原因）。</li>
-      <li><strong>产者</strong>：反思子代理（<code>BUILT_IN</code> Agent，prompt 固定、工具集写死）。</li>
+      <li><strong>产者</strong>：内置反思代理（<code>BUILT_IN</code> Agent，prompt 固定、工具集写死）——<strong>与检索/沉淀/裁判同一形状</strong>：一段文本进、一段结论出，直连 <code>ModelInvocationPort</code>，不建子会话（建会话要多付一次标题模型调用与一份流水，而反思没有任何并行或独立生命周期需求）。代理缺失或调用失败 ⇒ <strong>本次不反思</strong>：把错误文案存成反思结论比不反思更糟。</li>
       <li><strong>双消费者</strong>：① 作为下一次 attempt 的<strong>失败原因</strong>回注（Reflexion）；② 作为<strong>经验沉淀素材</strong>。</li>
       <li><strong>不可变</strong>：生成后任何角色不得修改。</li>
       <li><strong>归属唯一</strong>：一条 reflection 对应唯一的 <code>(planId, stepId, attemptNo)</code>。</li>
@@ -432,7 +429,7 @@
       <li><strong>两个来源、同一聚合</strong>：人写（<code>skills/&lt;id&gt;/SKILL.md</code>，front-matter + 五节正文）与机学（同一文件形态，由系统写入）在模型上完全同构，<strong>唯一差别是 <code>mutable</code></strong>。</li>
       <li><strong>可变性由聚合守护</strong>：<code>mutable = false</code> ⇒ <code>revise()</code> 抛不变量违反。人写技能默认 <code>mutable = true</code>（"人写的不一定更好"），想锁死就在 front-matter 写 <code>mutable: false</code>；jar 内置恒 <code>false</code>。</li>
       <li><strong>无候选态、无自动淘汰</strong>：机学技能写出即 <code>ACTIVE</code>、立即可用；淘汰 = 用户直接删 <code>skills/</code> 目录（应用不做删除/弃用操作）。</li>
-      <li><strong>无改进历史</strong>：<code>revise()</code> 整篇覆盖，不留版本链；改动理由与依据留在产出它的子代理会话流水里（<code>Attempt.childSessionIds</code> 可达）。</li>
+      <li><strong>无改进历史</strong>：<code>revise()</code> 整篇覆盖，不留版本链；改动理由与依据是<strong>本次任务输入</strong>（结果 + 验证报告 + 现有正文），不依赖任何会话流水。</li>
       <li><strong>渐进披露</strong>：快照只挂 <code>name + description + triggerCondition</code>；SOP 正文只能通过 <code>load_skill</code> 注入。</li>
       <li><strong>注入形态</strong>：SOP 注入为一条 <code>role = SYSTEM</code> 的 <code>Record</code>，此后不参与滑窗（除非 SYSTEM 占比超限被整体裁剪）。</li>
       <li><strong>只有 <code>ACTIVE</code> 技能</strong>进入新会话快照；<code>DEPRECATED</code> 不占容量额度。</li>
@@ -444,34 +441,32 @@
 
     <h3>7.9.1 <code>ExperienceRetriever.retrieveAndAssign(RetrievalInput)</code></h3>
     <p>计划诞生 / 每次重划后，为各 step 分配经验。<strong>它只返回分配结果，不写 <code>Plan</code>。</strong></p>
-    <pre class="mermaid">
-sequenceDiagram
+    <pre class="mermaid">sequenceDiagram
     autonumber
     participant OL as ExecutionLoop（规划）
     participant R as ExperienceRetriever
     participant RP as RuntimePolicy（感知）
     participant E as Experience 库
-    participant SL as SubagentLauncher（应用层）
+    participant MI as ModelInvocationPort（基础设施）
 
-    OL->>R: retrieveAndAssign(RetrievalInput{planId, steps})
-    R->>RP: experienceTopN / experienceCapacity
-    R->>E: 取全部 status = ACTIVE 的经验
-    E-->>R: 经验列表（适用场景 + 教训）
-    R->>SL: 跑一次内置检索代理（整库 + 各 step 描述）
-    SL-->>R: 每个 step 的建议经验（≤ Top-N）
-    R->>R: 汇总 Assignment（Map‹StepId, List‹ExperienceId››）
-    R-->>OL: Assignment
-    OL->>OL: Plan.assignExperiences(stepId, ids)
-    </pre>
+    OL-&gt;&gt;R: retrieveAndAssign(RetrievalInput{planId, steps})
+    R-&gt;&gt;RP: experienceTopN / experienceCapacity
+    R-&gt;&gt;E: 取全部 status = ACTIVE 的经验
+    E--&gt;&gt;R: 经验列表（适用场景 + 教训）
+    R-&gt;&gt;MI: 内置检索代理 prompt 一次调用（整库 + 各 step 描述）
+    MI--&gt;&gt;R: 每个 step 分配到的经验（≤ Top-N）
+    R-&gt;&gt;R: 汇总 Assignment（Map‹StepId, List‹ExperienceId››）
+    R--&gt;&gt;OL: Assignment
+    OL-&gt;&gt;OL: Plan.assignExperiences(stepId, ids)</pre>
     <h4>要点</h4>
     <ol>
       <li><strong>全库交子代理语义筛选</strong>，不做关键词预筛（关键词在中文/领域术语上漏召严重）。</li>
       <li>只在<strong>计划诞生</strong>与<strong>计划重划</strong>两个时点发生；<strong>无 Plan 的自由 ReAct 不检索</strong>（经验按 step 分配）。</li>
-      <li>检索子代理的标注建议同时是"<strong>被应用</strong>"的判定依据（供 7.9.3 回写）。</li>
+      <li><strong>分配结果就是</strong>"<strong>被应用</strong>"的判定依据（供 7.9.3 回写）：<code>Plan.assignExperiences</code> 落下的那份集合，<code>injectExperiences</code> 原样注入，反馈也原样回写。</li>
     </ol>
 
     <h3>7.9.2 <code>ExperienceDistillationService.apply(ExperienceDraft, sessionId)</code>（应用层）</h3>
-    <p><strong>职责</strong>：<strong>只做写入</strong>——把编排者（7.9.6）判定出来的经验产物落成聚合变更。素材、裁剪、子代理调用都在编排者那边，本服务不碰模型、不读别人的流水。</p>
+    <p><strong>职责</strong>：<strong>只做写入</strong>——把编排者（7.9.6）判定出来的经验产物落成聚合变更。素材、裁剪、内置代理调用都在编排者那边，本服务不碰模型、不读别人的流水。</p>
     <pre class="mermaid">flowchart TD
     A[收到 ExperienceDraft&lt;br/&gt;applicableScenario + instruction + expectedOutcome] --&gt; B{与库内经验语义重复?}
     B -- 是 --&gt; C[合并：保留更清晰表述 + 提置信度&lt;br/&gt;raise ExperienceReinforced]
@@ -490,33 +485,31 @@ sequenceDiagram
     </ol>
 
     <h3>7.9.3 <code>ExperienceFeedbackService</code></h3>
-    <p>step 结束时把结果回写到经验统计（奖惩不对称）。</p>
-    <pre class="mermaid">
-sequenceDiagram
+    <p>step 结束时把结果回写到经验统计；成功与失败作用于<strong>同一份</strong>集合，只是动作相反。</p>
+    <pre class="mermaid">sequenceDiagram
     autonumber
     participant OL as ExecutionLoop（规划）
     participant F as ExperienceFeedbackService
     participant E as Experience
     participant RP as RuntimePolicy（感知）
 
-    OL->>F: onStepSucceeded(FeedbackInput{stepId, injected, suggested})
-    F->>RP: experienceConfidenceStep
-    loop 仅“被建议的”经验
-        F->>E: reinforce()
-        E->>E: confidence += step（上限 1）
-        E->>E: appliedCount += 1
+    OL-&gt;&gt;F: onStepSucceeded(FeedbackInput{stepId, experienceIds})
+    F-&gt;&gt;RP: experienceConfidenceStep
+    loop 本次分配的每一条经验
+        F-&gt;&gt;E: reinforce()
+        E-&gt;&gt;E: confidence += step（上限 1）
+        E-&gt;&gt;E: appliedCount += 1
     end
 
-    OL->>F: onStepFailed(FeedbackInput{...})
-    loop 本次“注入的全部”经验
-        F->>E: penalize()
-        E->>E: confidence −= step（下限 0）
+    OL-&gt;&gt;F: onStepFailed(FeedbackInput{...})
+    loop 同一份集合
+        F-&gt;&gt;E: penalize()
+        E-&gt;&gt;E: confidence −= step（下限 0）
         alt confidence &lt; experienceRetireThreshold
-            E->>E: archive()
+            E-&gt;&gt;E: archive()
         end
-    end
-    </pre>
-    <p><strong>要点</strong>：失败惩罚<strong>不做相关性归因</strong>（有意为之：宁可错杀）；置信度跌到阈值以下即 <code>archive()</code>，不再参与检索。</p>
+    end</pre>
+    <p><strong>要点</strong>：失败惩罚<strong>不做相关性归因</strong>（有意为之：宁可错杀）；置信度跌到阈值以下即 <code>archive()</code>，不再参与检索。既然成功与失败覆盖同一集合，<strong>一条经验在一次成功后再遇失败会把奖励抵消</strong>——这是"分配即应用"的直接后果，接受。</p>
 
     <h3>7.9.4 <code>SkillSopProvider.sop(skillId)</code>（基础设施，被 <code>load_skill</code> 调用）</h3>
     <pre class="mermaid">sequenceDiagram
@@ -540,7 +533,7 @@ sequenceDiagram
     <p><strong>要点</strong>：<code>SkillSopProvider</code> 只负责"读文件"；<strong>把它注入成 <code>SYSTEM</code> Record 是内循环的职责</strong>（记忆模块不写别人的会话）。因为正文是<strong>现读</strong>的，同一会话前后两次 <code>load_skill</code> 可能拿到不同正文——这是 S3 明确接受的漂移（快照冻结的是清单与三件套）。</p>
 
     <h3>7.9.5 <code>SkillDistillationService.apply(SkillDraft, sessionId)</code>（应用层）</h3>
-    <p><strong>职责</strong>：把子代理产出的技能草案落成聚合变更，并原子重写 <code>SKILL.md</code>。</p>
+    <p><strong>职责</strong>：把内置代理产出的技能草案落成聚合变更，并原子重写 <code>SKILL.md</code>。</p>
     <pre class="mermaid">flowchart TD
     A[收到 SkillDraft] --&gt; B{四件套非空?&lt;br/&gt;name / description / triggerCondition / sopBody}
     B -- 否 --&gt; X[本次沉淀失败&lt;br/&gt;不发事件、不占额度]
@@ -559,10 +552,10 @@ sequenceDiagram
     J --&gt; K[raise SkillLearned / SkillRevised]</pre>
     <p><strong>要点</strong></p>
     <ol>
-      <li><strong>两处失败刻意区分</strong>：<code>target</code> 不存在/非法 ⇒ <strong>整次作废</strong>（子代理幻觉，不奖励）；<code>target</code> 存在但不可变或非 <code>ACTIVE</code> ⇒ <strong>降级 CREATE</strong>（正常冲突：人写技能不许改，已下线技能不许借 MERGE 复活）。</li>
+      <li><strong>两处失败刻意区分</strong>：<code>target</code> 不存在/非法 ⇒ <strong>整次作废</strong>（内置代理幻觉，不奖励）；<code>target</code> 存在但不可变或非 <code>ACTIVE</code> ⇒ <strong>降级 CREATE</strong>（正常冲突：人写技能不许改，已下线技能不许借 MERGE 复活）。</li>
       <li><strong>容量判定必须原子</strong>：<code>skills/</code> 是全局资产，并行子会话会同时沉淀，容量"读—判—写"在 <code>CommitScope</code> 的<strong>全局资产写段</strong>内完成。</li>
-      <li><strong>写入的唯一路径</strong>：技能正文只由本服务经聚合（<code>create</code> / <code>revise</code>）→ <code>CatalogRepository.saveSkill</code> 落盘；<strong>子代理只产出文本，不碰文件</strong>（否则 <code>mutable</code> 失效）。</li>
-      <li><strong>零计数、零质量分、零阈值</strong>：是否需要改进由子代理看"本次结果 + 验证报告 + 现有正文"判断，系统不累计任何统计量。</li>
+      <li><strong>写入的唯一路径</strong>：技能正文只由本服务经聚合（<code>create</code> / <code>revise</code>）→ <code>CatalogRepository.saveSkill</code> 落盘；<strong>内置代理只产出文本，不碰文件</strong>（否则 <code>mutable</code> 失效）。</li>
+      <li><strong>零计数、零质量分、零阈值</strong>：是否需要改进由内置代理看"本次结果 + 验证报告 + 现有正文"判断，系统不累计任何统计量。</li>
     </ol>
 
     <h3>7.9.6 <code>PlanCompletionCurator.curate(DistillationInput)</code>（应用层）</h3>
@@ -595,7 +588,7 @@ sequenceDiagram
     <p><strong>要点</strong></p>
     <ol>
       <li><strong>一次调用、一个判定</strong>：经验与技能的互斥由<strong>同一次子代理判定</strong>保证；分成两个子代理各判一次，必然出现双写。</li>
-      <li><strong>素材归属</strong>：按 <code>RecordRange</code> <strong>只读</strong> <code>Session.Record</code>（含 <code>childSessionIds</code> 子会话）、裁剪"失败后翻盘"区间、拼成消息——全在本服务；两个写入器都拿到成品，不再各自读轨迹。</li>
+      <li><strong>素材归属</strong>：按 <code>RecordRange</code> <strong>只读</strong> <code>Session.Record</code>、裁剪"失败后翻盘"区间、拼成消息——全在本服务；两个写入器都拿到成品，不再各自读轨迹。</li>
       <li><strong>谁有权学</strong>：每个会话（含子代理会话）在计划完结时都会走本流程——学习入口因此不是唯一的，容量上限（<code>skillCapacity</code>）与 <code>MERGE</code> 收敛是唯一的闸门。</li>
       <li><strong>子会话的质量证据更弱</strong>：子代理 plan 常无验证声明，其技能产物天然"证据不足"；本期不加额外门槛（接受此风险）。</li>
       <li><strong>沉淀失败不阻塞</strong>：本服务任何一步失败都只是"这次没学到"，不影响会话继续（<code>ExecutionLoop</code> 不因沉淀失败而改变计划状态）。</li>

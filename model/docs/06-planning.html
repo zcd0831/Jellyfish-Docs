@@ -82,7 +82,6 @@
             &lt;&lt;Entity&gt;&gt;
             +int attemptNo
             +RecordRange recordRange
-            +List~SessionId~ childSessionIds
             +List~SkillId~ usedSkillIds
             +VerificationReportId verificationReportId
             +ReflectionId reflectionId
@@ -230,7 +229,6 @@
     PlanStep ..&gt; VerificationType
     Attempt ..&gt; VerificationReport : verificationReportId
     Attempt ..&gt; Reflection : reflectionId（记忆模块）
-    Attempt ..&gt; Session : childSessionIds（感知模块）
     PlanStep ..&gt; Experience : assignedExperienceIds（记忆模块）
     VerificationReport --&gt; VerificationOutcome
     VerificationReport --&gt; VerificationType

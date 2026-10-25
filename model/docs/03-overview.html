@@ -420,7 +420,6 @@
             &lt;&lt;Entity&gt;&gt;
             -int attemptNo
             -RecordRange recordRange
-            -List~SessionId~ childSessionIds
             -List~SkillId~ usedSkillIds
             -VerificationReportId verificationReportId
             -ReflectionId reflectionId
@@ -612,7 +611,6 @@
             -String description
             -StepStatus outcome
             -RecordRange recordRange
-            -List~SessionId~ childSessionIds
             -List~SkillId~ usedSkillIds
             -String failureReason
             -String reflectionConclusion
@@ -620,8 +618,7 @@
         class FeedbackInput {
             &lt;&lt;ValueObject&gt;&gt;
             -StepId stepId
-            -List~ExperienceId~ injectedExperienceIds
-            -List~ExperienceId~ suggestedExperienceIds
+            -List~ExperienceId~ experienceIds
         }
         class ExperienceRetriever {
             &lt;&lt;ApplicationService&gt;&gt;
@@ -745,7 +742,6 @@
     Model ..&gt; Provider : providerId
     AgentDefinition ..&gt; ToolDefinition : toolIds
     AgentDefinition ..&gt; SkillDefinition : skillIds
-    Attempt ..&gt; Session : childSessionIds
     Attempt ..&gt; Reflection : reflectionId
     Attempt ..&gt; VerificationReport : verificationReportId
     PlanStep ..&gt; Experience : assignedExperienceIds
@@ -1101,7 +1097,6 @@ flowchart LR
         <tr><td><code>Session</code></td><td>Model</td><td><code>activeModelId</code></td><td>当前用哪个模型（可降级切换）</td></tr>
         <tr><td><code>Plan</code></td><td>Session</td><td><code>sessionId</code></td><td>这个计划属于哪个会话</td></tr>
         <tr><td><code>Budget</code></td><td>Session</td><td><code>sessionFamilyRootId</code></td><td>这个台账属于哪个会话族</td></tr>
-        <tr><td><code>Attempt</code></td><td>Session</td><td><code>childSessionIds</code></td><td>这次尝试派了哪些子代理</td></tr>
         <tr><td><code>Attempt</code></td><td>VerificationReport</td><td><code>verificationReportId</code></td><td>这次尝试的验收结论</td></tr>
         <tr><td><code>Attempt</code></td><td>Reflection</td><td><code>reflectionId</code></td><td>这次尝试的复盘结论</td></tr>
         <tr><td><code>PlanStep</code></td><td>Experience</td><td><code>assignedExperienceIds</code></td><td>这一步分配到了哪些历史经验</td></tr>
