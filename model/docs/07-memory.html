@@ -381,7 +381,7 @@
       <li><strong>置信度</strong>：范围 [0,1]；初值统一为 <code>experienceInitialConfidence</code>（0.5，<strong>不为终局失败单独设参数</strong>）；<code>reinforce +step</code>、<code>penalize −step</code>（<code>experienceConfidenceStep</code> = 0.1）；<strong>低于 <code>experienceRetireThreshold</code>（0.2）淘汰</strong>。</li>
       <li><strong>容量与淘汰</strong>：总量上限 <code>experienceCapacity</code>；超限时<strong>优先淘汰"最早且最少被使用"</strong>（<code>createdAt</code> 升序 + <code>appliedCount</code> 升序）。</li>
       <li><strong>"被应用"的判定</strong>：检索为该 step 分配的经验<strong>即视为被应用</strong>——<strong>分配就是注入</strong>，两者是同一份集合，实现里没有独立的"标注"环节。</li>
-      <li><strong>回写范围</strong>：成功 <code>reinforce</code> 与失败 <code>penalize</code> 作用于<strong>同一份</strong>"本次分配的经验集合"（<code>FeedbackInput.experienceIds</code>）。<strong>不区分"建议"与"注入"</strong>——原设想的"奖惩不对称"（成功只奖励被建议的、失败惩罚全部注入的）在现实现里不成立，如实记录于此（M49）。</li>
+      <li><strong>回写范围</strong>：成功 <code>reinforce</code> 与失败 <code>penalize</code> 作用于<strong>同一份</strong>"本次分配的经验集合"（<code>FeedbackInput.experienceIds</code>）。<strong>不区分"建议"与"注入"</strong>——原设想的"奖惩不对称"（成功只奖励被建议的、失败惩罚全部注入的）在现实现里不成立，如实记录于此。</li>
       <li><strong>事件</strong>：新建 ⇒ <code>ExperienceCreated</code>；<code>reinforce()</code> 成功 ⇒ <code>ExperienceReinforced</code>；<code>penalize()</code> 成功 ⇒ <code>ExperiencePenalized</code>；语义重复的合并归入 <code>ExperienceReinforced</code>。</li>
       <li><strong>不绑定维度</strong>：不绑 Agent、不绑工具、不绑技能 —— 全局单一库，跨代理共用。</li>
       <li><strong>命中检测</strong>：检索走语义筛选，<strong>不做关键词匹配</strong>；经验只存"适用场景"自然语言 + 教训正文。</li>

@@ -515,7 +515,7 @@ flowchart LR
     <table>
       <thead><tr><th>对象</th><th>类型</th><th>简介</th></tr></thead>
       <tbody>
-        <tr><td><code>ToolSchema</code></td><td>VO</td><td>JSON Schema 文本（draft-07）；<code>inputSchema</code> 用于入参校验（<strong>完整校验，用 networknt 库</strong>，见 D17），<code>outputSchema</code> 用于结果描述（同时进入快照）</td></tr>
+        <tr><td><code>ToolSchema</code></td><td>VO</td><td>JSON Schema 文本（draft-07）；<code>inputSchema</code> 用于入参校验（<strong>完整校验，用 networknt 库</strong>，见《模块-行动》§7.1 规则 8），<code>outputSchema</code> 用于结果描述（同时进入快照）</td></tr>
         <tr><td><code>ToolSource</code></td><td>VO</td><td>工具来源：<code>SourceType</code> + 端点/标识。<code>INTERNAL</code> 存处理器名；<code>PLUGIN</code> 存 <code>&lt;pluginId&gt;/&lt;handlerId&gt;</code>；<code>NATIVE</code> 存处理器名（<code>INTERNAL</code> / <code>PLUGIN</code> / <code>NATIVE</code> <strong>共用同一张处理器注册表</strong>，来源只用于审计、界面与审批判定）</td></tr>
         <tr><td><code>PluginDescriptor</code></td><td>VO</td><td>运行时读到的插件事实：<code>id / version / apiVersion / loaded</code>（<code>loaded</code> 不落盘）</td></tr>
         <tr><td><code>SourceType</code></td><td>Enum</td><td>INTERNAL（应用内实现）/ NATIVE（本地能力：文件、目录、检索、命令，只在本工作区内动手，见 5.8.1 规则 9）/ REST / MCP</td></tr>
@@ -534,7 +534,7 @@ flowchart LR
         <tr><td><code>ModelInvocationResult</code></td><td>VO</td><td>端口出参：文本 + 本次的工具调用请求 + <strong>思维内容 <code>reasoning</code></strong>（思维模式模型才非空；降级/回放用）+ <code>ModelUsage</code> + <strong>实际服务的模型</strong>（降级后可被调用方据此 <code>switchModel</code>）</td></tr>
         <tr><td><code>ChatMessage</code></td><td>VO</td><td>一条对话消息：<code>role</code>（复用 <code>RecordRole</code>）、<code>content</code>、模型请求的工具调用（ASSISTANT）、<code>toolCallId</code>（TOOL_RESULT 回填用）、<strong><code>reasoning</code></strong>（仅带 <code>tool_calls</code> 的 assistant 消息需要）</td></tr>
         <tr><td><code>ToolCall</code></td><td>VO</td><td>模型请求的一次工具调用：<code>callId</code>（协议侧 id，用于回灌结果）、<code>name</code>、<code>argumentsJson</code></td></tr>
-        <tr><td><code>ModelUsage</code></td><td>VO</td><td>一次调用的精确用量：<code>inputTokens</code> / <code>outputTokens</code>（D08 台账口径；厂商不给时由 <code>TokenCounter</code> 估算）</td></tr>
+        <tr><td><code>ModelUsage</code></td><td>VO</td><td>一次调用的精确用量：<code>inputTokens</code> / <code>outputTokens</code>（台账口径见《模块-行动》§8.3；厂商不给时由 <code>TokenCounter</code> 估算）</td></tr>
         <tr><td><code>ExternalToolPort</code></td><td>Port</td><td>REST / MCP 出站调用；由基础设施实现。<strong><code>NATIVE</code> 不走这里</strong>（它是本层的处理器，不是出站调用）</td></tr>
         <tr><td><code>ModelInvocationPort</code></td><td>Port</td><td>模型调用端口；由 <code>ModelInvoker</code> 实现</td></tr>
       </tbody>
@@ -577,10 +577,10 @@ flowchart LR
         <br/><strong>本地命令工具例外</strong>：<code>run_command</code> <strong>不走这条</strong>，改由规则 10 的绊线判定。</li>
       <li><strong>结果截断</strong>：超过 <code>toolResultTruncateLength</code> ⇒ 截断进上下文，完整内容落<strong>本地归档文件</strong>，<code>ToolExecOutcome.resourceUri</code> 指向它；<strong>会话销毁时一并删除</strong>。</li>
       <li><strong>重试语义</strong>：失败重试时，已成功的工具调用按"重放"处理，副作用风险由用户承担。</li>
-      <li>入参必须通过 <code>inputSchema</code> 的<strong>完整 JSON Schema 校验</strong>（draft-07，networknt <code>json-schema-validator</code>，见 D17）；失败即返回<strong>错误结果</strong>（不执行，回灌模型自修复）。校验产出的是"违反项清单"而不是异常——校验失败是预期内结果，不是 bug。</li>
+      <li>入参必须通过 <code>inputSchema</code> 的<strong>完整 JSON Schema 校验</strong>（draft-07，networknt <code>json-schema-validator</code>，见《模块-行动》§7.1 规则 8）；失败即返回<strong>错误结果</strong>（不执行，回灌模型自修复）。校验产出的是"违反项清单"而不是异常——校验失败是预期内结果，不是 bug。</li>
       <li><strong>本地能力只在一个根里动手</strong>：工作区根 = <strong>进程启动时的工作目录</strong>（启动时求一次 <code>toRealPath()</code>；<strong>不做配置项</strong>——"我在哪个目录启动它，它就在哪儿干活"）。所有本地工具的路径都必须落在根内：相对路径拼到根下，绝对路径也接受但必须仍在根内；<strong>判定必须基于 real path</strong>（否则一个符号链接就能逃逸）；目标不存在时对<strong>父目录</strong>判定。越界<strong>不是异常</strong>，是普通工具错误结果（规则 3）。写/改文件先写 <code>*.tmp</code> 再原子改名；<code>run_command</code> 的 <code>cwd</code> 默认根、且只能是根内子目录；<code>delete_file</code> 不许删根本身。
         <br/><strong>硬限制</strong>（超限一律走规则 6 截断 + 归档）：<code>read_file</code> 默认 2000 行，含 NUL 字节判为二进制并拒绝；<code>list_dir</code> 深度默认 2、最多 500 项，忽略 <code>.git</code>/<code>target</code>/<code>node_modules</code>/<code>.idea</code>；<code>grep</code> 最多 200 条、每条 ≤ 200 字符；<code>fetch_url</code> 只 <code>http</code>/<code>https</code>、默认 8000 字符、失败当普通结果；<code>run_command</code> 超时默认 120s、上限 600s、只回<strong>尾部 200 行 + 退出码</strong>、超时<strong>杀进程树</strong>；<code>edit_file</code> 的 <code>oldText</code> 必须<strong>恰好出现一次</strong>（0 次或多次都失败，并回报位置）；<code>write_file</code> 已存在且未 <code>overwrite</code> 即失败。</li>
-      <li><strong><code>run_command</code> 默认放行，命中毒性特征才审批</strong>（这是对 I3 的实质让渡，见 D25）：判定<strong>不靠正则</strong>，靠<strong>浅结构解析</strong>——引号消解后把命令行切成命令段，每段得到 <code>程序 / 参数集合 / 操作数 / 重定向</code>，段间保留 <code>;</code> <code>&amp;&amp;</code> <code>||</code> <code>|</code> 的拓扑；<code>sh -c</code> / <code>eval</code> 的<strong>实参文本再解析一遍</strong>（深度上限 2）。
+      <li><strong><code>run_command</code> 默认放行，命中毒性特征才审批</strong>（这是对 I3 的实质让渡，见《模块-行动》§7.1 规则 10）：判定<strong>不靠正则</strong>，靠<strong>浅结构解析</strong>——引号消解后把命令行切成命令段，每段得到 <code>程序 / 参数集合 / 操作数 / 重定向</code>，段间保留 <code>;</code> <code>&amp;&amp;</code> <code>||</code> <code>|</code> 的拓扑；<code>sh -c</code> / <code>eval</code> 的<strong>实参文本再解析一遍</strong>（深度上限 2）。
         <br/><strong>命中即审批，不是拒绝</strong>；<strong>解析失败、或嵌套超深 ⇒ 一律审批</strong>（fail-closed：看不懂就问）。审批文案带命中的规则名与原始命令。
         <br/>判定项：整盘或家目录的递归删除；<code>mkfs</code> / <code>dd of=/dev/*</code> / <code>shred</code> / 写 <code>/dev/sd*</code>；<code>chmod -R</code> 作用于系统目录或家目录（<strong>任一权限模式</strong>都算，不只看 777）；<code>sudo</code> / <code>su</code> / <code>doas</code>；管道末端是 shell 且上游是 <code>curl</code>/<code>wget</code>/<code>base64 -d</code>/<code>eval</code>；<code>git push --force</code> / <code>git reset --hard</code> / <code>git clean -x</code>；<code>find -delete</code> / <code>find -exec</code> / <code>xargs</code> + 删除类命令；fork 炸弹 / <code>kill -9 -1</code> / <code>shutdown</code> / <code>reboot</code>；<code>drop database</code> / <code>drop table</code> / <code>truncate table</code>；把 <code>.env</code>、<code>.ssh/id_*</code>、<code>.aws/credentials</code> 读出或 POST 出去。
         <br/><strong>它是绊线不是闸门</strong>：拦不住动态拼接（<code>$(...)</code>/<code>$VAR</code>/别名）、间接执行（<code>xargs</code>/<code>find -exec</code>）、以及<strong>项目自己的脚本</strong>（<code>npm run build</code>、<code>mvn clean</code>）——这几类恰好是最常见的真实事故，模型必须知道它没被保护。
@@ -662,7 +662,7 @@ flowchart LR
     </table>
     <h4>规则（8 条）</h4>
     <ol>
-      <li><strong>落盘只存用户意图</strong>：<code>id / version / apiVersion / trusted / grantedAt / toolIds / declaredCapabilities / grantedCapabilities</code>。"已加载 / 加载失败"是<strong>进程内事实</strong>，不落盘（D22 的同一条理由：没人负责擦除的持久状态必然变脏）。</li>
+      <li><strong>落盘只存用户意图</strong>：<code>id / version / apiVersion / trusted / grantedAt / toolIds / declaredCapabilities / grantedCapabilities</code>。"已加载 / 加载失败"是<strong>进程内事实</strong>，不落盘（同一条理由：没人负责擦除的持久状态必然变脏）。</li>
       <li><strong>目录名 = <code>Plugin-Id</code></strong>：不一致 ⇒ 拒绝安装（否则同 id 两个目录，卸载会漏）。</li>
       <li><strong><code>grantedCapabilities ⊆ declaredCapabilities</code></strong>：勾选不能超出插件自报的可替换面。</li>
       <li><strong>同一端口至多一个启用者</strong>：冲突在<strong>启用</strong>时判定（安装不判），第二次启用被拒绝并提示冲突方；不做"后装覆盖"、不做优先级链。</li>
@@ -759,7 +759,7 @@ sequenceDiagram
       <li><strong>用量随请求下行</strong>：<code>estimatedPromptTokens</code> 由调用方填入 <code>ModelInvocationRequest</code>；<strong>执行器不得回查 <code>Session</code></strong>（<code>Session</code> 不知道 <code>contextLimit</code>，回查还会破坏单向依赖）。</li>
       <li><strong>记账在调用方</strong>：<code>ModelInvoker</code> 只返回 <code>usage</code>，由调用方交给 <code>BudgetService</code> —— 否则会出现"基础设施 → 应用层"的反向依赖。</li>
       <li><strong><code>reasoning_content</code> 原样回传</strong>：思维模式（如 DeepSeek thinking）要求“带 <code>tool_calls</code> 的 assistant 消息必须把该轮的 <code>reasoning_content</code> 原样带回”，否则整轮 400。因此：解析侧（阻塞与流式）都把 <code>reasoning_content</code> 收进 <code>ModelInvocationResult.reasoning</code>，组装侧只在 <code>ChatMessage.reasoning != null</code> 时发出 <code>reasoning_content</code> 字段；<strong>不做模型能力判定</strong>（该字段只可能由思维模型产出，能力标记缺省为空，按能力过滤会把主路径打坏）。跨到不支持该字段的模型属于降级链配置问题，不在本层处理。</li>
-      <li><strong>系统提示词独立于消息列表</strong>：<code>systemPrompt</code> 由调用方（<code>ReActLoop</code> / <code>ContextWindowService</code> / <code>SessionTitleGenerator</code>）从窗口推导后填入，不进 <code>messages</code>；<strong>工具清单同理</strong>：<code>tools</code> 取自 <code>SystemPromptSnapshot.toolList</code>（会话开启时冻结），执行器<strong>不得</strong>现查目录；落到各家协议里的差异（OpenAI 用首条 <code>role=system</code>、Anthropic 用顶层 <code>system</code>、Gemini 用 <code>systemInstruction</code>）由基础设施适配器吸收（见 D16）。</li>
+      <li><strong>系统提示词独立于消息列表</strong>：<code>systemPrompt</code> 由调用方（<code>ReActLoop</code> / <code>ContextWindowService</code> / <code>SessionTitleGenerator</code>）从窗口推导后填入，不进 <code>messages</code>；<strong>工具清单同理</strong>：<code>tools</code> 取自 <code>SystemPromptSnapshot.toolList</code>（会话开启时冻结），执行器<strong>不得</strong>现查目录；落到各家协议里的差异（OpenAI 用首条 <code>role=system</code>、Anthropic 用顶层 <code>system</code>、Gemini 用 <code>systemInstruction</code>）由基础设施适配器吸收（见《模块-基础设施层》§10）。</li>
       <li><strong>端口失败用上下文错误码表达</strong>：<code>ModelInvoker</code> 失败时抛 <code>ModelInvocationException(ModelError)</code>，错误码取 <code>M_*</code>；调用方据此区分"不可用"（不改状态）与"请求超限"（补折一次）。</li>
       <li><strong>降级后由调用方切换会话模型</strong>：<code>ModelInvocationResult.servedModelId</code> 指出实际服务的模型；与请求的目标模型不同 ⇒ 调用方调 <code>Session.switchModel(...)</code> 让聚合 raise <code>ModelSwitched</code>（<code>ModelInvoker</code> 不碰聚合）。</li>
     </ol>

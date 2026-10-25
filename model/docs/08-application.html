@@ -300,7 +300,7 @@
 
     <div class="callout">
       <div class="ct">数字口径</div>
-      7 个用例 + <strong>15 个核心组件</strong> + <strong>13 个工具处理器 / 钩子</strong>（M37 增 <code>PlanCompletionCurator</code> / <code>SkillDistillationService</code>；M42 增 <code>PluginAssembler</code>；M45 增 8 个本地能力处理器）。后 13 个是被分发的处理单元（处理器 / 注册表 / 验证钩子），按职责单列一组，不改变用例编排。
+      7 个用例 + <strong>15 个核心组件</strong> + <strong>13 个工具处理器 / 钩子</strong>（早期增 <code>PlanCompletionCurator</code> / <code>SkillDistillationService</code>；增 <code>PluginAssembler</code>；M45 增 8 个本地能力处理器）。后 13 个是被分发的处理单元（处理器 / 注册表 / 验证钩子），按职责单列一组，不改变用例编排。
     </div>
 
     <h3><span class="sec">8.6.1</span>应用层的内部实现类</h3>
@@ -312,13 +312,13 @@
         <tr><td><code>RunSessionResult</code></td><td><code>RunSession</code> 的返回值：<code>CONVERGED / SUSPENDED / ROUNDS_EXHAUSTED / CANCELLED</code>（<strong>挂起与取消都不是错误</strong>）</td></tr>
         <tr><td><code>PlanCreationException</code></td><td><code>generate_plan</code> 草案不合法时抛出（携带 <code>P_INVALID_PLAN</code>），由处理器转成工具错误结果</td></tr>
         <tr><td><code>ModelInvocationException</code></td><td>端口失败时抛出，携带上下文自己的 <code>DomainError</code>（<code>M_*</code>）</td></tr>
-        <tr><td><code>Json</code> / <code>JsonText</code></td><td>应用层自带的极简 JSON 解析与转义：<strong>不引 JSON 库</strong>（D02 的模块边界）</td></tr>
+        <tr><td><code>Json</code> / <code>JsonText</code></td><td>应用层自带的极简 JSON 解析与转义：<strong>不引 JSON 库</strong>（模块边界见《模块-应用层》「模块边界」）</td></tr>
         <tr><td><code>RunSessionProvider</code></td><td>延迟取 <code>RunSessionUseCase</code>：子代理启动器 → 用例 → 外循环 → 内循环 → 工具执行 → 启动器 是构造环，用"取的时候才要"打断它（应用层不引容器类型）</td></tr>
         <tr><td><code>CommandParsing</code></td><td><code>run_command</code> 的<strong>浅结构解析</strong>（纯字符串、不碰文件与进程）：引号消解后得到每段的 <code>程序 / 参数 / 操作数 / 重定向</code> 与段间拓扑；<code>sh -c</code> / <code>eval</code> 的实参递归解析（深度上限 2）。<strong>解析失败要能被上层区分出来</strong>——fail-closed 的前提（行动 5.8.1 规则 10）</td></tr>
         <tr><td><code>CommandRules</code></td><td>绊线判定项（结构化谓词，不是正则）与结论三态：<code>放行 / 需审批(原因) / 无法解析</code></td></tr>
         <tr><td><code>Approvals</code></td><td>人工审批的判定：<strong>先看否定再看肯定</strong>（"不同意"里含着"同意"），工具放行与结果验收共用</td></tr>
         <tr><td><code>TechnicalLog</code></td><td>技术事件出口（事件名 + 耗时 + key=value 字段），实现由基础设施注入；应用层不引日志库</td></tr>
-        <tr><td><code>PortRoutes</code></td><td>端口路由表：<code>能力名 → 当前启用者</code>，并发安全、可原子替换（插件实现<strong>实时生效</strong>，D24-9）</td></tr>
+        <tr><td><code>PortRoutes</code></td><td>端口路由表：<code>能力名 → 当前启用者</code>，并发安全、可原子替换（插件实现<strong>实时生效</strong>，见《模块-行动》§7.6）</td></tr>
       </tbody>
     </table>
     <blockquote><p><code>ProgressEvent</code> 是 <code>ProgressPort</code> 的入参值对象（<code>Kind</code> + <code>message</code>），面向界面、可丢弃，不属于领域事实。</p></blockquote>
@@ -328,7 +328,7 @@
       <thead><tr><th>端口</th><th>职责</th><th>关键方法</th><th>实现方</th></tr></thead>
       <tbody>
         <tr><td><code>CommitScope</code></td><td>一次状态转移的写入作用域，<strong>固定按「事实 → 追加 → 替换」执行并 fsync</strong>；另提供<strong>全局资产写段</strong>（<code>skills/</code>、<code>experience/</code>），进程内串行以保证容量判定原子（<code>globalWrite</code>）</td><td><code>stageFact</code> / <code>stageAppend</code> / <code>stageReplace</code> / <code>commit</code></td><td>基础设施</td></tr>
-        <tr><td><code>SessionRepository</code></td><td>会话头与存放策略（会话无状态，D22）；<code>list</code> 返回 <code>SessionSummary</code></td><td><code>load</code> / <code>save</code> / <code>list</code> / <code>archive</code> / <code>delete</code> / <code>cleanupArchiveResidue</code></td><td>基础设施</td></tr>
+        <tr><td><code>SessionRepository</code></td><td>会话头与存放策略（会话无状态，见《模块-感知》§7.1 规则 7）；<code>list</code> 返回 <code>SessionSummary</code></td><td><code>load</code> / <code>save</code> / <code>list</code> / <code>archive</code> / <code>delete</code> / <code>cleanupArchiveResidue</code></td><td>基础设施</td></tr>
         <tr><td><code>RecordStore</code></td><td>流水追加与读取</td><td><code>append</code> / <code>last(n)</code> / <code>range(startSeq, endSeq)</code></td><td>基础设施</td></tr>
         <tr><td><code>PlanRepository</code></td><td>计划聚合</td><td><code>load</code> / <code>save</code> / <code>findRunning</code></td><td>基础设施</td></tr>
         <tr><td><code>VerificationReportRepository</code></td><td>不可变报告</td><td><code>save</code> / <code>get</code> / <code>findByStep</code></td><td>基础设施</td></tr>
@@ -528,11 +528,11 @@ sequenceDiagram
         U4-&gt;&gt;C: cancel()（唤醒阻塞中的 ask / join）
         U4-&gt;&gt;CS: stageReplace(plan 中 RUNNING 的 attempt → INTERRUPTED)；commit
         U4-&gt;&gt;EP: publishAfterCommit(SessionCancelled)
-        Note over U4: 级联取消所有子会话（同一事务内逐个 replace）；会话没有状态，取消不写 meta（D22）；运行中的循环由外壳用取消令牌打断
+        Note over U4: 级联取消所有子会话（同一事务内逐个 replace）；会话没有状态，取消不写 meta（见《模块-感知》§7.1 规则 7）；运行中的循环由外壳用取消令牌打断
     else 归档
         UI-&gt;&gt;U4: archive(sessionId)
         U4-&gt;&gt;R: archive(sessionId)（压成 archive/&lt;id&gt;.zip 后删原目录）
-        Note over U4: 不 raise 事件；归档后应用不再认识它（D22）
+        Note over U4: 不 raise 事件；归档后应用不再认识它（见《模块-感知》§7.1 规则 7）
     else 删除
         UI-&gt;&gt;U4: delete(sessionId)
         U4-&gt;&gt;R: delete(sessionId)（递归删除目录，含 records/plans/reports/artifacts/budget）
@@ -543,7 +543,7 @@ sequenceDiagram
     <h3><span class="sec">8.9.4.1</span>取消令牌怎么到阻塞点</h3>
     <p>外壳创建并持有唯一实现（本期 <code>ShellCancellationToken</code>，每轮开始复位）；<code>ManageSessionUseCase.cancel</code> 与 Ctrl-C 都调它的 <code>cancel()</code>。令牌只下传到<strong>轮次边界</strong>：<code>RunSessionUseCase.run(..., token)</code> → <code>ExecutionLoop</code> 每轮开头检查，命中即抛 <code>CancellationException</code>，走 8.9.4 的 <code>Cancelled</code> 分支。</p>
     <p>重试的终止<strong>不靠令牌</strong>，而靠<strong>传输层的取消标记</strong>：<code>Call.cancel()</code> 之后 <code>HttpJsonClient</code> 记下“本次调用被用户取消”，<code>ModelInvoker</code> 见到这个标记直接抛 <code>CancellationException</code>（不重试、不降级）。这样令牌不必穿进 <code>ContextWindowService</code>、<code>VerificationRunner</code>、<code>ExperienceRetriever</code>、<code>ExperienceDistillationService</code>——它们都在轮次内，在途请求同样被立刻打断，只是“不再重试”由传输层保证。轮次外的调用（<code>SessionTitleGenerator</code>、测试复跑）拿不到令牌，用“永不取消”的 <code>CancellationToken.never()</code>。</p>
-    <p>取消是终态：<strong>不进重试、不降级、不弹错误</strong>（D10 第 4 节、“取消不是错误”）。会话没有状态，取消只把 plan 里 RUNNING 的 attempt 置 <code>INTERRUPTED</code>（D22）。</p>
+    <p>取消是终态：<strong>不进重试、不降级、不弹错误</strong>（取消不是错误，见《模块-应用层》§9）。会话没有状态，取消只把 plan 里 RUNNING 的 attempt 置 <code>INTERRUPTED</code>（见《模块-感知》§7.1 规则 7）。</p>
     <pre class="mermaid">
 flowchart LR
     K["Ctrl-C / ManageSession.cancel"] --&gt;|cancel| T["ShellCancellationToken（外壳持有，每轮复位）"]
@@ -639,12 +639,12 @@ sequenceDiagram
         <tr><td>1</td><td>有 <code>PASSED</code> 报告，但 step 仍 <code>RUNNING</code> / <code>VERIFYING</code></td><td>按报告里的 <code>attemptNo</code> 补 <code>markStepSucceeded</code></td></tr>
         <tr><td>2</td><td>有 <code>FAILED</code> 报告，但 step 仍 <code>RUNNING</code></td><td>补 <code>markStepFailed</code></td></tr>
         <tr><td>3</td><td>流水末尾有 <code>TOOL_REQUEST</code> 无 <code>TOOL_RESULT</code></td><td>该 attempt 判失败（计一次重试）；<strong>环境故障已在 <code>ReActLoop</code> 内补记中止结果，不会落到这条</strong>，这里只接崩溃/强杀残留。该半截请求无法回放，<strong>本期不做回放自愈</strong>：会话需人工清理（重建）</td></tr>
-        <tr><td>4</td><td>归档中间态（<code>.zip.tmp</code> 残留 / 包已完整但原目录还在）</td><td>丢弃半截包；包完整则补删原目录（幂等，D22）</td></tr>
+        <tr><td>4</td><td>归档中间态（<code>.zip.tmp</code> 残留 / 包已完整但原目录还在）</td><td>丢弃半截包；包完整则补删原目录（幂等，见《模块-感知》§7.1 规则 7）</td></tr>
         <tr><td>5</td><td><code>budget.json</code> 缺失或损坏</td><td>重建为 0 并写告警（预算不精确可接受）</td></tr>
       </tbody>
     </table>
     <p>技术残留（<code>*.tmp</code>、写了一半的行、未释放的锁）由基础设施层的启动清理处理，不在这里重复。</p>
-    <p>错误码、<code>Result</code> 与用户文案的组织方式见《技术决策》D11：应用层返回 <code>Result&lt;T, UseCaseError&gt;</code>，<code>Cancel</code> 是独立分支，文案由外壳按 <code>code</code> 查表。</p>
+    <p>错误码、<code>Result</code> 与用户文案的组织方式见《模块-应用层》§9：应用层返回 <code>Result&lt;T, UseCaseError&gt;</code>，<code>Cancel</code> 是独立分支，文案由外壳按 <code>code</code> 查表。</p>
 
     <h2><span class="sec">8.11</span>并发模型</h2>
     <table>

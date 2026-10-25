@@ -374,7 +374,7 @@ flowchart LR
         <tr><td><code>AttemptOutcome</code></td><td>Enum</td><td>SUCCEEDED / FAILED / INTERRUPTED（只有这三个是 attempt 的边界）</td></tr>
         <tr><td><code>VerificationOutcome</code></td><td>Enum</td><td>PASSED / FAILED / UNDETERMINED（<code>UNDETERMINED</code> → 转人工）</td></tr>
         <tr><td><code>VerificationType</code></td><td>Enum</td><td>DETERMINISTIC / ENV_FEEDBACK / LLM_JUDGE / HUMAN_APPROVAL，固定顺序即链序</td></tr>
-        <tr><td><code>RunOutcome</code></td><td>Enum</td><td>一轮运行的出口：<code>CONVERGED / SUSPENDED / ROUNDS_EXHAUSTED</code>（原本嵌在 <code>ExecutionLoop</code> 里，M42 提升为独立类型）</td></tr>
+        <tr><td><code>RunOutcome</code></td><td>Enum</td><td>一轮运行的出口：<code>CONVERGED / SUSPENDED / ROUNDS_EXHAUSTED</code>（原本嵌在 <code>ExecutionLoop</code> 里，现已独立）</td></tr>
         <tr><td><code>RunContext</code></td><td>VO</td><td>交给 <code>SessionRunner</code> 的运行上下文：<code>Session</code>、<code>ChunkSink</code>、<code>CancellationToken</code> + 6 个端口/服务（模型、工具、人机、进度、计划仓储、上下文窗口）</td></tr>
         <tr><td><code>IterationResult</code></td><td>VO</td><td>内循环一次迭代的输出：是否收敛、是否提交、提交摘要、<strong>内循环轮次 <code>round</code></strong>（<strong>不是 attempt 序号</strong>——attempt 由外循环自己跟踪）、<strong>本次 load 过的技能</strong>（内循环拿不到 <code>Plan</code>，靠它把技能使用交回外循环）</td></tr>
       </tbody>
@@ -532,7 +532,7 @@ sequenceDiagram
     <table>
       <thead><tr><th>条件</th><th>结果</th></tr></thead>
       <tbody>
-        <tr><td>无 Plan 且内循环收敛</td><td>本次交互结束，会话停在原处（会话没有状态，D22）</td></tr>
+        <tr><td>无 Plan 且内循环收敛</td><td>本次交互结束，会话停在原处（会话没有状态，见《模块-感知》§7.1 规则 7）</td></tr>
         <tr><td>内循环里 <code>generate_plan</code> 成功</td><td>本轮收敛后，下一次迭代 <code>hasExecutablePlan()</code> 为真，转入计划执行</td></tr>
         <tr><td>计划 <code>COMPLETED</code></td><td>再跑一轮自由内循环，由模型产出<strong>最终答复</strong>（这就是"结论交付"）；完结时由 <code>PlanCompletionCurator</code> <strong>一次判定</strong>产出「经验? / 技能?」（用过技能 ⇒ 判改进；没用过 ⇒ 判沉淀）</td></tr>
         <tr><td>计划 <code>FAILED</code>（外循环判定重划用尽 → <code>terminate()</code>）</td><td>循环收敛退出，触发沉淀</td></tr>

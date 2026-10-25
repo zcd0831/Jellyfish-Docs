@@ -286,7 +286,7 @@ flowchart LR
         <tr>
           <td><code>Session</code></td>
           <td>一次会话（可嵌套）的全部上下文事实：记录流水、系统提示词快照、窗口与摘要。由 <code>parentSessionId</code> 组成会话树</td>
-          <td>① <code>Record</code> 只追加，被 <code>Attempt.recordRange</code> 引用的记录永不删除/改写；② 快照在会话开启时冻结，运行中不再变；③ Agent 不可切换，Model 可切换；④ 父子会话一致（父取消级联）；⑤ <strong>没有状态</strong>：会话是持久化容器，存在即可用（D22）</td>
+          <td>① <code>Record</code> 只追加，被 <code>Attempt.recordRange</code> 引用的记录永不删除/改写；② 快照在会话开启时冻结，运行中不再变；③ Agent 不可切换，Model 可切换；④ 父子会话一致（父取消级联）；⑤ <strong>没有状态</strong>：会话是持久化容器，存在即可用（见《模块-感知》§7.1 规则 7）</td>
         </tr>
         <tr>
           <td><code>RuntimePolicy</code></td>
@@ -392,7 +392,7 @@ flowchart LR
         <tr>
           <td><strong>会话开启</strong>（用户发起对话）<br><strong>子代理派遣</strong>（spawn_subagents）</td>
           <td>迭代中不断追加 Record；上下文折叠；模型降级；取消</td>
-          <td><strong>归档</strong>（压成 zip 移走，应用不再可见，D22）<br><strong>会话销毁</strong>（物理删除）</td>
+          <td><strong>归档</strong>（压成 zip 移走，应用不再可见，见《模块-感知》§7.1 规则 7）<br><strong>会话销毁</strong>（物理删除）</td>
           <td><strong>会话续跑</strong>（按 sessionId 加载，<code>StartupReconciler</code> 先对账）</td>
         </tr>
       </tbody>
@@ -407,7 +407,7 @@ flowchart LR
         <strong>技能有两层，冻结的只有浅层</strong>：可见清单（哪些 <code>skillId</code>）+ 三件套（<code>name / description / triggerCondition</code>）冻结；<strong>SOP 正文不冻结</strong>——<code>load_skill</code> 每次现读 <code>SKILL.md</code>，因此同一会话前后两次 <code>load_skill</code> 可能拿到不同正文（技能被改进时）。这是有意接受的漂移（S3）：<strong>正文是外部资产，不是会话事实</strong>，也不受 <code>Record</code> 的 append-only 约束。会话中途新沉淀的技能<strong>不进</strong>当前清单，下个会话才可见。</li>
       <li><strong>流水只追加</strong>：<code>Record</code> 不得修改；被 <code>Attempt.recordRange</code> 引用的区间<strong>永不删除、永不改写</strong>（本地应用的磁盘控制只能靠归档/导出）。</li>
       <li><strong>会话树</strong>：<code>parentSessionId</code> 组树；<strong>父会话取消 ⇒ 级联取消所有子会话</strong>；<strong>子代理不得再开子代理</strong>（深度恒为 1）。</li>
-      <li><strong>没有状态</strong>：<code>sessions/&lt;id&gt;/</code> 存在即可用，不存在即不可用（含已归档，D22）。“在跑”是进程内事实，不落盘；归档 = 压成包移走，此后应用不再认识它。删除 = 物理消失。</li>
+      <li><strong>没有状态</strong>：<code>sessions/&lt;id&gt;/</code> 存在即可用，不存在即不可用（含已归档，见《模块-感知》§7.1 规则 7）。“在跑”是进程内事实，不落盘；归档 = 压成包移走，此后应用不再认识它。删除 = 物理消失。</li>
       <li><strong>销毁</strong>：物理删除该会话族的 <code>Record</code>、<code>Plan</code>、<code>Budget</code>；<strong>已沉淀的 <code>Experience</code> 保留</strong>（记忆模块全局资产）。</li>
       <li><strong>上下文组装</strong>（<code>buildContextForLlm(policy)</code>）为<strong>三步推导 + 一次降级</strong>：
         ① 取全部 <code>role = SYSTEM</code> 的记录（<strong>运行期注入</strong>：SOP 注入 + 工具注入 + 经验注入）；经验注入由外循环在<strong>步骤启动前</strong>写一条带 <code>step=&lt;id&gt;</code> 标记的 SYSTEM 记录，正文来自 <code>ExperienceRepository.find(id)</code>，同一步只注入一次；系统提示词来自 <code>SystemPromptSnapshot</code>，<strong>不落 <code>Record</code></strong>，由调用方作为 <code>systemPrompt</code> 单独传给模型；

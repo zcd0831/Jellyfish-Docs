@@ -30,7 +30,7 @@
     <table>
       <thead><tr><th>方向</th><th>内容</th></tr></thead>
       <tbody>
-        <tr><td>本层对象</td><td>22 个适配器（实现 21 个端口；<code>HumanInteractionPort</code> / <code>ProgressPort</code> 由外壳实现，见 D19）</td></tr>
+        <tr><td>本层对象</td><td>22 个适配器（实现 21 个端口；<code>HumanInteractionPort</code> / <code>ProgressPort</code> 由外壳实现，见《模块-基础设施层》「模块边界」④）</td></tr>
         <tr><td>本层依赖</td><td>只依赖<strong>端口接口</strong>（application）与 JDK。实现端口时可以使用<strong>领域类型</strong>（端口签名所必需）：允许<strong>重建与读取</strong>（<code>rehydrate</code> 工厂 / getter / Id）；<strong>不得驱动聚合的状态迁移</strong>（不调业务方法、不改不变量）。聚合 ↔ 文件的映射只在本层 <code>*Dto</code> / <code>*Mapper</code>，不在聚合上留存储痕迹</td></tr>
         <tr><td>谁依赖本层</td><td>启动装配（组装端口实现并注入应用层）</td></tr>
         <tr><td>本层<strong>不</strong>负责</td><td>业务判断、状态机、事务的"决定"（只执行既定的提交顺序）</td></tr>
@@ -43,7 +43,7 @@
         <li>适配器之间只通过<strong>端口</strong>协作，不直接引用彼此的实现类；</li>
         <li>一切写入落地都要经过<strong>原子写协议</strong>（<code>.tmp</code> → fsync → rename → fsync 目录）；</li>
         <li>本层不认识聚合——它只认"路径 + JSON 文本"和"记录行"。</li>
-      <li><strong>本层不实现任何与终端相关的端口</strong>（<code>HumanInteractionPort</code> / <code>ProgressPort</code>）：界面归外壳（D19）。</li>
+      <li><strong>本层不实现任何与终端相关的端口</strong>（<code>HumanInteractionPort</code> / <code>ProgressPort</code>）：界面归外壳（见「模块边界」④）。</li>
       </ol>
     </div>
 
@@ -143,7 +143,7 @@ flowchart LR
       <thead><tr><th>端口</th><th>适配器</th><th>落点</th><th>要点</th></tr></thead>
       <tbody>
         <tr><td><code>CommitScope</code></td><td><code>FileCommitScope</code></td><td>各目标目录</td><td><strong>固定顺序执行</strong>：事实 → 追加 → 替换；每条走原子写</td></tr>
-        <tr><td><code>SessionRepository</code></td><td><code>FileSessionRepository</code></td><td><code>sessions/&lt;id&gt;/meta.json</code></td><td>原子替换；<code>list</code> = 扫 <code>sessions/*/meta.json</code>；<code>archive</code> = 压成 <code>archive/&lt;id&gt;.zip</code> 后删原目录（D22）；<code>delete</code> = 递归删除</td></tr>
+        <tr><td><code>SessionRepository</code></td><td><code>FileSessionRepository</code></td><td><code>sessions/&lt;id&gt;/meta.json</code></td><td>原子替换；<code>list</code> = 扫 <code>sessions/*/meta.json</code>；<code>archive</code> = 压成 <code>archive/&lt;id&gt;.zip</code> 后删原目录（见《模块-感知》§7.1 规则 7）；<code>delete</code> = 递归删除</td></tr>
         <tr><td><code>RecordStore</code></td><td><code>FileRecordStore</code></td><td><code>sessions/&lt;…&gt;/records-NNNN.jsonl</code>（含 <code>sub/</code>）</td><td>追加 + fsync；<strong>超过 32 MiB 滚动</strong>；<code>range</code> 基于 <code>seq</code>；一行 = <code>id/role/content/reasoning/toolPayload/summaryCoversUpTo/sequence/date</code>（<code>reasoning</code> 只占 <code>TOOL_REQUEST</code>，<code>summaryCoversUpTo</code> 只占 <code>SUMMARY</code>）</td></tr>
         <tr><td><code>PlanRepository</code></td><td><code>FilePlanRepository</code></td><td><code>sessions/&lt;id&gt;/plans/</code></td><td>原子替换；<code>findRunning</code> 扫目录（对账用）</td></tr>
         <tr><td><code>VerificationReportRepository</code></td><td><code>FileReportRepository</code></td><td><code>sessions/&lt;id&gt;/reports/</code></td><td><strong>只新建，不覆盖</strong></td></tr>
@@ -156,7 +156,7 @@ flowchart LR
         <tr><td><code>ModelInvocationPort</code></td><td><code>ModelInvoker</code></td><td>—（网络）</td><td>选模型 → 硬校验 → 调用 → <strong>降级链</strong>；<strong>只返回 usage，不记账</strong>。调用方是 <code>ReActLoop</code>、<code>ContextWindowService</code>、<code>SessionTitleGenerator</code> 与裁判</td></tr>
         <tr><td><code>ExternalToolPort</code></td><td><code>HttpToolAdapter</code> / <code>McpToolAdapter</code></td><td>—（网络）</td><td>工具自带超时；结果原样返回给应用层截断</td></tr>
         <tr><td><code>SkillSopProvider</code></td><td><code>FileSkillSopProvider</code></td><td><code>skills/&lt;id&gt;/SKILL.md</code></td><td>解析 front-matter + 正文，<strong>原样返回正文、不渲染</strong>；缺失或非 active 返回"不可用"。每次调用都现读（正文不冻结，S3）</td></tr>
-        <tr><td><code>PluginRepository</code></td><td><code>FilePluginRepository</code></td><td><code>plugins/&lt;pluginId&gt;/plugin.json</code></td><td>只存用户意图（信任 / 勾选的能力）；"已加载"不落盘（M42）</td></tr>
+        <tr><td><code>PluginRepository</code></td><td><code>FilePluginRepository</code></td><td><code>plugins/&lt;pluginId&gt;/plugin.json</code></td><td>只存用户意图（信任 / 勾选的能力）；"已加载"不落盘</td></tr>
         <tr><td><code>PluginRuntimePort</code></td><td><code>Pf4jPluginRuntime</code></td><td><code>plugins/&lt;pluginId&gt;/*.jar</code></td><td>PF4J 3.16.0：扫描、装载、取扩展、启停、卸载；读 jar 内 <code>META-INF/jellyfish/tools/*.json</code></td></tr>
         
         
@@ -181,7 +181,7 @@ flowchart LR
         <tr><td><code>ToolCatalog</code> / <code>AgentCatalog</code> / <code>ProviderCatalog</code> / <code>ModelCatalog</code> / <code>SkillCatalog</code></td><td>五类目录的"jar 内置 + 磁盘"合并</td></tr>
         <tr><td><code>BuiltinAssets</code> / <code>FrontMatter</code></td><td>jar 内资产清单读取、人写资产的 front-matter 解析</td></tr>
         <tr><td><code>ModelResponseFormatException</code></td><td>模型响应无法解析（不可重试的技术异常）</td></tr>
-        <tr><td><code>MaskingLayout</code></td><td>日志 Layout：key 命中敏感词的值统一替换为 <code>***</code>（D14-2、D18-3）</td></tr>
+        <tr><td><code>MaskingLayout</code></td><td>日志 Layout：key 命中敏感词的值统一替换为 <code>***</code>（见《模块-基础设施层》§8）</td></tr>
         <tr><td><code>Log4jTechnicalLog</code></td><td>把 <code>TechnicalLog</code> 声明的事件落到 Log4j 的 key=value 行</td></tr>
         <tr><td><code>ModelCallLog</code></td><td>模型侧技术事件：重试 / 降级 / 不可用（不记对话正文）</td></tr>
       </tbody>
@@ -224,7 +224,7 @@ flowchart LR
 │   ├── plugin.json                   #   系统管：信任 / 勾选的能力（唯一落盘的意图）
 │   └── &lt;artifact&gt;.jar                #   PF4J 读 Plugin-Id / Plugin-Version / Plugin-Requires
 ├── experience/&lt;experienceId&gt;.json    # 全局资产
-├── archive/&lt;sessionId&gt;.zip           # 归档包：应用只写不读，解档交给用户（D22）
+├── archive/&lt;sessionId&gt;.zip           # 归档包：应用只写不读，解档交给用户（见《模块-感知》§7.1 规则 7）
 ├── logs/                             # 运行日志（按天滚动）
 └── locks/jellyfish.lock</code></pre>
     <p><code>cache</code>（会话路径索引、流水索引、经验索引、分词缓存）在 <code>$TMPDIR/jellyfish/</code>，<strong>可整目录删除并重建</strong>。</p>
@@ -363,10 +363,10 @@ sequenceDiagram
     <ol>
       <li><strong>适配器不记账</strong>：只返回 <code>usage</code>，由调用方交给 <code>BudgetService</code> —— 否则会出现"基础设施 → 应用层"的反向依赖。</li>
       <li><strong>降级要重新硬校验</strong>：备用链里可能是小上下文模型，<code>maxInputTokens</code> 必须按<strong>实际要用的模型</strong>重新比较。</li>
-      <li><strong>线协议由 <code>Provider.protocol</code> 选择</strong>：<code>ModelInvoker</code> 按协议查实现（<code>ChatProtocol</code> → <code>ChatCompletionsProtocol</code> 等），共享同一个 OkHttp 客户端（D16-5、M14）；本期只实现 <code>OPENAI_CHAT</code>，新增协议只加一个实现类与一个枚举常量。映射细则（技术决策 D16）：<code>request.systemPrompt</code> → 首条 <code>role=system</code> 消息；<code>ChatMessage</code> → <code>messages</code>；<code>ToolCall</code> → <code>tool_calls</code>；<code>usage.prompt_tokens / completion_tokens</code> → <code>ModelUsage</code>；<code>servedModelId</code> 回填实际模型（降级后与目标不同）。</li>
+      <li><strong>线协议由 <code>Provider.protocol</code> 选择</strong>：<code>ModelInvoker</code> 按协议查实现（<code>ChatProtocol</code> → <code>ChatCompletionsProtocol</code> 等），共享同一个 OkHttp 客户端（见本条第 5 条）；本期只实现 <code>OPENAI_CHAT</code>，新增协议只加一个实现类与一个枚举常量。映射细则：<code>request.systemPrompt</code> → 首条 <code>role=system</code> 消息；<code>ChatMessage</code> → <code>messages</code>；<code>ToolCall</code> → <code>tool_calls</code>；<code>usage.prompt_tokens / completion_tokens</code> → <code>ModelUsage</code>；<code>servedModelId</code> 回填实际模型（降级后与目标不同）。</li>
       <li><strong>不碰聚合</strong>：<code>ModelInvoker</code> 只回填 <code>servedModelId</code>，<code>switchModel</code> 由调用方在收到结果后执行（见《模块-行动》§8.2）。</li>
       <li><strong>阻塞与流式共用一份失败映射</strong>：流式路径先把 HTTP 状态码交回 <code>ModelInvoker</code>，由 <code>mapFailure</code> 统一分流——<code>400/401/403/404</code> <strong>不重试</strong>（确定性错误，重试只会把同样的非法请求再发三遍），<code>429/5xx</code> 才退避重试，网络/读超时属于可重试。<strong>流式不得把 4xx 包成“可重试失败”</strong>。</li>
-      <li><strong><code>reasoning_content</code> 的映射</strong>（D16 补充）：解析时收进 <code>ModelInvocationResult.reasoning</code>；组装时 <code>ChatMessage.reasoning != null</code> ⇒ 在 assistant 消息上输出 <code>reasoning_content</code>。流式累加器必须同时累加 <code>delta.content</code> 与 <code>delta.reasoning_content</code>；流断在中途 ⇒ 整条不落（“半截输出不落 Record”）。</li>
+      <li><strong><code>reasoning_content</code> 的映射</strong>（见 §10 第 3、5 条）：解析时收进 <code>ModelInvocationResult.reasoning</code>；组装时 <code>ChatMessage.reasoning != null</code> ⇒ 在 assistant 消息上输出 <code>reasoning_content</code>。流式累加器必须同时累加 <code>delta.content</code> 与 <code>delta.reasoning_content</code>；流断在中途 ⇒ 整条不落（“半截输出不落 Record”）。</li>
     </ol>
 
     <h2><span class="sec">9.12</span>插件运行时（PF4J）的实现要点</h2>
@@ -374,7 +374,7 @@ sequenceDiagram
       <thead><tr><th>#</th><th>约定</th></tr></thead>
       <tbody>
         <tr><td>1</td><td><strong>PF4J 3.16.0</strong>：实测其 class 文件 major version = 52（Java 8 字节码），JDK 8 可用；内部用 multi-release jar 把 <code>module-info</code> 放在 <code>META-INF/versions/9/</code></td></tr>
-        <tr><td>2</td><td><strong>关掉 PF4J 自带的状态持久化</strong>（默认会写一份启停状态）：否则与 <code>plugin.json</code> 形成两份真相，违反"落盘只存用户意图"（M42）</td></tr>
+        <tr><td>2</td><td><strong>关掉 PF4J 自带的状态持久化</strong>（默认会写一份启停状态）：否则与 <code>plugin.json</code> 形成两份真相，违反"落盘只存用户意图"</td></tr>
         <tr><td>3</td><td><strong>动态装载可用</strong>：<code>loadPlugin(Path)</code> / <code>startPlugin(id)</code> / <code>stopPlugin(id)</code> / <code>unloadPlugin(id)</code> 都是运行期 API，装/启/停/卸<strong>不需要重启</strong></td></tr>
         <tr><td>4</td><td><strong>同 id 升级要重启</strong>：重新装载同一 <code>Plugin-Id</code> 会与旧 <code>PluginClassLoader</code> 撞车；卸载后类可能仍被线程/静态缓存引用（泄漏），所以升级走"停进程 → 换 jar → 起进程"</td></tr>
         <tr><td>5</td><td><strong>插件不得重复打包宿主已提供的依赖</strong>（Jackson / OkHttp / networknt / Log4j 等）：装了就在类加载器里打架。安装时检查 jar 内依赖清单，命中即拒绝</td></tr>
