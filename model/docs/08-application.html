@@ -330,11 +330,12 @@
       </tbody>
     </table>
     <blockquote><p><code>ProgressEvent</code> 是 <code>ProgressPort</code> 的入参值对象（<code>Kind</code> + <code>message</code>），面向界面、可丢弃，不属于领域事实。</p>
-            <p><code>Kind</code> 共 11 种，按用途分三类：<strong>阶段类</strong>（<code>SUMMARIZING</code> / <code>SUMMARY_DONE</code> / <code>RETRY_SCHEDULED</code> / <code>MODEL_SWITCHED</code> / <code>SUBAGENTS_RUNNING</code>）、<strong>计划类</strong>（<code>PLAN_CREATED</code> / <code>STEP_STARTED</code> / <code>STEP_FINISHED</code>）、<strong>工具类</strong>（<code>TOOL_STARTED</code> / <code>TOOL_FINISHED</code>），外加用量类 <code>USAGE</code>。约定：</p>
+            <p><code>Kind</code> 共 12 种，按用途分三类：<strong>阶段类</strong>（<code>SUMMARIZING</code> / <code>SUMMARY_DONE</code> / <code>RETRY_SCHEDULED</code> / <code>MODEL_SWITCHED</code> / <code>SUBAGENTS_RUNNING</code>）、<strong>计划类</strong>（<code>PLAN_CREATED</code> / <code>STEP_STARTED</code> / <code>STEP_FINISHED</code>）、<strong>工具类</strong>（<code>TOOL_STARTED</code> / <code>TOOL_FINISHED</code>），外加用量类 <code>USAGE</code> 与上下文类 <code>CONTEXT_USAGE</code>。约定：</p>
             <ul>
               <li>计划类事件的 <code>message</code> 必须带进度：<code>计划：&lt;goal&gt;（N 步）</code>、<code>第 3/5 步：&lt;描述&gt;</code>、<code>第 3/5 步 完成/失败（原因）</code>；</li>
               <li>工具类事件的 <code>message</code> 必须带工具名与结果：<code>read_file（参数摘要）</code>、<code>read_file 成功 12ms</code> / <code>read_file 失败：原因</code>；<code>ask_user</code> 不重复发（问题本身已呈现）；</li>
               <li><code>USAGE</code> 的 <code>message</code> 带本轮与累计用量：<code>+1.2k / 累计 3.1k / 上限 1.0M</code>；</li>
+              <li><code>CONTEXT_USAGE</code> 的 <code>message</code> 带“当前上下文占用 / 模型输入上限”：<code>上下文 12.3k / 50k</code>（每轮组装上下文后发一次，供界面常驻展示）；</li>
               <li>外壳按 <code>Kind</code> 决定呈现方式（状态行 or 常驻行），<strong>应用层不关心排版</strong>。</li>
             </ul></blockquote>
 
