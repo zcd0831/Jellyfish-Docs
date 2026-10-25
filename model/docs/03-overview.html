@@ -36,7 +36,8 @@
       虚线箭头是"引用"（跨聚合/跨模块，只存 ID）。
     </p>
 
-    <pre class="mermaid">classDiagram
+    <pre class="mermaid">
+classDiagram
     namespace 感知模块 {
         class Session {
             &lt;&lt;AggregateRoot&gt;&gt;
@@ -50,7 +51,7 @@
             -SystemPromptSnapshot systemPromptSnapshot
             +appendRecord(RecordRole, String, ToolResultPayload) Record
             +buildContextForLlm(ContextWindowPolicy) ContextWindow
-            +markSummarized(String summary)
+            +markSummarized(String summary, int coveredThroughSequence)
             +switchModel(ModelId)
             +cancel()
         }
@@ -59,7 +60,9 @@
             -RecordId id
             -RecordRole role
             -String content
+            -String reasoning
             -ToolResultPayload toolPayload
+            -int summaryCoversUpTo
             -int sequence
             -Date date
         }
@@ -346,6 +349,7 @@
             &lt;&lt;ValueObject&gt;&gt;
             -String text
             -List~ToolCall~ toolCalls
+            -String reasoning
             -ModelUsage usage
             -ModelId servedModelId
         }
@@ -355,6 +359,7 @@
             -String content
             -List~ToolCall~ toolCalls
             -String toolCallId
+            -String reasoning
         }
         class ToolCall {
             &lt;&lt;ValueObject&gt;&gt;
@@ -810,7 +815,8 @@
     Session ..&gt; SessionCancelled : raises
     Session ..&gt; ModelSwitched : raises
     RuntimePolicy ..&gt; PolicyAdjusted : raises
-    ToolDefinition ..&gt; ToolDefinitionUpdatedEvent : raises</pre>
+    ToolDefinition ..&gt; ToolDefinitionUpdatedEvent : raises
+</pre>
     <p class="diagram-note">图 3-1　领域模型总图（按模块分组；虚线 = 引用，只存 ID）</p>
 
     <h2><span class="sec">3.3</span>服务与端口协作图</h2>

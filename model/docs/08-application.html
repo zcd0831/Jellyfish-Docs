@@ -213,7 +213,7 @@
           <td><code>sessionId</code>、文本、<code>CancellationToken</code></td>
           <td>本轮是否收敛 + 会话状态</td>
           <td>0..N</td>
-          <td>模型不可用（返回、不改状态）；请求超限（折叠一次后重试）；用户中断（<code>INTERRUPTED</code>）</td>
+          <td>模型不可用（返回、不推进状态、补记中止事实）；请求超限（折叠一次后重试）；用户中断（<code>INTERRUPTED</code>）</td>
         </tr>
         <tr>
           <td><code>ResumeSessionUseCase</code></td>
@@ -404,7 +404,8 @@
     </table>
     <div class="callout">
       <div class="ct">全局资产写段</div>
-      T11 / T13 / T14 都在 <code>CommitScope</code> 的<strong>全局资产写段</strong>内执行：并行子会话可能同时沉淀，容量"读—判—写"必须在该段内完成。一次计划完结中，T11 与 T13/T14 <strong>至多发生一个</strong>（同一件事只进一边）。
+      T11 / T13 / T14 都在 <code>CommitScope</code> 的<strong>全局资产写段</strong>内执行：并行子会话可能同时沉淀，容量"读—判—写"必须在该段内完成。一次计划完结中，T11 与 T13/T14 <strong>至多发生一个</strong>（同一件事只进一边）。<br/>
+      <strong>环境故障时的 T4</strong>：本轮已发出、还没拿到结果的工具调用，由 <code>ReActLoop</code> 在异常上抛前补一条 <code>TOOL_RESULT</code>（内容为“本轮中止：…”）；它是流水事实，不是状态推进，因此不占用 T7，也不消耗重试。
     </div>
 
     <h3>8.8.3 三条纪律</h3>
@@ -624,7 +625,7 @@ sequenceDiagram
       <thead><tr><th>情形</th><th>语义</th><th>应用层动作</th><th>聚合落点</th></tr></thead>
       <tbody>
         <tr><td>工具自身失败（超时/异常/半截）</td><td>一种工具结果</td><td>回灌模型，ReAct 继续</td><td>只追加 <code>TOOL_RESULT</code></td></tr>
-        <tr><td><strong>模型不可用</strong>（备用链全挂）</td><td>环境故障</td><td><code>RunSession</code> 立即返回；不触发反思/重划/重试</td><td><strong>不改任何状态</strong>；<code>Attempt</code> 不落终态</td></tr>
+        <tr><td><strong>模型不可用</strong>（备用链全挂）</td><td>环境故障</td><td><code>RunSession</code> 立即返回；不触发反思/重划/重试；<strong>把本轮未闭合的工具调用补记为中止 <code>TOOL_RESULT</code></strong></td><td><strong>不推进 <code>plan</code> / <code>budget</code></strong>；<code>Attempt</code> 不落终态；流水多一条中止事实</td></tr>
         <tr><td><strong>请求超限</strong></td><td>业务预算问题</td><td>强制折叠一次后重试；仍失败按模型不可用处理</td><td>追加 <code>SUMMARY</code>，不动 <code>plan</code></td></tr>
         <tr><td>用户中断</td><td>用户主动</td><td><code>ask</code> 返回 <code>CANCELLED</code>；当前 attempt 收尾</td><td><code>Attempt.outcome = INTERRUPTED</code>（不耗重试）</td></tr>
         <tr><td>崩溃残留</td><td>进程非正常退出</td><td><code>StartupReconciler</code> 按下列 5 条补齐</td><td>视规则而定</td></tr>
@@ -637,7 +638,7 @@ sequenceDiagram
       <tbody>
         <tr><td>1</td><td>有 <code>PASSED</code> 报告，但 step 仍 <code>RUNNING</code> / <code>VERIFYING</code></td><td>按报告里的 <code>attemptNo</code> 补 <code>markStepSucceeded</code></td></tr>
         <tr><td>2</td><td>有 <code>FAILED</code> 报告，但 step 仍 <code>RUNNING</code></td><td>补 <code>markStepFailed</code></td></tr>
-        <tr><td>3</td><td>流水末尾有 <code>TOOL_REQUEST</code> 无 <code>TOOL_RESULT</code></td><td>该 attempt 判失败（按"半截工具调用视为失败"计一次重试）</td></tr>
+        <tr><td>3</td><td>流水末尾有 <code>TOOL_REQUEST</code> 无 <code>TOOL_RESULT</code></td><td>该 attempt 判失败（计一次重试）；<strong>环境故障已在 <code>ReActLoop</code> 内补记中止结果，不会落到这条</strong>，这里只接崩溃/强杀残留。该半截请求无法回放，<strong>本期不做回放自愈</strong>：会话需人工清理（重建）</td></tr>
         <tr><td>4</td><td>归档中间态（<code>.zip.tmp</code> 残留 / 包已完整但原目录还在）</td><td>丢弃半截包；包完整则补删原目录（幂等，D22）</td></tr>
         <tr><td>5</td><td><code>budget.json</code> 缺失或损坏</td><td>重建为 0 并写告警（预算不精确可接受）</td></tr>
       </tbody>

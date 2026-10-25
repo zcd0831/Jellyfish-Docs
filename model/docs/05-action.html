@@ -364,6 +364,7 @@ flowchart LR
         MI[ModelInvoker]
         BS[BudgetService]
     end
+
     subgraph 聚合
         TD[ToolDefinition]
         AG[AgentDefinition]
@@ -371,32 +372,33 @@ flowchart LR
         PV[Provider]
         BU[Budget]
     end
+
     subgraph 跨模块
-        P1[(规划·PlanFactory&lt;br/>generate_plan)]
-        M1[(基础设施·SkillSopProvider&lt;br/>load_skill)]
-        S1[(应用·StartSessionUseCase&lt;br/>spawn_subagents)]
-        S2[(感知·Session&lt;br/>appendRecord / switchModel)]
+        P1[(规划·PlanFactory&lt;br/&gt;generate_plan)]
+        M1[(基础设施·SkillSopProvider&lt;br/&gt;load_skill)]
+        S1[(应用·StartSessionUseCase&lt;br/&gt;spawn_subagents)]
+        S2[(感知·Session&lt;br/&gt;appendRecord / switchModel)]
         RP[(感知·RuntimePolicy)]
     end
 
-    TE -->|execute| TD
-    TE -->|读 toolIds 校验调用合法| AG
-    TE -->|读 trustedToolIds / 截断阈值| RP
-    TE -->|generate_plan| P1
-    TE -->|load_skill| M1
-    TE -->|spawn_subagents| S1
-    TE -->|ask_user / 其它 INTERNAL| TE
-    TE -->|REST / MCP / NATIVE| EXT[(外部端点)]
+    TE --&gt;|execute| TD
+    TE --&gt;|读 toolIds 校验调用合法| AG
+    TE --&gt;|读 trustedToolIds / 截断阈值| RP
+    TE --&gt;|generate_plan| P1
+    TE --&gt;|load_skill| M1
+    TE --&gt;|spawn_subagents| S1
+    TE --&gt;|INTERNAL / NATIVE / PLUGIN（处理器注册表）| TE
+    TE --&gt;|REST / MCP| EXT[(外部端点)]
 
-    MI -->|读 activeModelId| S2
-    MI -->|选模型 / 校验 contextLimit| MD
-    MI -->|取凭据与端点| PV
-    MI -->|降级时 switchModel| S2
-    MI -->|usage| BS
+    MI --&gt;|读 activeModelId| S2
+    MI --&gt;|选模型 / 校验 contextLimit| MD
+    MI --&gt;|取凭据与端点| PV
+    MI --&gt;|降级时 switchModel| S2
+    MI --&gt;|usage| BS
 
-    BS -->|recordUsage| BU
-    BU -->|shouldWarn 读阈值| RP
-    </pre>
+    BS --&gt;|recordUsage| BU
+    BU --&gt;|shouldWarn 读阈值| RP
+</pre>
     <p class="diagram-note">图 5-2　对象之间的操作关系</p>
 
     <h2><span class="sec">5.4</span>聚合清单</h2>
@@ -529,8 +531,8 @@ flowchart LR
         <tr><td><code>AgentStatus</code></td><td>Enum</td><td>DRAFT / ACTIVE / DEPRECATED</td></tr>
         <tr><td><code>ToolExecOutcome</code></td><td>VO</td><td>工具执行结果：内容、是否截断、完整内容归档位置（<strong>无 isSuccess</strong>：失败也是一种结果）</td></tr>
         <tr><td><code>ModelInvocationRequest</code></td><td>VO</td><td>端口入参：目标模型（或"当前会话模型"）、<code>systemPrompt</code>、<code>ChatMessage</code> 列表、<strong>可用工具 schema 快照</strong>（<code>List&lt;ToolSchemaSnapshot&gt;</code>，来自会话冻结快照）、<code>estimatedPromptTokens</code>、能力需求（可选）</td></tr>
-        <tr><td><code>ModelInvocationResult</code></td><td>VO</td><td>端口出参：文本 + 本次的工具调用请求 + <code>ModelUsage</code> + <strong>实际服务的模型</strong>（降级后可被调用方据此 <code>switchModel</code>）</td></tr>
-        <tr><td><code>ChatMessage</code></td><td>VO</td><td>一条对话消息：<code>role</code>（复用 <code>RecordRole</code>）、<code>content</code>、模型请求的工具调用（ASSISTANT）、<code>toolCallId</code>（TOOL_RESULT 回填用）</td></tr>
+        <tr><td><code>ModelInvocationResult</code></td><td>VO</td><td>端口出参：文本 + 本次的工具调用请求 + <strong>思维内容 <code>reasoning</code></strong>（思维模式模型才非空；降级/回放用）+ <code>ModelUsage</code> + <strong>实际服务的模型</strong>（降级后可被调用方据此 <code>switchModel</code>）</td></tr>
+        <tr><td><code>ChatMessage</code></td><td>VO</td><td>一条对话消息：<code>role</code>（复用 <code>RecordRole</code>）、<code>content</code>、模型请求的工具调用（ASSISTANT）、<code>toolCallId</code>（TOOL_RESULT 回填用）、<strong><code>reasoning</code></strong>（仅带 <code>tool_calls</code> 的 assistant 消息需要）</td></tr>
         <tr><td><code>ToolCall</code></td><td>VO</td><td>模型请求的一次工具调用：<code>callId</code>（协议侧 id，用于回灌结果）、<code>name</code>、<code>argumentsJson</code></td></tr>
         <tr><td><code>ModelUsage</code></td><td>VO</td><td>一次调用的精确用量：<code>inputTokens</code> / <code>outputTokens</code>（D08 台账口径；厂商不给时由 <code>TokenCounter</code> 估算）</td></tr>
         <tr><td><code>ExternalToolPort</code></td><td>Port</td><td>REST / MCP 出站调用；由基础设施实现。<strong><code>NATIVE</code> 不走这里</strong>（它是本层的处理器，不是出站调用）</td></tr>
@@ -756,6 +758,7 @@ sequenceDiagram
     <ol>
       <li><strong>用量随请求下行</strong>：<code>estimatedPromptTokens</code> 由调用方填入 <code>ModelInvocationRequest</code>；<strong>执行器不得回查 <code>Session</code></strong>（<code>Session</code> 不知道 <code>contextLimit</code>，回查还会破坏单向依赖）。</li>
       <li><strong>记账在调用方</strong>：<code>ModelInvoker</code> 只返回 <code>usage</code>，由调用方交给 <code>BudgetService</code> —— 否则会出现"基础设施 → 应用层"的反向依赖。</li>
+      <li><strong><code>reasoning_content</code> 原样回传</strong>：思维模式（如 DeepSeek thinking）要求“带 <code>tool_calls</code> 的 assistant 消息必须把该轮的 <code>reasoning_content</code> 原样带回”，否则整轮 400。因此：解析侧（阻塞与流式）都把 <code>reasoning_content</code> 收进 <code>ModelInvocationResult.reasoning</code>，组装侧只在 <code>ChatMessage.reasoning != null</code> 时发出 <code>reasoning_content</code> 字段；<strong>不做模型能力判定</strong>（该字段只可能由思维模型产出，能力标记缺省为空，按能力过滤会把主路径打坏）。跨到不支持该字段的模型属于降级链配置问题，不在本层处理。</li>
       <li><strong>系统提示词独立于消息列表</strong>：<code>systemPrompt</code> 由调用方（<code>ReActLoop</code> / <code>ContextWindowService</code> / <code>SessionTitleGenerator</code>）从窗口推导后填入，不进 <code>messages</code>；<strong>工具清单同理</strong>：<code>tools</code> 取自 <code>SystemPromptSnapshot.toolList</code>（会话开启时冻结），执行器<strong>不得</strong>现查目录；落到各家协议里的差异（OpenAI 用首条 <code>role=system</code>、Anthropic 用顶层 <code>system</code>、Gemini 用 <code>systemInstruction</code>）由基础设施适配器吸收（见 D16）。</li>
       <li><strong>端口失败用上下文错误码表达</strong>：<code>ModelInvoker</code> 失败时抛 <code>ModelInvocationException(ModelError)</code>，错误码取 <code>M_*</code>；调用方据此区分"不可用"（不改状态）与"请求超限"（补折一次）。</li>
       <li><strong>降级后由调用方切换会话模型</strong>：<code>ModelInvocationResult.servedModelId</code> 指出实际服务的模型；与请求的目标模型不同 ⇒ 调用方调 <code>Session.switchModel(...)</code> 让聚合 raise <code>ModelSwitched</code>（<code>ModelInvoker</code> 不碰聚合）。</li>

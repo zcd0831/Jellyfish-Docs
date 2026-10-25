@@ -588,10 +588,13 @@
     <p><strong>要点</strong></p>
     <ol>
       <li><strong>一次调用、一个判定</strong>：经验与技能的互斥由<strong>同一次子代理判定</strong>保证；分成两个子代理各判一次，必然出现双写。</li>
-      <li><strong>素材归属</strong>：按 <code>RecordRange</code> <strong>只读</strong> <code>Session.Record</code>、裁剪"失败后翻盘"区间、拼成消息——全在本服务；两个写入器都拿到成品，不再各自读轨迹。</li>
+      <li><strong>素材归属</strong>：按 <code>RecordRange</code> <strong>只读</strong> <code>Session.Record</code>、裁剪"失败后翻盘"区间、拼成消息——全在本服务；两个写入器都拿到成品，不再各自读轨迹。<br/>
+        <strong>只读 <code>content</code>，永不读 <code>reasoning</code></strong>：思维链是模型的原始推理过程，不可跨模型迁移、会把“被自己否决的路径”固化成经验、还可能带用户隐私；且体积大。<code>reasoning</code> 的唯一用途是请求回放（《模块-感知》7.1 规则 15）。<br/>
+        <strong>轨迹要结构化，不要原文拼接</strong>：每一轮一行 <code>第 n 轮：工具名(参数摘要) → 成功/失败/截断</code>，助手文本截短；否则预算会被单条 4000 字的工具结果吃光。</li>
       <li><strong>谁有权学</strong>：每个会话（含子代理会话）在计划完结时都会走本流程——学习入口因此不是唯一的，容量上限（<code>skillCapacity</code>）与 <code>MERGE</code> 收敛是唯一的闸门。</li>
       <li><strong>子会话的质量证据更弱</strong>：子代理 plan 常无验证声明，其技能产物天然"证据不足"；本期不加额外门槛（接受此风险）。</li>
       <li><strong>沉淀失败不阻塞</strong>：本服务任何一步失败都只是"这次没学到"，不影响会话继续（<code>ExecutionLoop</code> 不因沉淀失败而改变计划状态）。</li>
+      <li><strong>轨迹区间的来源</strong>：<code>StepTrace.recordRange</code> 由外循环在每段 <code>ReActLoop</code> 结束时写入（《模块-规划》7.1 规则 10）；区间为空 ⇒ 如实记为“无轨迹区间”，不自己猜范围、不读全量流水。</li>
     </ol>
 
     <div class="callout ok">
