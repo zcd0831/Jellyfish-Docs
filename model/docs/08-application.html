@@ -321,7 +321,14 @@
         <tr><td><code>PortRoutes</code></td><td>端口路由表：<code>能力名 → 当前启用者</code>，并发安全、可原子替换（插件实现<strong>实时生效</strong>，见《模块-行动》§7.6）</td></tr>
       </tbody>
     </table>
-    <blockquote><p><code>ProgressEvent</code> 是 <code>ProgressPort</code> 的入参值对象（<code>Kind</code> + <code>message</code>），面向界面、可丢弃，不属于领域事实。</p></blockquote>
+    <blockquote><p><code>ProgressEvent</code> 是 <code>ProgressPort</code> 的入参值对象（<code>Kind</code> + <code>message</code>），面向界面、可丢弃，不属于领域事实。</p>
+            <p><code>Kind</code> 共 11 种，按用途分三类：<strong>阶段类</strong>（<code>SUMMARIZING</code> / <code>SUMMARY_DONE</code> / <code>RETRY_SCHEDULED</code> / <code>MODEL_SWITCHED</code> / <code>SUBAGENTS_RUNNING</code>）、<strong>计划类</strong>（<code>PLAN_CREATED</code> / <code>STEP_STARTED</code> / <code>STEP_FINISHED</code>）、<strong>工具类</strong>（<code>TOOL_STARTED</code> / <code>TOOL_FINISHED</code>），外加用量类 <code>USAGE</code>。约定：</p>
+            <ul>
+              <li>计划类事件的 <code>message</code> 必须带进度：<code>计划：&lt;goal&gt;（N 步）</code>、<code>第 3/5 步：&lt;描述&gt;</code>、<code>第 3/5 步 完成/失败（原因）</code>；</li>
+              <li>工具类事件的 <code>message</code> 必须带工具名与结果：<code>read_file（参数摘要）</code>、<code>read_file 成功 12ms</code> / <code>read_file 失败：原因</code>；<code>ask_user</code> 不重复发（问题本身已呈现）；</li>
+              <li><code>USAGE</code> 的 <code>message</code> 带本轮与累计用量：<code>+1.2k / 累计 3.1k / 上限 1.0M</code>；</li>
+              <li>外壳按 <code>Kind</code> 决定呈现方式（状态行 or 常驻行），<strong>应用层不关心排版</strong>。</li>
+            </ul></blockquote>
 
     <h2><span class="sec">8.7</span>端口清单（23 个）</h2>
     <table>
@@ -344,7 +351,7 @@
         <tr><td><code>ExternalToolPort</code></td><td>REST / MCP 出站调用（<strong><code>NATIVE</code> 不在其中</strong>：本地能力是处理器，不是出站调用）</td><td><code>invoke(tool, args)</code></td><td>基础设施</td></tr>
         <tr><td><code>SkillSopProvider</code></td><td>按 id 读并渲染 SOP</td><td><code>sop(skillId)</code></td><td>基础设施</td></tr>
         <tr><td><code>HumanInteractionPort</code></td><td><strong>阻塞式</strong>提问（单队列、标来源、可取消）</td><td><code>ask(question) → answer</code></td><td>外壳（TUI）；CLI / Server 各自实现</td></tr>
-        <tr><td><code>ProgressPort</code></td><td>非领域进度：压缩中、子代理并行、步骤推进、模型降级</td><td><code>emit(event)</code></td><td>外壳（TUI）</td></tr>
+        <tr><td><code>ProgressPort</code></td><td>非领域进度：压缩、子代理并行、计划与步骤推进、工具调用开始/结束、模型降级、用量</td><td><code>emit(event)</code></td><td>外壳（TUI）</td></tr>
         <tr><td><code>DomainEventPublisher</code></td><td>领域事件，<strong>提交后同步派发</strong>（只通知）</td><td><code>publishAfterCommit(events)</code></td><td>基础设施</td></tr>
         <tr><td><code>Clock</code></td><td>时间（便于测试与审计）</td><td><code>now</code></td><td>基础设施</td></tr>
         <tr><td><code>TokenCounter</code></td><td>token 计量（与真实计费一致）</td><td><code>count(messages, modelId)</code></td><td>基础设施</td></tr>

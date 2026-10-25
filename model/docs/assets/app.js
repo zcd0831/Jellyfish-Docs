@@ -20,7 +20,7 @@
   if (sidebar) {
     const brand = document.createElement('div');
     brand.className = 'brand';
-    brand.innerHTML = 'Jellyfish Agent 领域模型<small>面向第一次接触 AI Agent 的开发者</small>';
+    brand.innerHTML = 'Jellyfish Agent 领域模型<small>面向第一次接触 Jellyfish 的开发者</small>';
     sidebar.appendChild(brand);
 
     const nav = document.createElement('nav');
