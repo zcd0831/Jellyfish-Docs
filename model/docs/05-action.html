@@ -487,7 +487,7 @@ flowchart LR
       <li><strong>只预警、不中断</strong>：达到 <code>budgetWarnRatio</code> → 外循环经 <code>ask_user</code> 询问是否继续；同一会话族只报一次。<br/>
           <code>budgetLimitTokens</code> 是会话族的<strong>总额度</strong>（token，用户可调），<code>budgetWarnRatio</code> 是它的百分比——两者缺一不可，否则"越过 80%"没有分母。</li>
       <li>并发（<code>spawn_subagents</code>）：子会话<strong>本地累计</strong>，结束后 <code>settleFromSubSession</code> 一次性归集到根。</li>
-      <li><strong>顺带记一次观测</strong>：<code>lastPromptTokens</code> / <code>lastPromptEstimated</code> / <code>lastPromptSessionId</code> 是“最近一次模型请求的输入用量”，由 <code>BudgetService.recordTurnUsage</code> 写下（厂商给的 <code>prompt_tokens</code>；厂商没给时是本地估算，<code>lastPromptEstimated = true</code>）。<strong>辅助调用</strong>（生成标题、检索经验、反思、重划、摘要、验证）走 <code>recordUsage</code>，只记账不写观测——它们的小请求会把真实窗口的数字盖掉。它只喂界面常驻展示（提示符里的 <code>18.2k / 50k</code>），<strong>不参与</strong>折叠判定——判定在请求前做，那时还没有厂商值。折叠发生后清空这三项：旧数值已经不再描述当前窗口，界面回到 <code>— / 50k</code>。</li>
+      <li><strong>顺带记一次观测</strong>：<code>lastPromptTokens</code> / <code>lastPromptEstimated</code> / <code>lastPromptSessionId</code> 是“最近一次模型请求的输入用量”，由 <code>BudgetService.recordTurnUsage</code> 写下（厂商给的 <code>prompt_tokens</code>；厂商没给时是本地估算，<code>lastPromptEstimated = true</code>）。<strong>辅助调用</strong>（生成标题、检索经验、反思、重划、摘要、验证）走 <code>recordUsage</code>，只记账不写观测——它们的小请求会把真实窗口的数字盖掉。它只喂界面展示（一轮结束时汇总行里的 <code>上下文 18.2k / 50k</code>），<strong>不参与</strong>折叠判定——判定在请求前做，那时还没有厂商值。折叠发生后清空这三项：旧数值已经不再描述当前窗口，界面回到 <code>— / 50k</code>。</li>
     </ul>
 
         <h2><span class="sec">5.5</span>领域服务清单</h2>
@@ -809,7 +809,7 @@ sequenceDiagram
     </pre>
     <p><strong>要点</strong>：子会话并发时先各自累计，结束后 <code>settleFromSubSession</code> 一次性归集到根，避免并发写同一 <code>Budget</code> 聚合。</p>
     <p><strong>两个入口</strong>：<code>recordTurnUsage</code>（主循环：记账 + 观测 + 立刻刷新界面标签）与 <code>recordUsage</code>（辅助调用：只记账）。</p>
-    <p><strong>用量展示口径</strong>：<code>recordTurnUsage</code> 顺手写下的 <code>lastPrompt*</code> 是界面提示符显示 <code>18.2k / 50k</code> 的唯一来源——厂商给了 <code>usage</code> 就是精确值，厂商没给（流式或端点不带）则是本地估算、界面加 <code>≈</code> 前缀。没有该会话的观测（新会话、刚折叠、换了模型）时显示 <code>— / 50k</code>。<strong>不要</strong>用估算值冒充精确值，也<strong>不要</strong>用它判断折叠（折叠只看请求前的估算）。</p>
+    <p><strong>用量展示口径</strong>：<code>recordTurnUsage</code> 顺手写下的 <code>lastPrompt*</code> 是界面汇总行显示 <code>上下文 18.2k / 50k</code> 的唯一来源——厂商给了 <code>usage</code> 就是精确值，厂商没给（流式或端点不带）则是本地估算、界面加 <code>≈</code> 前缀。没有该会话的观测（新会话、刚折叠、换了模型）时显示 <code>— / 50k</code>。<strong>不要</strong>用估算值冒充精确值，也<strong>不要</strong>用它判断折叠（折叠只看请求前的估算）。</p>
 
     <div class="callout">
       <div class="ct"><code>BudgetWarning</code> 不是异步订阅</div>
