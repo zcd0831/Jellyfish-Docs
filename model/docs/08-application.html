@@ -321,6 +321,7 @@
         <tr><td><code>PlanCreationException</code></td><td><code>generate_plan</code> 草案不合法时抛出（携带 <code>P_INVALID_PLAN</code>），由处理器转成工具错误结果</td></tr>
         <tr><td><code>ModelInvocationException</code></td><td>端口失败时抛出，携带上下文自己的 <code>DomainError</code>（<code>M_*</code>）</td></tr>
         <tr><td><code>Json</code> / <code>JsonText</code></td><td>应用层自带的极简 JSON 解析与转义：<strong>不引 JSON 库</strong>（模块边界见《模块-应用层》「模块边界」）</td></tr>
+        <tr><td><code>SessionTranscript</code></td><td>会话回放的只读视图：会话头（标题 / 模型 / 创建时间）+ 最近若干条记录 + “是否还有更早”</td></tr>
         <tr><td><code>RunSessionProvider</code></td><td>延迟取 <code>RunSessionUseCase</code>：子代理启动器 → 用例 → 外循环 → 内循环 → 工具执行 → 启动器 是构造环，用"取的时候才要"打断它（应用层不引容器类型）</td></tr>
         <tr><td><code>CommandParsing</code></td><td><code>run_command</code> 的<strong>浅结构解析</strong>（纯字符串、不碰文件与进程）：引号消解后得到每段的 <code>程序 / 参数 / 操作数 / 重定向</code> 与段间拓扑；<code>sh -c</code> / <code>eval</code> 的实参递归解析（深度上限 2）。<strong>解析失败要能被上层区分出来</strong>——fail-closed 的前提（行动 5.8.1 规则 10）</td></tr>
         <tr><td><code>CommandRules</code></td><td>绊线判定项（结构化谓词，不是正则）与结论三态：<code>放行 / 需审批(原因) / 无法解析</code></td></tr>
@@ -573,6 +574,10 @@ flowchart LR
     X --&gt; C["Cancelled 分支：不弹错误"]
     C --&gt; S["attempt = INTERRUPTED + SessionCancelled"]
     </pre>
+
+    <h3><span class="sec">8.9.4.2</span>查看 / 回放（<code>transcript(sessionId, limit)</code>）</h3>
+    <p><code>ManageSessionUseCase.transcript(sessionId, limit)</code> 是<strong>只读</strong>分支：会话头 + 最近 <code>limit</code> 条记录（多取一条判断“还有更早的”），返回 <code>SessionTranscript</code>。外壳用它实现“打开历史会话时把以前的对话显示出来”；它不参与上下文组装（模型侧窗口由 <code>ContextWindowService</code> 推导），也不改任何状态。</p>
+    <p>回放口径由外壳决定：只展示用户与助手正文，工具调用压成一行、摘要一行、<code>SYSTEM</code> 注入与 <code>reasoning</code> 不展示（<code>reasoning</code> 是模型私有状态，只回放给产者）。</p>
 
     <h3>8.9.5 <code>AdjustPolicyUseCase.adjust(changes)</code></h3>
     <pre class="mermaid">
