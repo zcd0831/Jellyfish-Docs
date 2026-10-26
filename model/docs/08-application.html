@@ -336,7 +336,7 @@
               <li>计划类事件的 <code>message</code> 必须带进度：<code>计划：&lt;goal&gt;（N 步）</code>、<code>第 3/5 步：&lt;描述&gt;</code>、<code>第 3/5 步 完成/失败（原因）</code>；</li>
               <li>工具类事件的 <code>message</code> 必须带工具名与结果：<code>read_file（参数摘要）</code>、<code>read_file 成功 12ms</code> / <code>read_file 失败：原因</code>；<code>ask_user</code> 不重复发（问题本身已呈现）；</li>
               <li><code>USAGE</code> 的 <code>message</code> 带本轮与累计用量：<code>+1.2k / 累计 3.1k / 上限 1.0M</code>；</li>
-              <li><code>CONTEXT_USAGE</code> 的 <code>message</code> 带“当前上下文占用 / 模型输入上限”：<code>上下文 12.3k / 50k</code>（每轮组装上下文后发一次，供界面常驻展示）；</li>
+              <li><code>CONTEXT_USAGE</code> 的 <code>message</code> 带“最近一次请求的输入用量 / 模型输入上限”：<code>18.2k / 50k</code>。数值是 <code>Budget.lastPrompt*</code>——厂商返回的 <code>prompt_tokens</code>（精确值），厂商没给时为本地估算并加 <code>≈</code>；没有可用的观测（新会话、刚折叠、换了模型）时为 <code>— / 50k</code>。每轮组装上下文后发一次，供界面常驻展示；<strong>折叠判定仍用请求前的估算</strong>，两者不混用；</li>
               <li>外壳按 <code>Kind</code> 决定呈现方式（状态行 or 常驻行），<strong>应用层不关心排版</strong>。</li>
             </ul></blockquote>
 

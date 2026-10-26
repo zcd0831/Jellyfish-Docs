@@ -212,6 +212,9 @@
             +SessionId sessionFamilyRootId
             +long consumedTokens
             +boolean warned
+            +long lastPromptTokens
+            +boolean lastPromptEstimated
+            +String lastPromptSessionId
             +recordUsage(long tokens)
             +shouldWarn(RuntimePolicy) boolean
         }
@@ -484,6 +487,7 @@ flowchart LR
       <li><strong>只预警、不中断</strong>：达到 <code>budgetWarnRatio</code> → 外循环经 <code>ask_user</code> 询问是否继续；同一会话族只报一次。<br/>
           <code>budgetLimitTokens</code> 是会话族的<strong>总额度</strong>（token，用户可调），<code>budgetWarnRatio</code> 是它的百分比——两者缺一不可，否则"越过 80%"没有分母。</li>
       <li>并发（<code>spawn_subagents</code>）：子会话<strong>本地累计</strong>，结束后 <code>settleFromSubSession</code> 一次性归集到根。</li>
+      <li><strong>顺带记一次观测</strong>：<code>lastPromptTokens</code> / <code>lastPromptEstimated</code> / <code>lastPromptSessionId</code> 是“最近一次模型请求的输入用量”，由 <code>BudgetService.recordUsage</code> 顺手写下（厂商给的 <code>prompt_tokens</code>；厂商没给时是本地估算，<code>lastPromptEstimated = true</code>）。它只喂界面常驻展示（提示符里的 <code>18.2k / 50k</code>），<strong>不参与</strong>折叠判定——判定在请求前做，那时还没有厂商值。折叠发生后清空这三项：旧数值已经不再描述当前窗口，界面回到 <code>— / 50k</code>。</li>
     </ul>
 
         <h2><span class="sec">5.5</span>领域服务清单</h2>
@@ -534,7 +538,7 @@ flowchart LR
         <tr><td><code>ModelInvocationResult</code></td><td>VO</td><td>端口出参：文本 + 本次的工具调用请求 + <strong>思维内容 <code>reasoning</code></strong>（思维模式模型才非空；降级/回放用）+ <code>ModelUsage</code> + <strong>实际服务的模型</strong>（降级后可被调用方据此 <code>switchModel</code>）</td></tr>
         <tr><td><code>ChatMessage</code></td><td>VO</td><td>一条对话消息：<code>role</code>（复用 <code>RecordRole</code>）、<code>content</code>、模型请求的工具调用（ASSISTANT）、<code>toolCallId</code>（TOOL_RESULT 回填用）、<strong><code>reasoning</code></strong>（模型私有思维状态，只回放给产者模型）。<strong><code>content</code> 与 <code>tool_calls</code> 同属一条消息</strong>：一次模型响应的文本与全部调用必须放在同一条 assistant 消息里</td></tr>
         <tr><td><code>ToolCall</code></td><td>VO</td><td>模型请求的一次工具调用：<code>callId</code>（协议侧 id，用于回灌结果）、<code>name</code>、<code>argumentsJson</code></td></tr>
-        <tr><td><code>ModelUsage</code></td><td>VO</td><td>一次调用的精确用量：<code>inputTokens</code> / <code>outputTokens</code>（台账口径见《模块-行动》§8.3；厂商不给时由 <code>TokenCounter</code> 估算）</td></tr>
+        <tr><td><code>ModelUsage</code></td><td>VO</td><td>一次调用的用量：<code>inputTokens</code> / <code>outputTokens</code> / <code>estimated</code>（台账口径见《模块-行动》§8.3；厂商不给时由 <code>TokenCounter</code> 估算，并把 <code>estimated</code> 置真，界面据此加 <code>≈</code>）</td></tr>
         <tr><td><code>ExternalToolPort</code></td><td>Port</td><td>REST / MCP 出站调用；由基础设施实现。<strong><code>NATIVE</code> 不走这里</strong>（它是本层的处理器，不是出站调用）</td></tr>
         <tr><td><code>ModelInvocationPort</code></td><td>Port</td><td>模型调用端口；由 <code>ModelInvoker</code> 实现</td></tr>
       </tbody>
@@ -776,7 +780,7 @@ sequenceDiagram
     </table>
     <p>本模块只负责 <code>Model</code> 聚合的规则（<code>ACTIVE</code> 才可调用、<code>contextLimit</code> 独立上限、能力标签）；降级实现见 <a href="09-infrastructure.html">第 9 章</a> 9.11，失败后的状态落点见第 8 章 8.10。</p>
 
-<h3>5.9.4 <code>BudgetService.recordUsage(rootId, tokens)</code>（应用层）</h3>
+<h3>5.9.4 <code>BudgetService.recordUsage(会话, ModelUsage)</code>（应用层）</h3>
     <pre class="mermaid">
 sequenceDiagram
     autonumber
@@ -786,13 +790,14 @@ sequenceDiagram
     participant B as Budget
     participant RP as RuntimePolicy（感知）
 
-    CALLER->>BS: recordUsage(会话, tokens)
+    CALLER->>BS: recordUsage(会话, usage)
     opt 传入的是子会话
         BS->>S: 沿 parentSessionId 上溯取会话族根
         S-->>BS: rootSessionId
     end
-    BS->>B: recordUsage(tokens)（按根定位台账）
-    B->>B: consumedTokens += tokens
+    BS->>B: recordUsage(usage.total())（按根定位台账）
+    B->>B: consumedTokens += usage.total()
+    B->>B: 记下 lastPrompt*（inputTokens / estimated / 会话 id）
     B->>RP: budgetWarnRatio
     alt 首次越过阈值且 warned = false
         B->>B: warned = true
@@ -801,6 +806,7 @@ sequenceDiagram
     end
     </pre>
     <p><strong>要点</strong>：子会话并发时先各自累计，结束后 <code>settleFromSubSession</code> 一次性归集到根，避免并发写同一 <code>Budget</code> 聚合。</p>
+    <p><strong>用量展示口径</strong>：<code>recordUsage</code> 顺手写下的 <code>lastPrompt*</code> 是界面提示符显示 <code>18.2k / 50k</code> 的唯一来源——厂商给了 <code>usage</code> 就是精确值，厂商没给（流式或端点不带）则是本地估算、界面加 <code>≈</code> 前缀。没有该会话的观测（新会话、刚折叠、换了模型）时显示 <code>— / 50k</code>。<strong>不要</strong>用估算值冒充精确值，也<strong>不要</strong>用它判断折叠（折叠只看请求前的估算）。</p>
 
     <div class="callout">
       <div class="ct"><code>BudgetWarning</code> 不是异步订阅</div>
