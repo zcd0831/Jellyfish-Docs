@@ -610,7 +610,7 @@
     <ol>
       <li><strong>一次调用、一个判定</strong>：经验与技能的互斥由<strong>同一次子会话判定</strong>保证；分成两次各判一次，必然出现双写。校验侧再强制一遗：两个都给了就当本次不产出。</li>
       <li><strong>素材就是窗口，不再另行组装</strong>：fork 的是“快照 + 最新 <code>SUMMARY</code> + 覆盖边界之后的全部记录”。因此<strong>早期步骤的证据来自摘要</strong>——这就是《模块-感知》要求摘要指令保留“已完成步骤及其结论/失败原因”的原因。<br/>
-        <strong>只读 <code>content</code>，永不读 <code>reasoning</code></strong>：思维链是模型的原始推理过程，不可跨模型迁移、会把“被自己否决的路径”固化成经验、还可能带用户隐私；且体积大。<code>reasoning</code> 的唯一用途是请求回放（《模块-感知》7.1 规则 15）。<br/>
+        <strong><code>reasoning</code> 会随窗口一起被看到</strong>：fork 复制的是“模型看到的那份”，同一模型下 <code>reasoning</code> 必须回放（协议要求），所以沉淀/反思会读到本轮思维链。这是为了<strong>素材完整 + 命中父请求的缓存前缀</strong>而明确接受的代价：原先“永不读 reasoning”的立论（可能固化被自己否决的路径、可能带隐私）<strong>不再成立</strong>，改由“同一计划只沉淀一次 + 人工可删资产”兜底（04-perception §4.8.1 规则 15）。<br/>
         <strong>不再有“每步轨迹预算”这类口径</strong>：素材口径统一为“窗口”，预算统一为上下文有效上限（原 <code>material()</code> / <code>traceOf()</code> 的字符级裁剪随之取消）。</li>
       <li><strong>子会话只产出、不落盘</strong>：它只走内循环、不建 <code>Plan</code>、不可再 fork、工具白名单为空（工具快照不变以保缓存）；产物是一段结构化文本，不写任何资产。</li>
       <li><strong>谁有权学</strong>：每个会话（含子代理会话）在计划完结时都会走本流程——学习入口因此不是唯一的，容量上限（<code>skillCapacity</code>）与 <code>MERGE</code> 收敛是唯一的闸门。</li>
