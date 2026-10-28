@@ -240,7 +240,7 @@ flowchart LR
       <thead><tr><th>类别</th><th>谁写</th><th>形态</th></tr></thead>
       <tbody>
         <tr><td><strong>人写资产</strong></td><td>用户 / 仓库</td><td>markdown + YAML front-matter（<code>agents/*.md</code>）</td></tr>
-        <tr><td><strong>人写 + 机写混合</strong></td><td>人写；<code>mutable: true</code> 时也可由系统改写</td><td><code>skills/&lt;id&gt;/SKILL.md</code>（front-matter + 五节正文）——<strong>技能没有单独的状态文件</strong>，<code>status</code> / <code>mutable</code> 都在 front-matter 里</td></tr>
+        <tr><td><strong>人写 + 机写混合</strong></td><td>人写；<code>mutable: true</code> 时也可由系统改写</td><td><code>skills/&lt;id&gt;/SKILL.md</code>（front-matter + 五节正文）——<strong>技能没有单独的状态文件</strong>，<code>status</code> / <code>mutable</code> / <code>sourcePlanIds</code> 都在 front-matter 里（后者是写入侧幂等键，人写技能可空）</td></tr>
         <tr><td><strong>系统配置</strong></td><td>界面 / 平台初始化</td><td>纯 JSON（<code>settings.json</code>、<code>tools|providers|models</code>）</td></tr>
         <tr><td><strong>内部状态</strong></td><td>应用</td><td>紧凑单行 JSON / JSONL</td></tr>
       </tbody>

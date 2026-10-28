@@ -61,6 +61,7 @@
             +ExperienceStatus status
             +int appliedCount
             +Date createdAt
+            +List~PlanId~ sourcePlanIds
             +reinforce()
             +penalize()
             +archive()
@@ -294,6 +295,7 @@
 
     <h3>7.4.1 <code>Experience</code></h3>
     <p>沉淀于计划完结时；检索于计划诞生 / 重划时；<strong>语义不绑定任何维度</strong>，全局共享。被 <code>PlanStep.assignedExperienceIds</code> 引用（规划）。</p>
+    <p><code>sourcePlanIds</code> 是<strong>写入侧幂等键</strong>：记录这条经验由哪些计划沉淀而来，合并时累加；写入前若已含本 <code>planId</code> 则整段跳过（§7.8.1 规则 12）。</p>
 
     <h3>7.4.2 <code>Reflection</code></h3>
     <p>重试达阈值后由反思代理产出；<strong>双消费者</strong>：回注本 step 的下一次 attempt（作为失败原因）、作为经验沉淀素材。被 <code>Attempt.reflectionId</code> 引用（规划）。素材 = fork 的当前生效窗口 + 末尾“反思指令 + 失败原因”。</p>
