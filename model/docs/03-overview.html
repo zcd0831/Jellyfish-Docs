@@ -50,7 +50,7 @@ classDiagram
             -List~Record~ records
             -SystemPromptSnapshot systemPromptSnapshot
             +appendRecord(RecordRole, String, ToolResultPayload) Record
-            +buildContextForLlm(ContextWindowPolicy) ContextWindow
+            +buildContextForLlm(TokenEstimator, int) ContextWindow
             +markSummarized(String summary, int coveredThroughSequence)
             +switchModel(ModelId)
             +cancel()
@@ -103,10 +103,6 @@ classDiagram
             -int systemTokens
             -int summaryTokens
             -int windowRecordCount
-        }
-        class ContextWindowPolicy {
-            &lt;&lt;ValueObject&gt;&gt;
-            -int retainRecordCount
         }
         class RuntimePolicy {
             &lt;&lt;AggregateRoot&gt;&gt;
@@ -738,7 +734,6 @@ classDiagram
     Record --&gt; RecordRole
     Session ..&gt; ContextWindow : buildContextForLlm 推导
     ContextWindow *-- ContextUsage
-    ContextWindow ..&gt; ContextWindowPolicy
     SystemPromptAssembler ..&gt; AgentSnapshotInput : 入参
     SystemPromptAssembler ..&gt; SystemPromptSnapshot : 产出
 
@@ -976,7 +971,7 @@ flowchart LR
       <div class="ct">维持这张无环图的三个纪律</div>
       <ol>
         <li><strong>需要别人的内容 → 让调用方取好，用值对象传进来。</strong>
-          例：<code>ContextWindowPolicy</code>、<code>AgentSnapshotInput</code>、<code>DistillationInput</code>、<code>RetrievalInput</code>、<code>FeedbackInput</code>、<code>ModelInvocationRequest</code>。</li>
+          例：<code>AgentSnapshotInput</code>、<code>DistillationInput</code>、<code>RetrievalInput</code>、<code>FeedbackInput</code>、<code>ModelInvocationRequest</code>。</li>
         <li><strong>需要别人的动作 → 走端口。</strong>
           例：<code>ModelInvocationPort</code>（应用层声明 / 基础设施实现）、<code>ExternalToolPort</code>、<code>SkillSopProvider</code>、<code>HumanInteractionPort</code>。</li>
         <li><strong>只读别人的聚合不算依赖。</strong>

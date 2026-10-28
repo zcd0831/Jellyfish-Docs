@@ -563,12 +563,12 @@ sequenceDiagram
     participant BS as BudgetService（行动）
     participant RP as RuntimePolicy（感知）
 
-    IL-&gt;&gt;S: buildContextForLlm(ContextWindowPolicy)
+    IL-&gt;&gt;S: buildContextForLlm(estimator, inputCeiling)
     S--&gt;&gt;IL: ContextWindow
     IL-&gt;&gt;RP: maxReActRounds
     loop 直到模型不再调工具 或 达到 maxReActRounds
         Note over IL: 每轮请求前：ensureWithinLimit（超限则折叠）<br/>并按最新窗口重建 messages（不沿用上一轮的列表）
-        IL-&gt;&gt;S: buildContextForLlm(ContextWindowPolicy)
+        IL-&gt;&gt;S: buildContextForLlm(estimator, inputCeiling)
         S--&gt;&gt;IL: 最新 ContextWindow + 用量
         IL-&gt;&gt;TE: execute(session, tool, args)
         TE--&gt;&gt;IL: 工具结果（成功/失败都只是“结果”）
