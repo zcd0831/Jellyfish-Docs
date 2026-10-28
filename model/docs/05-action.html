@@ -447,6 +447,7 @@ flowchart LR
       <thead><tr><th>内置工具</th><th>入参</th><th>出参</th><th>领域后果</th><th>处理器归属</th></tr></thead>
       <tbody>
         <tr><td><code>generate_plan</code></td><td>计划草案（steps + 每步声明的验证类型）</td><td>"计划已创建"或失败原因</td><td><code>PlanFactory</code> 创建 <code>Plan</code>，raise <code>PlanCreated</code></td><td>规划</td></tr>
+        <tr><td><code>replan_plan</code></td><td>剩余步骤草案（<code>steps</code>，形状同 <code>generate_plan</code>）</td><td>"计划已重划（第 N 代）"或失败原因</td><td><code>Plan.applyReplan()</code> 替换未执行尾部、代次 +1；外循环随后重分配经验并发进度事件 <code>PLAN_REPLAN</code></td><td>规划</td></tr>
         <tr><td><code>submit_step</code></td><td><code>summary</code>（必填）、<code>artifacts?</code></td><td>"已登记"</td><td>内循环据此置 <code>submitted</code>，交外循环验收</td><td>规划（由内循环识别）</td></tr>
         <tr><td><code>ask_user</code></td><td>问题文本</td><td>用户回答</td><td>阻塞同一 ReAct 循环；记 <code>TOOL_REQUEST</code> + <code>TOOL_RESULT</code></td><td>行动</td></tr>
         <tr><td><code>spawn_subagents</code></td><td><code>List&lt;SubagentRequest{agentId, modelId, task}&gt;</code></td><td><code>List&lt;SubagentResult{sessionId, conclusion}&gt;</code></td><td>并行创建子会话、join-all、各子独立超时</td><td>应用（<code>SubagentLauncher</code>，内部调 <code>StartSessionUseCase</code>）</td></tr>
@@ -562,7 +563,7 @@ flowchart LR
       <thead><tr><th>诞生</th><th>变更</th><th>终结</th><th>重建</th></tr></thead>
       <tbody>
         <tr>
-          <td><strong>平台初始化</strong>（13 个内置工具播种：5 个编排 + 8 个本地能力）/ 用户注册外部工具</td>
+          <td><strong>平台初始化</strong>（14 个内置工具播种：6 个编排 + 8 个本地能力）/ 用户注册外部工具</td>
           <td>元数据或 schema 更新、<code>activate</code> / <code>deprecate</code></td>
           <td><code>DEPRECATED</code>（不再进入新会话快照）</td>
           <td>应用启动时载入</td>
@@ -690,7 +691,7 @@ flowchart LR
     E -- 不同意 --&gt; X2[返回“用户拒绝执行”结果]
     E -- 同意 --&gt; F{按 source.type 分发}
     D -- 否 --&gt; F
-    F --&gt;|INTERNAL / PLUGIN / NATIVE| G[处理器注册表&lt;br/&gt;5 个编排 + 8 个本地能力 + 插件注册的处理器]
+    F --&gt;|INTERNAL / PLUGIN / NATIVE| G[处理器注册表&lt;br/&gt;6 个编排 + 8 个本地能力 + 插件注册的处理器]
     F --&gt;|REST / MCP| H[出站调用（工具自带超时）]
     G --&gt; J{结果超长?}
     H --&gt; J

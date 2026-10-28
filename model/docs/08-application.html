@@ -299,6 +299,7 @@
       <thead><tr><th>组件</th><th>职责</th><th>关键协作</th></tr></thead>
       <tbody>
         <tr><td><code>GeneratePlanHandler</code></td><td><code>generate_plan</code> 的处理器：草案校验通过才建计划，失败转工具错误结果</td><td><code>PlanFactory</code>、<code>PlanRepository</code>、<code>CommitScope</code></td></tr>
+        <tr><td><code>ReplanPlanHandler</code></td><td><code>replan_plan</code> 的处理器：草案校验通过才替换未执行尾部（<code>applyReplan</code>），失败转工具错误结果</td><td><code>PlanFactory</code>、<code>PlanRepository</code>、<code>CommitScope</code></td></tr>
         <tr><td><code>SpawnSubagentsHandler</code></td><td><code>spawn_subagents</code> 的处理器：<strong>拒绝子会话再开子代理</strong>，解析请求后交给启动器</td><td><code>SubagentLauncher</code></td></tr>
         <tr><td><code>LoadSkillHandler</code></td><td><code>load_skill</code> 的处理器：取 SOP 文本；注入为 <code>SYSTEM</code> 记录是内循环的职责</td><td><code>SkillSopProvider</code></td></tr>
         <tr><td><code>EnvironmentFeedbackVerifier</code></td><td>验证第二层（<code>ENV_FEEDBACK</code>）的钩子：校验外部系统返回；未配置时返回 <code>UNDETERMINED</code></td><td><code>VerificationRunner</code></td></tr>
@@ -308,7 +309,7 @@
 
     <div class="callout">
       <div class="ct">数字口径</div>
-      7 个用例 + <strong>15 个核心组件</strong> + <strong>13 个工具处理器 / 钩子</strong>（早期增 <code>PlanCompletionCurator</code> / <code>SkillDistillationService</code>；增 <code>PluginAssembler</code>；M45 增 8 个本地能力处理器）。后 13 个是被分发的处理单元（处理器 / 注册表 / 验证钩子），按职责单列一组，不改变用例编排。
+      7 个用例 + <strong>15 个核心组件</strong> + <strong>14 个工具处理器 / 钩子</strong>（早期增 <code>PlanCompletionCurator</code> / <code>SkillDistillationService</code>；增 <code>PluginAssembler</code>；M45 增 8 个本地能力处理器）。后 14 个是被分发的处理单元（处理器 / 注册表 / 验证钩子），按职责单列一组，不改变用例编排。
     </div>
 
     <h3><span class="sec">8.6.1</span>应用层的内部实现类</h3>
@@ -328,7 +329,7 @@
         <tr><td><code>Approvals</code></td><td>人工审批的判定：<strong>先看否定再看肯定</strong>（"不同意"里含着"同意"），工具放行与结果验收共用</td></tr>
         <tr><td><code>TechnicalLog</code></td><td>技术事件出口（事件名 + 耗时 + key=value 字段），实现由基础设施注入；应用层不引日志库</td></tr>
         <tr><td><code>PortRoutes</code></td><td>端口路由表：<code>能力名 → 当前启用者</code>，并发安全、可原子替换（插件实现<strong>实时生效</strong>，见《模块-行动》§7.6）</td></tr>
-        <tr><td><code>SessionToolScope</code></td><td><strong>会话作用域工具白名单</strong>：声明本会话允许调用哪些工具（<strong>默认空、fail-closed</strong>）。fork 型子会话（反思 / 沉淀）与“结论交付”轮共用这套闸门；由 <code>ToolExecutor</code> 在合法性校验阶段执行。越权 ⇒ 返回<strong>失败 <code>TOOL_RESULT</code></strong>（不抛异常，否则工具轮不闭合）；连续 N 次越权 ⇒ 结束会话</td></tr>
+        <tr><td><code>SessionToolScope</code></td><td><strong>会话作用域工具白名单</strong>：声明本会话允许调用哪些工具（<strong>默认空、fail-closed</strong>）。fork 型子会话（反思 / 沉淀）、“结论交付”轮与<strong>重划调用</strong>（白名单 = <code>{replan_plan}</code>）共用这套闸门；由 <code>ToolExecutor</code> 在合法性校验阶段执行。越权 ⇒ 返回<strong>失败 <code>TOOL_RESULT</code></strong>（不抛异常，否则工具轮不闭合）；连续 N 次越权 ⇒ 结束会话</td></tr>
       </tbody>
     </table>
     <blockquote><p><code>ProgressEvent</code> 是 <code>ProgressPort</code> 的入参值对象（<code>Kind</code> + <code>message</code>），面向界面、可丢弃，不属于领域事实。</p>

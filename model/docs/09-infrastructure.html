@@ -196,7 +196,7 @@ flowchart LR
         <tr><td><code>Workspace</code></td><td>工作区根：启动目录求一次 <code>toRealPath()</code>；<code>resolve(path)</code> 对 real path 判定是否在根内（目标不存在时判父目录）；越界返回"工具错误结果"而不是抛异常（行动 5.8.1 规则 9）</td></tr>
         <tr><td><code>LocalToolHandlers</code></td><td>8 个本地能力处理器 + 硬限制（行数、条数、深度、字符数、超时），实现 <code>InternalToolHandler</code> 并注册进同一张处理器注册表——<strong>它们不是端口适配器</strong>，因为本地能力不允许被替换</td></tr>
         <tr><td><code>UrlFetcher</code></td><td><code>fetch_url</code> 的出站 GET：只 <code>http</code>/<code>https</code>，HTML 去标签，超时与失败都当普通结果</td></tr>
-        <tr><td><code>builtin/tools/*.json</code></td><td>13 份工具声明随 jar 走：5 个编排（<code>INTERNAL</code>）+ 8 个本地能力（播种为 <code>NATIVE</code>，处理器名指向本层 <code>LocalToolHandlers</code>）</td></tr>
+        <tr><td><code>builtin/tools/*.json</code></td><td>14 份工具声明随 jar 走：6 个编排（<code>INTERNAL</code>）+ 8 个本地能力（播种为 <code>NATIVE</code>，处理器名指向本层 <code>LocalToolHandlers</code>）</td></tr>
       </tbody>
     </table>
 
