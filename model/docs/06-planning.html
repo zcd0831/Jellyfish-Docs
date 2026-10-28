@@ -422,7 +422,7 @@ flowchart LR
       <li><strong>固化</strong>：<code>SUCCEEDED</code> 后 <code>finalOutput / finalVerificationReportId / attempts</code> 不再变更。</li>
       <li><strong>重划</strong>：<code>applyReplan()</code> 只能替换<strong>未执行</strong>的尾部 step；被替换者置 <code>SUPERSEDED</code> 并<strong>保留</strong>（可审计），<code>replanGeneration + 1</code>。聚合只保证「尾部替换 + 代次递增」这次迁移合法；<strong>「还能不能再重划、用尽后判失败」由外循环保证</strong>。</li>
       <li><strong>重划怎么发起：外循环授权一次“无 step 的自由内循环”</strong>。外循环判定需要重划后，<strong>以 <code>step = null</code> 跑一次内循环</strong>（复用主请求：同一快照、同一窗口、同一工具快照，天然带着执行历史），这次内循环只挂 <code>replan_plan</code> 一个工具；工具成功 ⇒ <code>applyReplan()</code> + 重新分配经验 + 进度事件 <code>PLAN_REPLAN</code>。
-        <strong>失败即终结</strong>：没调工具 / <code>PlanFactory</code> 校验不过 / 模型不可用 ⇒ 直接 <code>terminate()</code>，<strong>不再重划</strong>（否则重划失败又触发重划，无限递归）。
+        <strong>失败即终结</strong>：没调工具 / <code>PlanFactory</code> 校验不过 ⇒ 直接 <code>terminate()</code>，<strong>不再重划</strong>（否则重划失败又触发重划，无限递归）；<strong>模型不可用 / 取消属于环境故障</strong>⇒ 上抛、不推进任何状态（与规则 9 同一口径）。
         权力归属不变：<strong>唯一有权推进计划状态机的是外循环</strong>——它判定并授权，工具只执行被授权的迁移。这次调用的记录进流水（可审计），但<strong>不计入任何 <code>attempt.recordRange</code></strong>。它也不是 <code>Plan</code> 里的一个 step：插 meta step 会污染“步骤分解”的语义与“第 x/N 步”计数。</li>
       <li><strong>结局</strong>：COMPLETED / FAILED 都是终态；两者都会触发经验沉淀。FAILED 后不再执行计划，但<strong>仍要跑一轮“结论交付”自由内循环</strong>（见 6.9 关键分支）。</li>
       <li><strong>单写者</strong>：执行严格串行 + 单一调度者，聚合不设乐观锁版本号。</li>
