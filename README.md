@@ -1,12 +1,13 @@
 # Jellyfish-Docs
 
-Jellyfish 的**领域模型文档**：一份 Markdown 源 + 一套纯静态 HTML 文档站。
+Jellyfish 的**文档仓库**：领域模型的 Markdown 源与纯静态 HTML 文档站，外加一份「怎么跑起来」的首次运行指南。
 没有构建步骤，克隆下来双击 `model/docs/index.html` 就能读。
 
 ## 目录结构
 
 ```
 Jellyfish-Docs/
+├── 首次运行.md            # 怎么把它跑起来：构建、数据目录、供应商/模型配置、会话命令、排障
 └── model/
     ├── 模型图.md            # 领域模型总图（按模块分组）+ 聚合/服务/事件/规则
     ├── 模块-感知.md          # 感知：会话、上下文流水、提示词快照、窗口折叠、运行策略
@@ -35,6 +36,7 @@ Jellyfish-Docs/
 
 ## 阅读方式
 
+- **想先跑起来**：读 [`首次运行.md`](首次运行.md)。
 - **想看图文**：打开 `model/docs/index.html`（`file://` 直接可用，不请求任何后端）。
 - **想看源文**：直接读 `model/模型图.md` 与四份模块文档。
 - **看图**：每张图右上角有缩放控件（− / + / 适应宽度 / 100% / 全屏）；也支持 `Ctrl`（macOS 为 `⌘`）+ 滚轮缩放、拖动平移、双击适应宽度，`Esc` 退出全屏。
@@ -58,5 +60,5 @@ HTML 站的 Mermaid 图通过 CDN 加载（`mermaid@10.9.1`）。断网时图会
 
 | 仓库 | 关系 |
 | --- | --- |
-| [Jellyfish](https://github.com/zcd0831/Jellyfish) | 内核，本文档描述的领域模型来源 |
+| [Jellyfish](https://github.com/zcd0831/Jellyfish) | 内核，本文档描述的领域模型来源，《首次运行》的操作对象 |
 | [Jellyfish-Plugins](https://github.com/zcd0831/Jellyfish-Plugins) | 官方插件 |
