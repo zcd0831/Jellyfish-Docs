@@ -1029,7 +1029,7 @@ flowchart LR
     <p><strong>四条伴随规则</strong>：</p>
     <ul>
       <li><strong>工具只有一类</strong>：<code>generate_plan</code>、<code>submit_step</code>、<code>ask_user</code>、<code>spawn_subagents</code>、<code>load_skill</code> 都是普通内置工具，靠"返回结果"改变领域状态；</li>
-      <li><code>generate_plan</code> 成功后<strong>不打断内循环</strong>，模型确认后自然收敛，下一轮迭代转入计划执行；</li>
+      <li><code>generate_plan</code> 成功后<strong>不打断内循环</strong>，模型确认后自然收敛，下一轮迭代转入计划执行；一个 <code>run</code> 里可以<strong>串行</strong>产出多个计划，每次出现新的 <code>planId</code> 都重新播报 <code>PLAN_CREATED</code>（重划用 <code>PLAN_REPLAN</code>）；</li>
       <li>计划 <code>COMPLETED</code> 后会再跑一轮<strong>自由内循环</strong>，由模型产出最终答复（结论交付）；</li>
       <li><strong>三条出口</strong>：未收敛（撞轮次上限）⇒ 判失败后<strong>继续</strong>；无计划且收敛 ⇒ <strong>结束</strong>；有计划、收敛但<strong>未提交</strong> ⇒ <strong>挂起</strong>（Attempt 不落终态，等用户输入）；</li>
       <li>计划 <code>FAILED</code>（重划用尽）也会补一轮<strong>结论交付</strong>，把失败原因与已沉淀内容告诉用户；取消 / 模型不可用 / 挂起不补；</li>

@@ -541,7 +541,7 @@ sequenceDiagram
       <tbody>
         <tr><td>无 Plan 且内循环收敛</td><td>本次交互结束，会话停在原处（会话没有状态，见《模块-感知》§7.1 规则 7）</td></tr>
         <tr><td>内循环里 <code>generate_plan</code> 成功</td><td>本轮收敛后，下一次迭代 <code>hasExecutablePlan()</code> 为真，转入计划执行</td></tr>
-        <tr><td>计划 <code>COMPLETED</code></td><td>再跑一轮自由内循环，由模型产出<strong>最终答复</strong>（这就是"结论交付"）；完结时由 <code>PlanCompletionCurator</code> <strong>一次判定</strong>产出「经验? / 技能?」（用过技能 ⇒ 判改进；没用过 ⇒ 判沉淀）</td></tr>
+        <tr><td>计划 <code>COMPLETED</code></td><td>再跑一轮自由内循环，由模型产出<strong>最终答复</strong>（这就是"结论交付"）；完结时由 <code>PlanCompletionCurator</code> <strong>一次判定</strong>产出「经验? / 技能?」（用过技能 ⇒ 判改进；没用过 ⇒ 判沉淀）。<strong>该轮里可以再次 <code>generate_plan</code></strong> 产出下一个计划：下一轮迭代会重新播报 <code>PLAN_CREATED</code>、重新分配经验；两个计划<strong>串行</strong>不重叠，与"同一时刻只有一个可执行计划"不冲突</td></tr>
         <tr><td>计划 <code>FAILED</code>（外循环判定重划用尽 → <code>terminate()</code>）</td><td><code>terminate()</code> → 沉淀并写“已沉淀”告知记录 → <strong>补一轮“结论交付”自由内循环</strong>，由模型把失败原因与已沉淀内容告诉用户 → 收敛退出。<strong>取消 / 模型不可用 / 挂起不补这一轮</strong>（取消不该再发请求，模型不可用发不出去）</td></tr>
         <tr><td><strong>“结论交付”轮</strong>（计划完结后 / 终局失败后）</td><td>该轮<strong>禁用工具调用</strong>：不能改 <code>tools</code> 快照（会破坏缓存前缀），改用<strong>会话作用域工具白名单置空</strong>，任何工具调用返回失败 <code>TOOL_RESULT</code>；<code>submit_step</code> 不可用（已无当前 step）；该轮失败<strong>静默收敛</strong>，<code>RunOutcome</code> 不变，且不得触发新的反思/沉淀</td></tr>
         <tr><td><strong>模型不可用</strong>（<code>ModelInvoker</code> 抛出）</td><td><code>run()</code> <strong>立即返回</strong>，不推进任何聚合状态、不消耗重试、不触发反思/重划；step 保持 RUNNING、<code>Attempt</code> 不结束；<strong>已发出的工具调用补一条中止 <code>TOOL_RESULT</code></strong>（闭合工具轮）；仅提示用户（不自动重试）</td></tr>
