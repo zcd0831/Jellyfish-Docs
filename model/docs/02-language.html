@@ -97,7 +97,9 @@
         <tr><td><strong>沉淀（蒸馏）</strong></td><td>distillation</td><td>计划结束时，把这次的反思蒸馏成一条"经验"。只有能让任务最终成功的反思才算好素材。</td></tr>
         <tr><td><strong>经验</strong></td><td><code>Experience</code></td><td>一条可复用的教训：什么场景下、该怎么做。<strong>不绑定任何代理或工具</strong>，全局共享。</td></tr>
         <tr><td><strong>置信度</strong></td><td><code>ConfidenceScore</code></td><td>这条经验有多可信（0~1）。被用对了加分，用错了减分，低到一定程度就淘汰。</td></tr>
-        <tr><td><strong>检索</strong></td><td><code>ExperienceRetriever</code></td><td>新计划生成时，让一个子代理从经验库里挑出"对这几步有用的"。</td></tr>
+        <tr><td><strong>检索</strong></td><td><code>ExperienceRetriever</code></td><td>新计划生成时，让一个内置代理从经验库里挑出"对这几步有用的"。</td></tr>
+        <tr><td><strong>fork 子会话</strong></td><td><code>internal</code> 子会话</td><td>把父会话当前生效窗口（快照 + 最新摘要 + 记录）原样复制到子会话，只在末尾追一句指令。反思与沉淀都走它：信息完整、能命中缓存前缀。</td></tr>
+        <tr><td><strong>Draft</strong></td><td>—</td><td>fork 子会话产出的<strong>结构化草案</strong>（经验或技能，二选一）。<strong>子会话只产出，父侧才落盘</strong>。</td></tr>
       </tbody>
     </table>
 
@@ -105,8 +107,8 @@
     <table>
       <thead><tr><th>术语</th><th>英文 / 代码名</th><th>通俗解释</th></tr></thead>
       <tbody>
-        <tr><td><strong>运行策略</strong></td><td><code>RuntimePolicy</code></td><td>所有"用户可以调"的全局参数：重试几次、什么时候反思、窗口多长、经验库多大……</td></tr>
-        <tr><td><strong>安全余量</strong></td><td><code>inputSafetyMargin</code></td><td>算上下文上限时预留的 token（默认 10000），防止估算偏差。<strong>不是给输出预留的。</strong></td></tr>
+        <tr><td><strong>运行策略</strong></td><td><code>RuntimePolicy</code></td><td>所有"用户可以调"的全局参数：重试几次、什么时候反思、折叠后留多少条、经验库多大……</td></tr>
+        <tr><td><strong>安全余量</strong></td><td><code>inputSafetyMargin</code></td><td>算上下文上限时预留的 token（默认 10000），防止估算偏差；<strong>主请求与摘要请求共用这份余量</strong>（摘要指令、快照边角都靠它）。<strong>不是给输出预留的。</strong></td></tr>
         <tr><td><strong>最大 ReAct 轮次</strong></td><td><code>maxReActRounds</code></td><td>唯一一道硬闸：一次尝试里最多让模型连多少轮工具。超了就判失败。</td></tr>
       </tbody>
     </table>

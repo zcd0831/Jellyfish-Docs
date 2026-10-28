@@ -112,8 +112,7 @@
         }
         class ContextWindowPolicy {
             &lt;&lt;ValueObject&gt;&gt;
-            -int recordCount
-            -double systemRatioLimit
+            -int retainRecordCount
         }
         class RecordRole {
             &lt;&lt;Enumeration&gt;&gt;
@@ -144,8 +143,7 @@
             +int maxReActRounds
             +int summarizationTokenThreshold
             +int inputSafetyMargin
-            +int contextWindowRecordCount
-            +double systemRecordRatioLimit
+            +int collapseRetainRecordCount
             +int toolResultTruncateLength
             +int subagentExecutionTimeoutMillis
             +int experienceCapacity
@@ -308,7 +306,7 @@ flowchart LR
       <thead><tr><th>参数组</th><th>参数</th><th>主要消费者</th></tr></thead>
       <tbody>
         <tr><td>重试与反思</td><td><code>maxRetries</code>、<code>reflectionThreshold</code>、<code>maxReplanGeneration</code>、<code>maxReActRounds</code></td><td>规划</td></tr>
-        <tr><td>上下文</td><td><code>summarizationTokenThreshold</code>、<code>inputSafetyMargin</code>、<code>contextWindowRecordCount</code>、<code>systemRecordRatioLimit</code>、<code>toolResultTruncateLength</code></td><td>感知（本模块）</td></tr>
+        <tr><td>上下文</td><td><code>summarizationTokenThreshold</code>、<code>inputSafetyMargin</code>、<code>collapseRetainRecordCount</code>（<strong>折叠后保留的记录条数</strong>，默认 20）、<code>toolResultTruncateLength</code></td><td>感知（本模块）</td></tr>
         <tr><td>经验</td><td><code>experienceCapacity</code>、<code>experienceTopN</code>、<code>experiencePerPlan</code>、<code>experienceInitialConfidence</code>、<code>experienceConfidenceStep</code>、<code>experienceRetireThreshold</code></td><td>记忆</td></tr>
         <tr><td>技能</td><td><code>skillCapacity</code>（<strong>ACTIVE 技能总数上限</strong>，含人写、不含 jar 内置；到限即停止自动沉淀并提醒）</td><td>记忆</td></tr>
         <tr><td>预算与执行</td><td><code>budgetWarnRatio</code>、<code>budgetLimitTokens</code>、<code>subagentExecutionTimeoutMillis</code>、<code>modelFallbackChain</code>、<code>trustedToolIds</code></td><td>行动</td></tr>
@@ -346,7 +344,7 @@ flowchart LR
         <tr>
           <td><code>ContextWindowService</code></td>
           <td>应用</td>
-          <td>上下文计量与折叠：<code>ensureWithinLimit(Session)</code> 经端口取模型档案 → 算有效上限 → 量测窗口 → 超限则触发摘要并追加 <code>SUMMARY</code>；另有 <code>forceCollapse(Session)</code> 承接「请求超限」后的<strong>强制折叠一次</strong></td>
+          <td>上下文计量与折叠：<code>ensureWithinLimit(Session)</code> 经端口取模型档案 → 算有效上限 → 量测窗口 → 超限则触发<strong>影子主请求摘要</strong>并把窗口收回到配置条数；另有 <code>forceCollapse(Session)</code> 承接「请求超限」后的<strong>强制折叠一次</strong>。由<strong>内循环在每次模型请求前</strong>调用</td>
           <td><code>ModelInvocationPort</code>、<code>TokenCounter</code>、<code>RuntimePolicy</code></td>
         </tr>
       </tbody>
@@ -364,7 +362,7 @@ flowchart LR
         <tr><td><code>SkillSummarySnapshot</code></td><td>VO</td><td>技能的 <code>name + description + triggerCondition</code>（渐进披露的浅层，<strong>只有它被冻结</strong>；SOP 正文靠 <code>load_skill</code> 现读，接受漂移）</td></tr>
         <tr><td><code>ContextWindow</code></td><td>VO</td><td><code>buildContextForLlm()</code> 的产物：真正发给模型的那批记录（已排序）+ 用量</td></tr>
         <tr><td><code>ContextUsage</code></td><td>VO</td><td>只读投影：<code>usedTokens / inputCeiling / systemTokens / summaryTokens / windowRecordCount</code></td></tr>
-        <tr><td><code>ContextWindowPolicy</code></td><td>VO</td><td>组装策略入参（来自 <code>RuntimePolicy</code> 的两个值）：窗口条数（<strong>只数非 SYSTEM、非 SUMMARY 的记录</strong>）、SYSTEM 占比上限</td></tr>
+        <tr><td><code>ContextWindowPolicy</code></td><td>VO</td><td>组装策略入参（来自 <code>RuntimePolicy</code>）：<code>retainRecordCount</code>——<strong>折叠后保留的记录条数</strong>（软上限，按整轮对齐；只用于折叠后的保留区，<strong>不是滑动窗口大小</strong>）</td></tr>
         <tr><td><code>AgentSnapshotInput</code></td><td>VO</td><td><code>SystemPromptAssembler</code> 的入参：<code>agentId</code>、<code>basePrompt</code>、<code>promptVariables</code>、<strong>已过滤 <code>ACTIVE</code></strong> 的 <code>activeTools</code> / <code>activeSkills</code>、<code>sopReferencedToolNames</code>（一致性告警用，本期恒空）</td></tr>
         <tr><td><code>ModelProfile</code></td><td>VO</td><td>端口返回的模型档案：<code>maxInputTokens / maxOutputTokens</code>（感知据此算有效上限，<strong>不直接引用 <code>Model</code> 聚合</strong>）</td></tr>
         <tr><td><code>ModelInvocationPort</code></td><td>Port</td><td>模型调用的唯一出口（选模型、降级、调用、计 token、提供模型档案）；由【行动】<code>ModelInvoker</code> 实现</td></tr>
@@ -398,7 +396,7 @@ flowchart LR
       </tbody>
     </table>
 
-    <h4>规则清单（17 条）</h4>
+    <h4>规则清单（23 条）</h4>
     <ol>
       <li><strong>唯一创建入口</strong>：只有应用层 <code>StartSessionUseCase</code> 能创建会话；两个触发点——用户发起对话、主会话发起子代理。</li>
       <li><strong>创建时必须指定</strong> <code>agentId</code> 与 <code>modelId</code>（缺省取默认）；<strong>Agent 在会话内不可切换</strong>，Model 可切换（<strong>降级或用户显式切换</strong>）。切换只允许在<strong>工具轮已闭合</strong>之后：存在未拿到结果的 <code>TOOL_REQUEST</code> 时拒绝切换（模型私有状态无法跨模型/跨厂商续接）。</li>
@@ -409,19 +407,27 @@ flowchart LR
       <li><strong>会话树</strong>：<code>parentSessionId</code> 组树；<strong>父会话取消 ⇒ 级联取消所有子会话</strong>；<strong>子代理不得再开子代理</strong>（深度恒为 1）。</li>
       <li><strong>没有状态</strong>：<code>sessions/&lt;id&gt;/</code> 存在即可用，不存在即不可用（含已归档，见《模块-感知》§7.1 规则 7）。“在跑”是进程内事实，不落盘；归档 = 压成包移走，此后应用不再认识它。删除 = 物理消失。</li>
       <li><strong>销毁</strong>：物理删除该会话族的 <code>Record</code>、<code>Plan</code>、<code>Budget</code>；<strong>已沉淀的 <code>Experience</code> 保留</strong>（记忆模块全局资产）。</li>
-      <li><strong>上下文组装</strong>（<code>buildContextForLlm(policy)</code>）为<strong>三步推导 + 一次降级</strong>：
-        ① 取全部 <code>role = SYSTEM</code> 的记录（<strong>运行期注入</strong>：SOP 注入 + 工具注入 + 经验注入）；经验注入由外循环在<strong>步骤启动前</strong>写一条带 <code>step=&lt;id&gt;</code> 标记的 SYSTEM 记录，正文来自 <code>ExperienceRepository.find(id)</code>，同一步只注入一次；系统提示词来自 <code>SystemPromptSnapshot</code>，<strong>不落 <code>Record</code></strong>，由调用方作为 <code>systemPrompt</code> 单独传给模型；
-        ② 取最新一条 <code>SUMMARY</code> 记录（若有）；
-        ③ 取最近 <code>policy.recordCount</code> 条<strong>未被最新 <code>SUMMARY</code> 覆盖</strong>（<code>sequence &gt; summaryCoversUpTo</code>）、且非 SYSTEM、非 SUMMARY 的记录，并<strong>按 <code>turnId</code> 整轮对齐</strong>（规则 14）；<code>SUMMARY</code> 已由 ② 单独取出；若再计入，折叠会退化为往窗口里堆摘要；
-        ④ 降级：若 <code>systemTokens / usedTokens &gt; policy.systemRatioLimit</code> ⇒ 只保留系统提示词快照，丢弃 SOP 与工具注入。</li>
-      <li><strong><code>SYSTEM</code> / <code>SUMMARY</code> 不参与第 ③ 步计数</strong>：<code>role = SYSTEM</code> 的记录不被第 ③ 步的"最近 n 条"挤出，只能被第 ④ 步<strong>整体</strong>裁剪；<code>SUMMARY</code> 只取最新一条（由 ② 负责）。</li>
+      <li><strong>上下文组装</strong>（<code>buildContextForLlm(policy)</code>）是<strong>两区 + 累积窗口</strong>，没有“条数上限”：
+        <ul>
+          <li><strong>不可变区 A</strong> = <code>SystemPromptSnapshot</code>：不落 <code>Record</code>、随会话冻结、永远占据请求的 <code>system</code> 字段、<strong>不参与任何裁剪</strong>，也不进摘要素材。它跨请求逐字节一致，因而成为提示词缓存的稳定前缀（折叠也只作废可变区，不动这一段）。</li>
+          <li><strong>可变区 B</strong> = 全部 <code>Record</code> 流水，<strong>含 <code>role = SYSTEM</code> 的运行期注入</strong>（SOP 注入 + 工具注入 + 经验注入）；经验注入由外循环在<strong>步骤启动前</strong>写一条带 <code>step=&lt;id&gt;</code> 标记的 SYSTEM 记录，正文来自 <code>ExperienceRepository.find(id)</code>，同一步只注入一次。</li>
+          <li><strong>窗口记录</strong> = 最新一条 <code>SUMMARY</code>（若有）+ <code>sequence &gt; summaryCoversUpTo</code> 的<strong>全部</strong> B 区记录，按 <code>turnId</code> 整轮对齐（规则 14）；<strong>不设条数上限</strong>——前沿（覆盖边界）固定，后沿随对话持续下移，直到折叠把窗口收回配置条数（见 4.9.2）。</li>
+        </ul>
+      </li>
+      <li><strong><code>SUMMARY</code> 不参与轮对齐与条数计数</strong>；<code>role = SYSTEM</code> 的注入记录参与窗口，但同样不参与整轮分组。<strong>SYSTEM 注入只能被覆盖边界淘汰</strong>（折叠时随区间一起进摘要并要求保留其要点），不再有“系统占比超限整体降级”——原第 ④ 步与 <code>systemRatioLimit</code> 已废弃。</li>
       <li><strong>可推导状态不落库</strong>：窗口边界与用量都是推导结果，不持久化；会话续跑时重新推导。<strong>例外</strong>：<code>SUMMARY.summaryCoversUpTo</code> 是“这份摘要覆盖了哪些记录”的事实，不可重算，必须落库。</li>
-      <li><strong>聚合不依赖配置聚合</strong>：策略以 <code>ContextWindowPolicy</code> <strong>值对象入参</strong>传入，<code>Session</code> 不引用 <code>RuntimePolicy</code>，也不读取任何阈值。</li></li>
-      <li><strong>系统提示词与流水分离</strong>：基础提示词只存在于 <code>SystemPromptSnapshot</code>（会话开启时冻结），<code>SYSTEM</code> 记录只承载运行期注入（<code>load_skill</code> 的 SOP、工具/经验注入）；发给模型时前者走 <code>systemPrompt</code>、后者并入同一 <code>system</code> 字段，二者都不进 <code>messages</code>。第 ④ 步降级只保留快照，即丢弃全部注入。</li>
-      <li><strong>模型输出轮是窗口的原子单位</strong>：一轮 = <code>[ASSISTANT] + (TOOL_REQUEST + TOOL_RESULT)⁺</code>（无工具调用则只有 <code>ASSISTANT</code>）。第 ③ 步的裁剪<strong>不得切在轮中间</strong>：首条落在一轮中间 ⇒ 把该轮起点整轮拉进窗口（<code>recordCount</code> 是软上限）；尾部出现未闭合的 <code>TOOL_REQUEST</code> ⇒ <strong>不变量违反</strong>（不静默修补）。理由：请求合法性的最小单位是这个轮，不是单条记录。</li>
+      <li><strong>聚合不依赖配置聚合</strong>：策略以 <code>ContextWindowPolicy</code> <strong>值对象入参</strong>传入，<code>Session</code> 不引用 <code>RuntimePolicy</code>，也不读取任何阈值。</li>
+      <li><strong>系统提示词与流水分离</strong>：基础提示词只存在于 <code>SystemPromptSnapshot</code>（会话开启时冻结），<code>SYSTEM</code> 记录只承载运行期注入（<code>load_skill</code> 的 SOP、工具/经验注入）；发给模型时前者单独走 <code>system</code> 字段，后者<strong>并入 <code>messages</code>、按 <code>sequence</code> 归位</strong>（不再“合并进 system 字段”：它们与普通记录同受覆盖边界约束）。快照不参与裁剪，也不进摘要素材——它是缓存的稳定前缀。</li>
+      <li><strong>模型输出轮是窗口的原子单位</strong>：一轮 = <code>[ASSISTANT] + (TOOL_REQUEST + TOOL_RESULT)⁺</code>（无工具调用则只有 <code>ASSISTANT</code>）。折叠划定保留区时<strong>不得切在轮中间</strong>：首条落在一轮中间 ⇒ 把该轮起点整轮拉进保留区（<code>collapseRetainRecordCount</code> 是软上限）；尾部出现未闭合的 <code>TOOL_REQUEST</code> ⇒ <strong>不变量违反</strong>（不静默修补）。理由：请求合法性的最小单位是这个轮，不是单条记录。</li>
       <li><strong>模型私有状态只回放给产者</strong>：<code>reasoning</code>（DeepSeek 的 <code>reasoning_content</code>；Anthropic 的签名 thinking、Gemini 的 thoughtSignature 同理）是模型私有状态，必须与 <code>producerModelId</code> 一起记录。回放规则：<strong>只有目标模型 == <code>producerModelId</code> 时才回传</strong>；切换模型后旧状态一律丢弃（签名/语义都不可跨模型搬运）。它<strong>计入 token 计量</strong>（真占输入），但<strong>不进摘要、不进沉淀、不进展示</strong>（理由见《模块-记忆》8.6）；半截输出不落（流式中断 ⇒ 整条 assistant 输出连同 <code>reasoning</code> 都不落）。</li>
       <li><strong>一个响应 = 一条 assistant 消息</strong>：同一 <code>turnId</code> 的 <code>content</code>（若有）与<strong>全部</strong> <code>tool_calls</code> 在回放时必须合成<strong>一条</strong> assistant 消息，其 <code>TOOL_RESULT</code> 按 callId 顺序紧随其后；不得把一个响应拆成“文本一条 + 每个调用一条”。这是 OpenAI / Anthropic / Gemini 共同的原生形态，拆开会被端点拒绝（错误文案可能完全与形态无关）。</li>
-      <li><strong>最新 <code>SUMMARY</code> 必须真的发给模型</strong>：它由第 ② 步进入窗口，调用方（<code>ReActLoop</code>）把它作为一条 <code>user</code> 消息放在 <code>messages</code> 最前；只参与计量不发出去，等于折叠后模型完全丢失历史。</li>
+      <li><strong>最新 <code>SUMMARY</code> 必须真的发给模型</strong>：它由窗口推导带出，调用方（<code>ReActLoop</code>）把它作为一条 <code>user</code> 消息放在 <code>messages</code> 最前；只参与计量不发出去，等于折叠后模型完全丢失历史。</li>
+      <li><strong>折叠判定挂在<u>内循环每一次模型请求之前</u></strong>，不是“每个外层迭代一次”；并且 <code>messages</code> 必须按最新窗口<strong>每轮重建</strong>——否则一次内循环里的多轮工具调用会把请求撑爆，折叠了也用不上。触发条件是 <code>usedTokens + 摘要指令估算 &gt; inputCeiling</code>（摘要请求 = 主请求 + 指令，必须把指令 token 算进去）。</li>
+      <li><strong>摘要是“影子主请求”</strong>：同一快照、同一 tools 快照、<code>messages</code> = 当前窗口 + 末尾追加一条 <code>user</code> 摘要指令。指令<strong>不落 <code>Record</code></strong>；模型回复<strong>只用于生成 <code>SUMMARY</code></strong>，不落 <code>ASSISTANT</code> 记录、不生成 <code>turnId</code>、不参与轮对齐。指令必须放在<strong>末尾</strong>（放最前会破坏缓存前缀，也会被长对话淹没）。</li>
+      <li><strong>折叠后窗口回落到配置条数</strong>：保留区 = 覆盖边界之后最近的整轮、累计记录条数 ≥ <code>collapseRetainRecordCount</code>；<code>summaryCoversUpTo</code> = 保留区前一条的 <code>sequence</code>，且<strong>单调不减</strong>。新摘要<strong>吞并旧摘要</strong>（素材天然含旧摘要正文——它本来就在窗口最前），旧 <code>SUMMARY</code> 记录留在流水里但不再进窗口。</li>
+      <li><strong>摘要指令必须要求保留</strong>：用户目标与约束、已确认事实、<strong>已完成的步骤及其结论/失败原因</strong>、已做操作与结果、待办、已加载技能与经验要点。理由：沉淀与反思只 fork 当前窗口，长计划早期步骤的原文已被折叠，证据只能来自摘要（见《模块-记忆》§8.6）。</li>
+      <li><strong>折叠失败分两种，不可合并处理</strong>：① <strong>因输入超限失败</strong> ⇒ 从待摘要区间的<strong>最旧一整轮</strong>开始丢弃素材后重试，被丢弃的区间必须在摘要正文里声明“更早的 N 条记录（seq a..b）因超出输入上限未纳入摘要”；丢弃不得触及保留区。② <strong>因模型不可用/取消失败</strong> ⇒ 返回、不推进任何状态、不落半截 <code>SUMMARY</code>、不丢任何记录。</li>
+      <li><strong>折叠只能发生在工具轮闭合之后、下一次请求之前</strong>；<code>SUMMARY</code> <strong>不进入</strong> <code>Attempt.recordRange</code>（<code>extendAttemptRange</code> 推进区间时跳过 <code>SUMMARY</code>），否则摘要会被当成执行证据。摘要请求里模型若返回 <code>tool_calls</code> ⇒ 不执行，按摘要失败处理。</li>
     </ol>
 
     <h3>4.8.2 <code>RuntimePolicy</code> 的生命周期</h3>
@@ -460,48 +466,51 @@ flowchart LR
     <p>预算创建、标题生成、持久化与提交都在应用层；<code>startSubSession</code> 由应用层 <code>SubagentLauncher</code> 调用，<strong>不自建 <code>Budget</code></strong>（沿 <code>parentSessionId</code> 上溯到根）。</p>
 
 <h3>4.9.2 <code>ContextWindowService.ensureWithinLimit(session)</code>（应用层）</h3>
-    <p>阻塞式地保证本次模型调用前上下文不超限；必要时折叠。</p>
+    <p>在内循环<strong>每一次模型请求之前</strong>保证上下文不超限；必要时折叠。方案是“<strong>累积窗口 + 折叠收回</strong>”：前沿固定在摘要覆盖边界，后沿随对话持续下移；一旦估算用量（含摘要指令）超过有效上限，就把窗口收回配置条数。</p>
     <pre class="mermaid">
 sequenceDiagram
     autonumber
-    participant APP as 外循环 / 内循环
+    participant IL as 内循环 ReActLoop
     participant CW as ContextWindowService
     participant RP as RuntimePolicy
     participant PORT as ModelInvocationPort（行动）
     participant S as Session
 
-    APP-&gt;&gt;CW: ensureWithinLimit(session)
-    CW-&gt;&gt;RP: summarizationTokenThreshold / contextWindowRecordCount / systemRecordRatioLimit
+    IL-&gt;&gt;CW: 每次模型请求前 ensureWithinLimit(session)
+    CW-&gt;&gt;RP: summarizationTokenThreshold / collapseRetainRecordCount / inputSafetyMargin
     CW-&gt;&gt;PORT: describe(activeModelId) 取模型档案
     CW-&gt;&gt;CW: inputCeiling = min(策略阈值, maxInputTokens − inputSafetyMargin)
     CW-&gt;&gt;S: buildContextForLlm(ContextWindowPolicy)
     S--&gt;&gt;CW: ContextWindow（窗口记录 + ContextUsage）
-    alt usage.usedTokens ≤ inputCeiling
-        CW--&gt;&gt;APP: 直接返回
-    else 超限
-        CW--&gt;&gt;APP: 应用事件 SummarizationStarted（界面显示“压缩中”）
-        CW-&gt;&gt;CW: 从未被摘要覆盖的记录里选最旧的一段（整轮）&lt;br/&gt;累加到用量回落到上限以内
-        CW-&gt;&gt;PORT: invoke(摘要请求)&lt;br/&gt;提示词不进 Record
+    alt usedTokens + 摘要指令估算 ≤ inputCeiling
+        CW--&gt;&gt;IL: 直接返回，按当前窗口发请求
+    else 需要折叠
+        CW-&gt;&gt;CW: 保留区 = 覆盖边界之后最近的整轮&lt;br/&gt;累计条数 ≥ collapseRetainRecordCount（软上限）
+        CW-&gt;&gt;CW: 待摘要区间 = 旧 SUMMARY 正文 + 覆盖边界之后到保留区之前的记录
+        CW-&gt;&gt;CW: 应用事件 SummarizationStarted（界面显示“压缩中”）
+        CW-&gt;&gt;PORT: invoke(影子主请求)&lt;br/&gt;同一快照 + 同一 tools + 窗口 + 末尾摘要指令&lt;br/&gt;指令不进 Record
         PORT--&gt;&gt;CW: 摘要文本（token 记账到会话族根）
-        CW-&gt;&gt;S: markSummarized(summary, coveredThroughSequence)
+        CW-&gt;&gt;S: markSummarized(summary, 保留区前一条 sequence)
         S-&gt;&gt;S: appendRecord(SUMMARY)&lt;br/&gt;窗口下次推导自动排除被覆盖记录
         S--&gt;&gt;CW: raise SummarizationCompleted
-        CW--&gt;&gt;APP: 返回（下一次推导即得到新窗口）
+        CW--&gt;&gt;IL: 返回（窗口回落为：新 SUMMARY + 保留区）
     end
 </pre>
 
-    <h4>要点（10 条）</h4>
+    <h4>要点（12 条）</h4>
     <ol>
-      <li><strong>压缩阻塞</strong>：期间不发起新的模型调用（摘要那一次除外）。</li>
-      <li><strong>摘要提示词用户不可见</strong>、且<strong>不进 <code>Record</code></strong>；用户只能看到压缩状态与压缩结果（<code>SUMMARY</code> 记录）。</li>
-      <li>摘要由<strong>当前会话模型</strong>生成，token 记到<strong>会话族根</strong>。</li>
-      <li><strong>折叠就是“把窗口变短”</strong>：折叠区间只能从未被覆盖的记录里选，且必须<strong>从最旧一条开始、按整轮累加</strong>（不能挖中间的段落）；写 <code>SUMMARY</code> 时同时记下 <code>summaryCoversUpTo = 该区间最后一条的 sequence</code>，窗口推导下次自动只取边界之后的记录。<strong>选少了会折不掉超限，选多了会把刚说过的话也折进去</strong>，所以区间长度以“移除后的估算用量 ≤ 有效上限”为终止条件，且至少保留一轮不折。</li>
-      <li><strong>有效上限</strong> = <code>min(summarizationTokenThreshold, maxInputTokens − inputSafetyMargin)</code>（<code>inputSafetyMargin</code> 默认 <strong>10000</strong>）。语义是"<strong>安全余量</strong>"（抵御估算偏差、系统提示临时插入），<strong>不是输出预留</strong>——输入与输出是两个独立上限（<code>maxOutputTokens</code> 单独生效）。</li>
-      <li><strong>计量口径唯一</strong>：本服务不自己实现 tokenizer，一律经 <code>ModelInvocationPort</code> 计量，保证与真实计费一致。</li>
-      <li><strong>用量随请求传下去</strong>：推导出的 <code>ContextUsage.usedTokens</code> 由调用方填入 <code>ModelInvocationRequest.estimatedPromptTokens</code>，供行动侧硬校验；<strong>行动不得反向回查 <code>Session</code></strong>。</li>
-      <li><strong>承接"请求超限"的补充折叠</strong>：行动 <code>ModelInvoker</code> 抛「请求超限」时，外循环调本服务<strong>强制折叠一次</strong>再重试；<strong>不消耗重试名额</strong>；仍超限则同"模型不可用"返回并提示。</li>
-      <li><strong>摘要必须进请求</strong>：最新 <code>SUMMARY</code> 由窗口第 ② 步带出，<code>ReActLoop</code> 把它作为一条 <code>user</code> 消息放到 <code>messages</code> 最前（带固定前缀）；只记账不发送等于折叠后丢失全部历史。</li>
-      <li><strong>折叠不写 reasoning</strong>：被折叠的旧工具轮不再进窗口，它们的 <code>reasoning</code> 也不需要回放；摘要文本里不得包含 <code>reasoning</code>（只汇总可见内容与工具结果）。</li>
+      <li><strong>触发点在内循环每一次模型请求之前</strong>（不是每个外层迭代），且 <code>messages</code> 必须按最新窗口<strong>每轮重建</strong>：否则一次内循环里的多轮工具调用会一路把请求撑爆，折叠了也用不上。</li>
+      <li><strong>摘要是影子主请求</strong>：同一快照、同一 tools 快照、<code>messages</code> = 当前窗口 + 末尾一条 <code>user</code> 摘要指令。指令<strong>不进 <code>Record</code></strong>；回复<strong>只用于生成 <code>SUMMARY</code></strong>，不落 <code>ASSISTANT</code> 记录、不生成 <code>turnId</code>。<strong>指令必须在末尾</strong>：放最前会破坏缓存前缀，也会被长对话淹没。</li>
+      <li><strong>触发条件必须计入指令</strong>：<code>usedTokens + 摘要指令估算 &gt; inputCeiling</code>。否则摘要请求总比它要解决的那个请求先超限。</li>
+      <li><strong>折叠就是“把窗口收回配置条数”</strong>：保留区 = 覆盖边界之后最近的整轮、累计记录条数 ≥ <code>collapseRetainRecordCount</code>（软上限，默认 20）；<code>summaryCoversUpTo</code> = 保留区前一条的 <code>sequence</code>，且<strong>单调不减</strong>。折叠只发生在工具轮闭合之后。</li>
+      <li><strong>新摘要吞并旧摘要</strong>：素材 = 旧 <code>SUMMARY</code> 正文 + 覆盖边界之后到保留区之前的全部记录（含 SYSTEM 注入）。旧摘要本来就在窗口最前，所以“吞并”天然成立；旧 <code>SUMMARY</code> 记录留在流水里但不再进窗口。</li>
+      <li><strong>摘要指令必须要求保留</strong>：目标与约束、已确认事实、<strong>已完成的步骤及其结论/失败原因</strong>、已做操作与结果、待办、已加载技能与经验要点（沉淀与反思只 fork 当前窗口，早期证据只能靠它）。</li>
+      <li><strong>失败分两种</strong>：① <strong>因输入超限失败</strong> ⇒ 从待摘要区间<strong>最旧一整轮</strong>开始丢素材后重试，被丢区间必须在摘要正文里声明（不得触及保留区）；② <strong>因模型不可用/取消失败</strong> ⇒ 返回、不推进状态、不落半截 <code>SUMMARY</code>、不丢记录。</li>
+      <li><strong>有效上限</strong> = <code>min(summarizationTokenThreshold, maxInputTokens − inputSafetyMargin)</code>（<code>inputSafetyMargin</code> 默认 <strong>10000</strong>）。它的语义是“<strong>主请求与摘要请求共用的安全余量</strong>”（抵御估算偏差、摘要指令与快照边角），<strong>不是输出预留</strong>——输入与输出是两个独立上限。</li>
+      <li><strong>计量口径唯一</strong>：本服务不自己实现 tokenizer，一律经 <code>ModelInvocationPort</code> 计量；摘由<strong>当前会话模型</strong>生成，token 记到<strong>会话族根</strong>。摘要请求里模型若返回 <code>tool_calls</code> ⇒ 不执行，按失败处理。</li>
+      <li><strong>承接“请求超限”的补充折叠</strong>：行动 <code>ModelInvoker</code> 抛「请求超限」时，外循环调本服务<strong>强制折叠一次</strong>再重试；<strong>不消耗重试名额</strong>；仍超限则同“模型不可用”返回并提示。这条与前置判定要去重，同一轮不得折两次。</li>
+      <li><strong>摘要必须进请求</strong>：最新 <code>SUMMARY</code> 由窗口推导带出，<code>ReActLoop</code> 把它作为一条 <code>user</code> 消息放到 <code>messages</code> 最前（固定前缀）；只记账不发送等于折叠后丢失全部历史。</li>
+      <li><strong>折叠不写 reasoning</strong>：被折叠的旧工具轮不再进窗口，它们 <code>reasoning</code> 也不需要回放；摘要文本里不得包含 <code>reasoning</code>（只汇总可见内容与工具结果）。</li>
     </ol>
 
     <h3>4.9.3 <code>SystemPromptAssembler.assemble(AgentSnapshotInput)</code>（领域）</h3>
@@ -542,13 +551,11 @@ sequenceDiagram
     <p>把"记录流水"推导为"本次发给模型的窗口 + 用量"。它是<strong>纯函数式的推导行为</strong>：不改状态、不落库、不读配置聚合。</p>
     <pre class="mermaid">
 flowchart TD
-    A[入参：ContextWindowPolicy] --&gt; B[① 取全部 role=SYSTEM 记录&lt;br/&gt;仅运行期注入：SOP / 工具 / 经验&lt;br/&gt;系统提示词来自快照，不落 Record]
-    B --&gt; C[② 取最新一条 SUMMARY 记录（若有）]
-    C --&gt; D[③ 取最近 policy.recordCount 条&lt;br/&gt;未被摘要覆盖（在覆盖边界之后）且非 SYSTEM、非 SUMMARY&lt;br/&gt;并整轮对齐（不切在模型输出轮中间）]
-    D --&gt; E[④ 计算 usedTokens / systemTokens / summaryTokens]
-    E --&gt; F{systemTokens / usedTokens&lt;br/&gt;大于 policy.systemRatioLimit ?}
-    F -- 否 --&gt; H[输出 ContextWindow]
-    F -- 是 --&gt; G[退化为：只保留系统提示词快照&lt;br/&gt;丢弃 SOP 与工具注入] --&gt; H
+    A[入参：ContextWindowPolicy] --&gt; S0[快照不进 messages&lt;br/&gt;由调用方作为 system 单独传]    
+    A --&gt; B[① 取最新一条 SUMMARY 记录（若有）]
+    B --&gt; C[② 取覆盖边界之后（sequence &gt; summaryCoversUpTo）的全部记录&lt;br/&gt;含 SYSTEM 运行期注入，排除 SUMMARY&lt;br/&gt;按 turnId 整轮对齐，不设条数上限]
+    C --&gt; E[③ 计算 usedTokens / systemTokens / summaryTokens]
+    E --&gt; H[输出 ContextWindow&lt;br/&gt;systemTokens 只用于展示，不参与判定]
 </pre>
 
     <h4>四条 DDD 约束</h4>

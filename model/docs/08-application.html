@@ -276,14 +276,14 @@
     <table>
       <thead><tr><th>组件</th><th>职责</th><th>关键协作</th></tr></thead>
       <tbody>
-        <tr><td><code>ExecutionLoop</code></td><td>外循环 do-while：算上下文 → 取 step → 跑一次内循环 → 三条出口（继续 / 结束 / 挂起）。<strong>唯一有权推进计划状态机的地方</strong></td><td><code>ContextWindowService</code>、<code>ReActLoop</code>、<code>VerificationRunner</code>、经验三件套、<code>CommitScope</code></td></tr>
-        <tr><td><code>ReActLoop</code></td><td>内循环：组装上下文 → 调模型（可流式，chunk 交给外壳）→ 执行工具 → 落流水 → 判定收敛与提交</td><td><code>ToolExecutor</code>、<code>BudgetService</code>、<code>HumanInteractionPort</code>、<code>SubagentLauncher</code></td></tr>
-        <tr><td><code>ContextWindowService</code></td><td>计量 → 算有效上限 → 超限则折叠（调模型生成摘要）→ 追加 <code>SUMMARY</code></td><td><code>ModelInvocationPort</code>、<code>RecordStore</code>、<code>TokenCounter</code></td></tr>
-        <tr><td><code>ToolExecutor</code></td><td>工具执行唯一入口：合法性校验 → 放行审批 → 按来源分发 → 截断归档</td><td><code>ExternalToolPort</code>、<code>SkillSopProvider</code>、<code>HumanInteractionPort</code>、<code>ArtifactStore</code></td></tr>
+        <tr><td><code>ExecutionLoop</code></td><td>外循环 do-while：算上下文 → 取 step → 跑一次内循环 → 三条出口（继续 / 结束 / 挂起）。<strong>唯一有权推进计划状态机的地方</strong>。重划以“<strong>无 step 的自由内循环 + <code>replan_plan</code></strong>”发起；计划完结与终局失败都补一轮<strong>结论交付</strong></td><td><code>ContextWindowService</code>、<code>ReActLoop</code>、<code>VerificationRunner</code>、经验三件套、<code>CommitScope</code></td></tr>
+        <tr><td><code>ReActLoop</code></td><td>内循环：<strong>每次模型请求前</strong>折叠判定 → <strong>按最新窗口重建 messages</strong> → 调模型（可流式，chunk 交给外壳）→ 执行工具 → 落流水 → 判定收敛与提交</td><td><code>ContextWindowService</code>、<code>ToolExecutor</code>、<code>BudgetService</code>、<code>HumanInteractionPort</code>、<code>SubagentLauncher</code></td></tr>
+        <tr><td><code>ContextWindowService</code></td><td>计量 → 算有效上限 → 超限则折叠（<strong>影子主请求</strong>生成摘要）→ 追加 <code>SUMMARY</code>；折叠后窗口回落到配置条数</td><td><code>ModelInvocationPort</code>、<code>RecordStore</code>、<code>TokenCounter</code></td></tr>
+        <tr><td><code>ToolExecutor</code></td><td>工具执行唯一入口：合法性校验（含<strong>会话作用域工具白名单</strong>）→ 放行审批 → 按来源分发 → 截断归档</td><td><code>ExternalToolPort</code>、<code>SkillSopProvider</code>、<code>HumanInteractionPort</code>、<code>ArtifactStore</code>、<code>SessionToolScope</code></td></tr>
         <tr><td><code>VerificationRunner</code></td><td>执行 <code>VerificationChain</code> 给出的有序层</td><td><code>VerificationChain</code>（领域）、<code>ModelInvocationPort</code>、<code>HumanInteractionPort</code></td></tr>
         <tr><td><code>SubagentLauncher</code></td><td>并行发起子会话（即 <code>spawn_subagents</code> 工具的实现）：各自独立超时、join-all、预算归集</td><td><code>StartSessionUseCase</code>、<code>BudgetService</code>、<code>ProgressPort</code></td></tr>
         <tr><td><code>ExperienceRetriever</code></td><td>计划诞生/重划时：全库 <code>ACTIVE</code> → 语义筛选 → 返回 <code>Map&lt;StepId, List&lt;ExperienceId&gt;&gt;</code></td><td><code>ExperienceRepository</code>、<code>SubagentLauncher</code></td></tr>
-        <tr><td><code>PlanCompletionCurator</code></td><td><strong>计划完结的唯一归纳入口</strong>：起一次子代理，产出「经验? / 技能?」（至多一个），按"同一件事只进一边"分派</td><td><code>SubagentLauncher</code>、<code>ExperienceDistillationService</code>、<code>SkillDistillationService</code>、<code>RecordStore</code></td></tr>
+        <tr><td><code>PlanCompletionCurator</code></td><td><strong>计划完结的唯一归纳入口</strong>：fork 当前生效窗口到 <code>internal</code> 子会话，收一份<strong>结构化 Draft</strong>（经验? / 技能?，至多一个），父侧校验 + 全局写段落盘 + 写告知记录</td><td><code>SubagentLauncher</code>、<code>ExperienceDistillationService</code>、<code>SkillDistillationService</code>、<code>RecordStore</code></td></tr>
         <tr><td><code>ExperienceDistillationService</code></td><td><strong>只做写入</strong>：接收经验产物 → 与库内经验去重（合并 + 提置信度）或新建</td><td><code>ExperienceRepository</code>、<code>CommitScope</code></td></tr>
         <tr><td><code>SkillDistillationService</code></td><td>接收技能产物：校验四件套 → <code>CREATE / MERGE</code> 判定（<code>mutable</code>、<code>ACTIVE</code>、容量）→ <code>create</code> / <code>revise</code> → 写 <code>SKILL.md</code></td><td><code>SkillDefinition</code>、<code>CatalogRepository</code>、<code>RuntimePolicy</code>、<code>CommitScope</code></td></tr>
         <tr><td><code>ExperienceFeedbackService</code></td><td>step 结束后回写奖惩（规则在 <code>Experience</code> 聚合内）</td><td><code>ExperienceRepository</code></td></tr>
@@ -328,12 +328,13 @@
         <tr><td><code>Approvals</code></td><td>人工审批的判定：<strong>先看否定再看肯定</strong>（"不同意"里含着"同意"），工具放行与结果验收共用</td></tr>
         <tr><td><code>TechnicalLog</code></td><td>技术事件出口（事件名 + 耗时 + key=value 字段），实现由基础设施注入；应用层不引日志库</td></tr>
         <tr><td><code>PortRoutes</code></td><td>端口路由表：<code>能力名 → 当前启用者</code>，并发安全、可原子替换（插件实现<strong>实时生效</strong>，见《模块-行动》§7.6）</td></tr>
+        <tr><td><code>SessionToolScope</code></td><td><strong>会话作用域工具白名单</strong>：声明本会话允许调用哪些工具（<strong>默认空、fail-closed</strong>）。fork 型子会话（反思 / 沉淀）与“结论交付”轮共用这套闸门；由 <code>ToolExecutor</code> 在合法性校验阶段执行。越权 ⇒ 返回<strong>失败 <code>TOOL_RESULT</code></strong>（不抛异常，否则工具轮不闭合）；连续 N 次越权 ⇒ 结束会话</td></tr>
       </tbody>
     </table>
     <blockquote><p><code>ProgressEvent</code> 是 <code>ProgressPort</code> 的入参值对象（<code>Kind</code> + <code>message</code>），面向界面、可丢弃，不属于领域事实。</p>
-            <p><code>Kind</code> 共 12 种，按用途分三类：<strong>阶段类</strong>（<code>SUMMARIZING</code> / <code>SUMMARY_DONE</code> / <code>RETRY_SCHEDULED</code> / <code>MODEL_SWITCHED</code> / <code>SUBAGENTS_RUNNING</code>）、<strong>计划类</strong>（<code>PLAN_CREATED</code> / <code>STEP_STARTED</code> / <code>STEP_FINISHED</code>）、<strong>工具类</strong>（<code>TOOL_STARTED</code> / <code>TOOL_FINISHED</code>），外加用量类 <code>USAGE</code> 与上下文类 <code>CONTEXT_USAGE</code>。约定：</p>
+            <p><code>Kind</code> 共 13 种，按用途分三类：<strong>阶段类</strong>（<code>SUMMARIZING</code> / <code>SUMMARY_DONE</code> / <code>RETRY_SCHEDULED</code> / <code>MODEL_SWITCHED</code> / <code>SUBAGENTS_RUNNING</code>）、<strong>计划类</strong>（<code>PLAN_CREATED</code> / <code>PLAN_REPLAN</code> / <code>STEP_STARTED</code> / <code>STEP_FINISHED</code>）、<strong>工具类</strong>（<code>TOOL_STARTED</code> / <code>TOOL_FINISHED</code>），外加用量类 <code>USAGE</code> 与上下文类 <code>CONTEXT_USAGE</code>。约定：</p>
             <ul>
-              <li>计划类事件的 <code>message</code> 必须带进度：<code>计划：&lt;goal&gt;（N 步）</code>、<code>第 3/5 步：&lt;描述&gt;</code>、<code>第 3/5 步 完成/失败（原因）</code>；</li>
+              <li>计划类事件的 <code>message</code> 必须带进度：<code>计划：&lt;goal&gt;（N 步）</code>、<code>重划（第 2 代）：&lt;goal&gt;（4 步）</code>、<code>第 3/5 步：&lt;描述&gt;</code>、<code>第 3/5 步 完成/失败（原因）</code>。<strong>步数只计未被 <code>SUPERSEDED</code> 的步骤</strong>（重划会保留被替换的旧 step，算进去会让 N 越来越大）；</li>
               <li>工具类事件的 <code>message</code> 必须带工具名与结果：<code>read_file（参数摘要）</code>、<code>read_file 成功 12ms</code> / <code>read_file 失败：原因</code>；<code>ask_user</code> 不重复发（问题本身已呈现）；</li>
               <li><code>USAGE</code> 的 <code>message</code> 带本轮与累计用量：<code>+1.2k / 累计 3.1k / 上限 1.0M</code>；</li>
               <li><code>CONTEXT_USAGE</code> 的 <code>message</code> 带“最近一次请求的输入用量 / 模型输入上限”：<code>18.2k / 50k</code>。数值是 <code>Budget.lastPrompt*</code>——厂商返回的 <code>prompt_tokens</code>（精确值），厂商没给时为本地估算并加 <code>≈</code>；没有可用的观测（新会话、刚折叠、换了模型）时为 <code>— / 50k</code>。每轮组装上下文后、以及主循环每次响应记账后各发一次（后者让界面立刻看到本轮实际用量），供界面在一轮结束时的汇总行里展示；<strong>折叠判定仍用请求前的估算</strong>，两者不混用；</li>
@@ -407,12 +408,13 @@
         <tr><td>T5</td><td>token 记账</td><td><code>budget.json</code> 累加</td><td>—</td></tr>
         <tr><td>T6</td><td>步骤结案</td><td><code>VerificationReport</code> + <code>plan.json</code></td><td>跑验证链（模型 / 人工）</td></tr>
         <tr><td>T7</td><td>尝试判败 / 中断</td><td><code>plan.json</code></td><td>—</td></tr>
-        <tr><td>T8</td><td>经验分配</td><td><code>plan.json</code>（<code>assignedExperienceIds</code>）</td><td>内置检索代理（<code>ModelInvocationPort</code>）</td></tr>
-        <tr><td>T9</td><td>计划重划</td><td><code>plan.json</code>（代次+1、<code>SUPERSEDED</code>）</td><td>调模型生成新计划</td></tr>
+        <tr><td>T8</td><td>经验分配</td><td><code>plan.json</code>（<code>assignedExperienceIds</code>）</td><td>内置检索代理（<code>ModelInvocationPort</code>）；素材超限时按置信度升序整条裁剪，仍超则本次不分配</td></tr>
+        <tr><td>T9</td><td>计划重划</td><td><code>plan.json</code>（代次+1、<code>SUPERSEDED</code>）</td><td>以“无 step 内循环 + <code>replan_plan</code>”调模型生成新草案；<strong>成功后重新分配经验</strong></td></tr>
         <tr><td>T10</td><td>经验反馈</td><td><code>experience/*.json</code></td><td>—</td></tr>
-        <tr><td>T11</td><td>经验沉淀</td><td><code>experience/*.json</code>（新建/合并）</td><td>读轨迹 + 内置归纳代理（<code>ModelInvocationPort</code>）</td></tr>
-        <tr><td>T13</td><td>技能沉淀</td><td><code>skills/&lt;id&gt;/SKILL.md</code>（新建）</td><td>内置归纳代理（<code>ModelInvocationPort</code>）</td></tr>
-        <tr><td>T14</td><td>技能改进</td><td><code>skills/&lt;id&gt;/SKILL.md</code>（原子重写）</td><td>内置归纳代理（<code>ModelInvocationPort</code>）</td></tr>
+        <tr><td>T11</td><td>经验沉淀</td><td><code>experience/*.json</code>（新建/合并）</td><td>fork 当前窗口到 <code>internal</code> 子会话，收 Draft</td></tr>
+        <tr><td>T13</td><td>技能沉淀</td><td><code>skills/&lt;id&gt;/SKILL.md</code>（新建）</td><td>fork 当前窗口到 <code>internal</code> 子会话，收 Draft</td></tr>
+        <tr><td>T14</td><td>技能改进</td><td><code>skills/&lt;id&gt;/SKILL.md</code>（原子重写）</td><td>同上（末尾指令换成“判改进”）</td></tr>
+        <tr><td>T17</td><td>沉淀告知</td><td>追加一条 <code>SYSTEM</code> 告知记录（有界摘要 + <code>planId</code> 标记）</td><td>—（必须在 T11/T13/T14 成功之后）</td></tr>
         <tr><td>T15</td><td>安装插件</td><td><code>plugins/&lt;id&gt;/plugin.json</code></td><td>校验 jar（<code>apiVersion</code> / 依赖）</td></tr>
         <tr><td>T16</td><td>授权 / 停用</td><td><code>plugins/&lt;id&gt;/plugin.json</code>（<code>grantedCapabilities</code>）</td><td>装载或卸载扩展</td></tr>
         <tr><td>T12</td><td>会话状态</td><td><code>meta.json</code>（归档/取消/<code>ModelSwitched</code>）</td><td>—</td></tr>
@@ -423,6 +425,8 @@
       <div class="ct">全局资产写段</div>
       T11 / T13 / T14 都在 <code>CommitScope</code> 的<strong>全局资产写段</strong>内执行：并行子会话可能同时沉淀，容量"读—判—写"必须在该段内完成。一次计划完结中，T11 与 T13/T14 <strong>至多发生一个</strong>（同一件事只进一边）。<br/>
       <strong>环境故障时的 T4</strong>：本轮已发出、还没拿到结果的工具调用，由 <code>ReActLoop</code> 在异常上抛前补一条 <code>TOOL_RESULT</code>（内容为“本轮中止：…”）；它是流水事实，不是状态推进，因此不占用 T7，也不消耗重试。<br/>
+      <strong>沉淀幂等键在写入侧</strong>：T11/T13/T14 写入前先比对来源 <code>planId</code>（经验可多值 <code>sourcePlanIds</code>），已包含则整段跳过——包括 T17 的告知记录。流水里的 <code>planId</code> 标记只负责“不重复播报”，不能当作唯一幂等凭据（落盘成功、写记录失败时标记并不存在）。<br/>
+      <strong>T17 的顺序不可颠倒</strong>：先落盘、后告知。反过来会出现“模型告诉用户已沉淀、资产却没落盘”。<br/>
       <strong>T12（会话状态）也承接模型切换</strong>：<code>SwitchModelUseCase</code> 只改 <code>meta.json</code> 里的 <code>activeModelId</code> 并派发 <code>ModelSwitched</code>；它<strong>不动流水</strong>——旧模型的 reasoning 靠 <code>producerModelId</code> 在回放时自动失效。
     </div>
 
@@ -455,10 +459,10 @@ sequenceDiagram
     U2->>EL: loop(session)
 
     loop 每轮一次内循环
-        EL->>CW: ensureWithinLimit(session)
-        CW->>CW: count → 有效上限 → 必要时调模型摘要
-        CW->>CS: stageAppend(SUMMARY)；commit
         EL->>RL: runIteration(session, step?)
+        RL->>CW: （每次模型请求前）ensureWithinLimit(session)
+        CW->>CW: count → 有效上限 → 需要时影子主请求摘要
+        CW->>CS: stageAppend(SUMMARY)；commit
         RL-->>EL: IterationResult(isConverged, submitted, summary)
 
         alt 未收敛（撞 maxReActRounds）
@@ -485,7 +489,7 @@ sequenceDiagram
     end
 
     EL->>EP: publishAfterCommit(PlanCompleted / PlanFailed)
-    Note over EL: 计划完结后，由用例显式调用经验沉淀与反馈（不经事件）
+    Note over EL: 计划完结（含终局失败）后，由用例显式调用沉淀编排（不经事件）<br/>再补一轮“结论交付”自由内循环（工具白名单置空）
     </pre>
 
     <h3>8.9.2 <code>StartSessionUseCase.start(agentId?, modelId?, firstInput)</code></h3>
@@ -643,6 +647,41 @@ sequenceDiagram
       <li><strong>真实生效靠 <code>PluginAssembler</code></strong>：用例只改"意图"，装载/卸载与路由表切换在装配层完成——所以插件<strong>崩溃或加载失败不会污染授权意图</strong>。</li>
     </ol>
 
+    <h3>8.9.7 fork 型子会话（反思 / 沉淀）与落盘播报</h3>
+    <p>反思与沉淀不再是“组装一段素材再调一次模型”，而是<strong>把父会话的生效窗口原样 fork 成 <code>internal</code> 子会话</strong>，只在末尾追加不同指令。这样信息量完整，且能命中父请求写下的提示词缓存前缀。</p>
+    <h4>子会话的四条硬约束</h4>
+    <ol>
+      <li><strong>只走内循环</strong>：不建 <code>Plan</code>、不进 <code>plans/</code>、不触发验证、<strong>不可再 fork</strong>（反思/沉淀失败不得再触发反思/沉淀）。</li>
+      <li><strong>工具快照不可变</strong>：为保缓存前缀，tools 原样拷贝父会话快照（哪怕大部分用不到）；限制靠 <code>SessionToolScope</code> 白名单<strong>在执行层</strong>拦，越权返回失败 <code>TOOL_RESULT</code>。</li>
+      <li><strong>提示词追加在末尾 user</strong>：system 保持快照；末尾 = 反思/沉淀指令（+ 反思时带上失败原因）。代理的 <code>basePrompt</code> 也归入末尾指令，<strong>不得作 system</strong>，否则前缀作废。</li>
+      <li><strong>只产出 Draft，不写任何状态</strong>：产物是一段结构化文本（经验草案 / 技能草案，互斥二选一），由父侧解析。子会话流水只作审计，<strong>不作证据</strong>；用量经 <code>settleFromSubSession</code> 归集，<strong>不写 prompt 观测</strong>。</li>
+    </ol>
+    <h4>落盘与播报链（顺序不可颠倒）</h4>
+    <pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant OL as ExecutionLoop
+    participant SUB as internal 子会话（内循环）
+    participant CUR as PlanCompletionCurator
+    participant DS as 沉淀服务（记忆）
+    participant CS as CommitScope（globalWrite）
+    participant S as Session（父）
+
+    OL-&gt;&gt;CUR: curate(session, plan)
+    CUR-&gt;&gt;SUB: fork 生效窗口 + 末尾指令（沉淀 / 改进）
+    SUB--&gt;&gt;CUR: 结构化 Draft（经验? / 技能?）
+    CUR-&gt;&gt;CUR: 代码解析 + 校验（形状 / 非空 / 互斥）
+    alt 解析或校验失败
+        CUR--&gt;&gt;OL: 本次不产出（静默，不播报）
+    else 通过
+        CUR-&gt;&gt;CS: globalWrite { 判重 / 合并 / 容量 / 互斥 + 来源 planId 幂等 }
+        CS--&gt;&gt;CUR: 已写入
+        CUR-&gt;&gt;S: 追加 SYSTEM 告知记录（有界摘要 + planId 标记）
+        Note over OL: 后续“结论交付”轮带上这条记录，<br/>模型在最终回复里自然说出“已沉淀 / 已生成”
+    end
+</pre>
+    <p>要点：解析和校验一律由<strong>代码</strong>完成（不让 LLM 解析 LLM 的输出）；告知记录只放“id + 场景/名称 + 一句话结论”，不塞 SOP 全文；<strong>写入失败就不写告知记录、也不播报</strong>。</p>
+
 <h2><span class="sec">8.10</span>错误与恢复策略</h2>
     <table>
       <thead><tr><th>情形</th><th>语义</th><th>应用层动作</th><th>聚合落点</th></tr></thead>
@@ -650,6 +689,11 @@ sequenceDiagram
         <tr><td>工具自身失败（超时/异常/半截）</td><td>一种工具结果</td><td>回灌模型，ReAct 继续</td><td>只追加 <code>TOOL_RESULT</code></td></tr>
         <tr><td><strong>模型不可用</strong>（备用链全挂）</td><td>环境故障</td><td><code>RunSession</code> 立即返回；不触发反思/重划/重试；<strong>把本轮未闭合的工具调用补记为中止 <code>TOOL_RESULT</code></strong></td><td><strong>不推进 <code>plan</code> / <code>budget</code></strong>；<code>Attempt</code> 不落终态；流水多一条中止事实</td></tr>
         <tr><td><strong>请求超限</strong></td><td>业务预算问题</td><td>强制折叠一次后重试；仍失败按模型不可用处理</td><td>追加 <code>SUMMARY</code>，不动 <code>plan</code></td></tr>
+        <tr><td><strong>摘要请求失败</strong></td><td>分两种，不可合并</td><td>① <strong>输入超限</strong>：从待摘要区间最旧一整轮开始丢素材重试，摘要正文声明被丢区间；② <strong>模型不可用 / 取消</strong>：返回、不推进状态、不落半截 <code>SUMMARY</code>、不丢记录</td><td>① 追加 <code>SUMMARY</code>（带覆盖边界）；② 无</td></tr>
+        <tr><td><strong>重划失败</strong>（未调 <code>replan_plan</code> / 校验不过 / 模型不可用）</td><td>重划用尽</td><td>不再重划，直接 <code>terminate()</code>；随后沉淀 + 结论交付轮（若还能发请求）</td><td><code>Plan.terminate()</code></td></tr>
+        <tr><td><strong>结论交付轮失败</strong></td><td>尽力而为</td><td>静默收敛，<code>RunOutcome</code> 不变；不得触发新的反思/沉淀</td><td>无（结局已定）</td></tr>
+        <tr><td><strong>fork 型子会话越权调用工具</strong></td><td>作用域限制</td><td>返回失败 <code>TOOL_RESULT</code>（“该工具在本会话不可用”）；不弹审批；连续 N 次 ⇒ 结束该子会话</td><td>无</td></tr>
+        <tr><td><strong>沉淀 Draft 不可解析 / 互斥冲突</strong></td><td>本次不产出</td><td>不落盘、不写告知记录、不播报；会话继续</td><td>无</td></tr>
         <tr><td>用户中断</td><td>用户主动</td><td><code>ask</code> 返回 <code>CANCELLED</code>；当前 attempt 收尾</td><td><code>Attempt.outcome = INTERRUPTED</code>（不耗重试）</td></tr>
         <tr><td><strong>切换模型被拒</strong>（工具轮未闭合）</td><td>用户操作与回合边界冲突</td><td>返回 <code>S_TOOL_ROUND_OPEN</code>，不改任何状态；提示等本轮收尾后再切</td><td>无</td></tr>
         <tr><td>崩溃残留</td><td>进程非正常退出</td><td><code>StartupReconciler</code> 按下列 5 条补齐</td><td>视规则而定</td></tr>

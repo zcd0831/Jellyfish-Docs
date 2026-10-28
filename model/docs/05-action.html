@@ -497,8 +497,8 @@ flowchart LR
         <tr>
           <td><code>ToolExecutor</code></td>
           <td>应用</td>
-          <td>工具执行的唯一入口：合法性校验 → 放行审批 → 按来源分发（内部工具处理器 / <code>ExternalToolPort</code>）→ 结果截断归档</td>
-          <td><code>ToolDefinition</code>、<code>AgentDefinition</code>、<code>RuntimePolicy</code>、<code>ExternalToolPort</code>、<code>SkillSopProvider</code>、<code>ArtifactStore</code></td>
+          <td>工具执行的唯一入口：合法性校验（<strong>含会话作用域工具白名单</strong>，越权即返失败结果、不抛异常）→ 放行审批 → 按来源分发（内部工具处理器 / <code>ExternalToolPort</code>）→ 结果截断归档</td>
+          <td><code>ToolDefinition</code>、<code>AgentDefinition</code>、<code>RuntimePolicy</code>、<code>SessionToolScope</code>、<code>ExternalToolPort</code>、<code>SkillSopProvider</code>、<code>ArtifactStore</code></td>
         </tr>
         <tr>
           <td><code>BudgetService</code></td>
