@@ -570,8 +570,9 @@ flowchart LR
         </tr>
       </tbody>
     </table>
-    <h4>规则（8 条）</h4>
+    <h4>规则（9 条）</h4>
     <ol>
+      <li><strong>白名单授权的工具不受“代理绑定”限制</strong>：<code>SessionToolScope</code> 是外循环的显式授权，优先于 <code>AgentDefinition.toolIds</code>；否则 <code>replan_plan</code> 这类内部工具只能进代理清单，日常对话里也会被模型看见。</li>
       <li>工具<strong>严格串行执行</strong>，不存在并发工具调用。</li>
       <li>一次模型响应里出现多个工具调用时，<strong>逐个执行、各自独立成败</strong>（可部分成功）。</li>
       <li><strong>工具失败不是领域状态</strong>：超时 / 异常 / 无返回都作为"一种工具结果"回灌模型，ReAct 继续。</li>

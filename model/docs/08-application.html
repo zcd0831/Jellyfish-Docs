@@ -330,7 +330,7 @@
         <tr><td><code>Approvals</code></td><td>人工审批的判定：<strong>先看否定再看肯定</strong>（"不同意"里含着"同意"），工具放行与结果验收共用</td></tr>
         <tr><td><code>TechnicalLog</code></td><td>技术事件出口（事件名 + 耗时 + key=value 字段），实现由基础设施注入；应用层不引日志库</td></tr>
         <tr><td><code>PortRoutes</code></td><td>端口路由表：<code>能力名 → 当前启用者</code>，并发安全、可原子替换（插件实现<strong>实时生效</strong>，见《模块-行动》§7.6）</td></tr>
-        <tr><td><code>SessionToolScope</code></td><td><strong>会话作用域工具白名单</strong>：声明本会话允许调用哪些工具（<strong>默认空、fail-closed</strong>）。fork 型子会话（反思 / 沉淀）、“结论交付”轮与<strong>重划调用</strong>（白名单 = <code>{replan_plan}</code>）共用这套闸门；由 <code>ToolExecutor</code> 在合法性校验阶段执行。越权 ⇒ 返回<strong>失败 <code>TOOL_RESULT</code></strong>（不抛异常，否则工具轮不闭合）；连续 N 次越权 ⇒ 结束会话</td></tr>
+        <tr><td><code>SessionToolScope</code></td><td><strong>会话作用域工具白名单</strong>：声明本会话允许调用哪些工具（<strong>默认空、fail-closed</strong>）。fork 型子会话（反思 / 沉淀）、“结论交付”轮与<strong>重划调用</strong>（白名单 = <code>{replan_plan}</code>）共用这套闸门；由 <code>ToolExecutor</code> 在合法性校验阶段执行；<strong>白名单显式授权的工具不受“代理绑定”限制</strong>（授权优先）。越权 ⇒ 返回<strong>失败 <code>TOOL_RESULT</code></strong>（不抛异常，否则工具轮不闭合）；连续 N 次越权 ⇒ 结束会话</td></tr>
       </tbody>
     </table>
     <blockquote><p><code>ProgressEvent</code> 是 <code>ProgressPort</code> 的入参值对象（<code>Kind</code> + <code>message</code>），面向界面、可丢弃，不属于领域事实。</p>
