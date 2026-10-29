@@ -132,7 +132,7 @@ flowchart LR
 
     <h3>外循环：Plan-and-Execute（要不要拆任务、拆完怎么推）</h3>
     <p>
-      外循环是个 do-while。它每转一圈，就跑一次内循环：
+      外循环是个 do-while 循环。它每转一圈，就跑一次内循环：
     </p>
     <ul>
       <li>如果<strong>还没有计划</strong>：跑一次不带步骤的内循环。模型可能只是聊两句，也可能调 <code>generate_plan</code> 生成计划；</li>
@@ -142,8 +142,7 @@ flowchart LR
 
     <pre class="mermaid">
 flowchart TD
-    U["用户输入"] --> B["算上下文，必要时折叠"]
-    B --> C{"有可执行计划？"}
+    U["用户输入"] --> C{"有可执行计划？"}
     C -- 有 --> D["取当前步骤&lt;br/>（同一 Attempt 继续）"]
     C -- 无 --> E["本轮不带步骤"]
     D --> F["内循环：ReAct"]
@@ -151,14 +150,14 @@ flowchart TD
     F --> G{"模型不再调工具？"}
     G -- 否 --> F
     G -- 已达轮次上限 --> R["该 Attempt 判失败&lt;br/>重试 / 反思 / 重划"]
-    R --> B
-    G -- 是 --> H{"提交了 submit_step？"}
+    R --> C
+    G -- 是 --> B{"是否存在当前步骤？"}
+    B -- 是 --> H{"提交了 submit_step？"}
     H -- 否 --> P["本轮结束：Attempt 挂起&lt;br/>不消耗重试，等你再说一句"]
     P --> U
     H -- 是 --> I["验证链 → 推进 / 重试 / 重划"]
-    I --> K{"还有可执行计划？"}
-    K -- 有 --> B
-    K -- 无 --> L["本轮交互结束&lt;br/>（计划完成后另跑一轮自由内循环交付结论）"]
+    I --> C
+    B -- 否 --> L["本轮交互结束&lt;br/>（计划完成后另跑一轮自由内循环交付结论）"]
     </pre>
     <p class="diagram-note">图 1-2　外循环 do-while 与内循环的嵌套关系（三条出口：继续 / 结束 / 挂起）</p>
 
@@ -180,17 +179,16 @@ flowchart TD
       <thead><tr><th>时刻</th><th>发生了什么</th><th>谁负责</th></tr></thead>
       <tbody>
         <tr><td>会话开启</td><td>建会话、建这个会话族的 token 台账、冻结一份提示词快照、用模型起个标题</td><td>感知</td></tr>
-        <tr><td>第一步之前</td><td>检查上下文是否超长，必要时压缩</td><td>感知</td></tr>
-        <tr><td>内循环</td><td>模型挑工具 → 执行 → 结果回到上下文 → 再挑，直到不再调工具</td><td>规划（驱动）+ 行动（执行）</td></tr>
-        <tr><td>模型决定拆任务</td><td>调 <code>generate_plan</code>，校验通过后计划诞生，并给每步分配历史经验</td><td>规划（+ 记忆）</td></tr>
-        <tr><td>每步执行</td><td>内循环跑这一步 → 模型调 <code>submit_step</code> 声明做完了</td><td>规划</td></tr>
+        <tr><td>内循环</td><td>检查和压缩（必要时）上下文 → 模型思考 → 调用工具 → 结果回到上下文 → 再回第一步，直到不再调工具</td><td>规划（驱动）+ 行动（执行）+ 感知</td></tr>
+        <tr><td>模型决定拆任务（内循环中）</td><td>调 <code>generate_plan</code>，校验通过后计划诞生，并给每步分配历史经验</td><td>规划（+ 记忆）</td></tr>
+        <tr><td>每步执行</td><td>内循环跑这一步 → （如果做完了）模型调 <code>submit_step</code> 声明做完了</td><td>规划</td></tr>
         <tr><td>每步验收</td><td>按这一步声明的验证类型跑验证链；通过就固化，不通过就重试 / 反思 / 重划</td><td>规划</td></tr>
         <tr><td>计划完结</td><td>成功或失败都会触发一次"复盘"，把教训蒸馏成经验</td><td>记忆</td></tr>
         <tr><td>交付</td><td>再跑一轮不带步骤的内循环，模型把结果汇总成答复</td><td>规划</td></tr>
       </tbody>
     </table>
 
-    <h2><span class="sec">1.6</span>六条贯穿全模型的设计原则</h2>
+    <h2><span class="sec">1.6</span>五条贯穿全模型的设计原则</h2>
     <p>后面四章会反复出现这些原则。它们决定了"为什么这个规则长这样"。</p>
 
     <table>
@@ -205,11 +203,6 @@ flowchart TD
           <td><strong>故障不是业务失败</strong></td>
           <td>模型连不上、请求超长，都不是"这一步失败了"</td>
           <td>用业务失败掩盖环境问题，把计划判死、白白消耗重试次数</td>
-        </tr>
-        <tr>
-          <td><strong>可推导的不存</strong></td>
-          <td>能算出来的（比如上下文窗口里有哪些记录）就不落库</td>
-          <td>同一事实两处真相，改一处忘一处</td>
         </tr>
         <tr>
           <td><strong>聚合不读配置</strong></td>

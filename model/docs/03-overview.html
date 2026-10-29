@@ -917,7 +917,7 @@ flowchart LR
         <tr>
           <td><strong>行动</strong></td>
           <td>能做什么 / 用什么做 / 花多少钱：工具、模型、代理、预算、插件</td>
-          <td><code>ToolDefinition</code>、<code>Provider</code>、<code>Model</code>、<code>AgentDefinition</code>、<code>Budget</code>、<strong><code>PluginManifest</code></strong></td>
+          <td><code>ToolDefinition</code>、<code>Provider</code>、<code>Model</code>、<code>AgentDefinition</code>、<code>Budget</code>、<code>PluginManifest</code></td>
           <td><code>ToolExecutor</code>、<code>BudgetService</code>（应用）；<code>ModelInvoker</code>（基础设施，实现 <code>ModelInvocationPort</code>）</td>
           <td><code>ExternalToolPort</code>、<code>PluginRepository</code>、<code>PluginRuntimePort</code></td>
         </tr>
@@ -947,7 +947,7 @@ flowchart LR
           <td>端口背后：文件、模型、终端、时钟</td>
           <td>—</td>
           <td>22 个适配器（见 <a href="09-infrastructure.html">第 9 章</a>）</td>
-          <td>实现 21 个端口（<code>HumanInteractionPort</code> / <code>ProgressPort</code> 由外壳实现，见《模块-基础设施层》「模块边界」④）</td>
+          <td>实现 21 个端口（<code>HumanInteractionPort</code> / <code>ProgressPort</code> 由外壳实现）</td>
         </tr>
       </tbody>
     </table>
@@ -976,103 +976,7 @@ flowchart LR
       </ol>
     </div>
 
-    <h2><span class="sec">3.6</span>十二个聚合与它们的红线</h2>
-    <p>
-      聚合是"必须一起改对"的一小组对象。每个聚合只有一根"根"，外面改它必须通过根。
-      最后一列是<strong>不变量</strong>——违反它的操作一律不允许。<strong>所有不变量都不依赖 <code>RuntimePolicy</code></strong>：
-      配置只改变"外循环选择哪条路",不改变"什么状态是合法的"。
-    </p>
-    <table>
-      <thead><tr><th>聚合</th><th>模块</th><th>一句话</th><th>不变量（红线）</th></tr></thead>
-      <tbody>
-        <tr><td><code>Session</code></td><td>感知</td><td>会话上下文事实流</td><td>① 记录只追加，被引用的区间永不删改；② 快照创建即冻结；③ Agent 不可切换；④ 父终止级联子；⑤ <strong>没有状态</strong>：存在即可用（见《模块-感知》§7.1 规则 7）</td></tr>
-        <tr><td><code>RuntimePolicy</code></td><td>感知</td><td>运行环境策略单例</td><td>① 全局唯一；② 不进会话快照；③ 只有用户可改</td></tr>
-        <tr><td><code>ToolDefinition</code></td><td>行动</td><td>一个可调用的动作定义</td><td>① 入参须过 inputSchema；② INTERNAL 必须指向已注册处理器</td></tr>
-        <tr><td><code>Provider</code></td><td>行动</td><td>供应商与凭据持有者</td><td>① 凭据只存于此；② 一 Provider 多 Model</td></tr>
-        <tr><td><code>Model</code></td><td>行动</td><td>具体模型与能力</td><td>① 仅 ACTIVE 可调用；② 无价格概念</td></tr>
-        <tr><td><code>AgentDefinition</code></td><td>行动</td><td>代理身份与能力边界</td><td>① 内置代理 prompt 不可改；② 会话内 Agent 不可切换</td></tr>
-        <tr><td><code>Budget</code></td><td>行动</td><td>会话族 token 台账</td><td>① 一族一账；② 只累加，不预留不分配；③ warned 只置真一次</td></tr>
-        <tr><td><code>PluginManifest</code></td><td>行动</td><td>一个插件的授权意图（唯一落盘的东西）</td><td>① <code>id</code> 必须等于 jar 内 <code>Plugin-Id</code>；② <code>grantedCapabilities ⊆ declaredCapabilities</code>；③ 同一端口至多一个启用者；④ <code>apiVersion</code> 不符即不能安装/启用</td></tr>
-        <tr><td><code>Plan</code></td><td>规划</td><td>一次工作分解</td><td>① steps 非空；② 同时至多一个 RUNNING 步骤；③ SUCCEEDED 不可变；④ 重划只替换未执行尾部；⑤ 单写者，无需乐观锁</td></tr>
-        <tr><td><code>VerificationReport</code></td><td>规划</td><td>一次判定的结论</td><td>① 不可变；② 三态；③ 只留失败层与失败原因</td></tr>
-        <tr><td><code>Experience</code></td><td>记忆</td><td>一条经验</td><td>① 置信度 [0,1]；② 不绑定任何维度；③ ARCHIVED 不参与检索；④ 不超容量</td></tr>
-        <tr><td><code>Reflection</code></td><td>记忆</td><td>一次反思结论</td><td>① 不可变；② 唯一归属 (planId, stepId, attemptNo)</td></tr>
-        <tr><td><code>SkillDefinition</code></td><td>记忆</td><td>程序性知识（SOP）：人写与机学同构，<code>mutable</code> 区分系统能否改</td><td>① 仅 ACTIVE 进快照；② 不含工具依赖；③ <strong><code>mutable = false</code> ⇒ <code>revise()</code> 必须失败</strong>；④ 四件套非空；⑤ <code>status</code> 只由 front-matter 决定</td></tr>
-      </tbody>
-    </table>
-
-    <h2><span class="sec">3.7</span>驱动：外循环就是 do-while</h2>
-    <pre><code>ExecutionLoop.run(session):
-    loop:
-        ContextWindowService.ensureWithinLimit(session)       // 阻塞；算窗口、必要时折叠
-        step = session.hasExecutablePlan() ? plan.getCurrentStep() : null
-        iter = ReActLoop.runIteration(session, step)    // 内循环只在"模型不再调工具"时返回
-
-        if !iter.isConverged:                                  // 撞 maxReActRounds
-            plan.markAttemptFailed(step, iter.attemptNo)
-            advanceAfterFailure(step)                          // 重试 / 反思 / 重划
-            continue                                           // 不需要用户介入，继续下一轮
-
-        if step == null: return                                // 无计划且收敛：本轮交互完成
-        if !iter.submitted: return                             // 模型在等用户：本轮结束，Attempt 挂起
-
-        // 已提交
-        if step.requiredVerifications.isEmpty():
-            plan.markStepSucceeded(step, iter.submittedSummary, null)   // 不验证即完成
-        else:
-            report = VerificationRunner.verify(step, iter.attempt)
-            advance(step, report)                              // 通过 → 推进；失败 → 重试/反思/重划</code></pre>
-
-    <p><strong>四条伴随规则</strong>：</p>
-    <ul>
-      <li><strong>工具只有一类</strong>：<code>generate_plan</code>、<code>submit_step</code>、<code>ask_user</code>、<code>spawn_subagents</code>、<code>load_skill</code> 都是普通内置工具，靠"返回结果"改变领域状态；</li>
-      <li><code>generate_plan</code> 成功后<strong>不打断内循环</strong>，模型确认后自然收敛，下一轮迭代转入计划执行；一个 <code>run</code> 里可以<strong>串行</strong>产出多个计划，每次出现新的 <code>planId</code> 都重新播报 <code>PLAN_CREATED</code>（重划用 <code>PLAN_REPLAN</code>）；</li>
-      <li>计划 <code>COMPLETED</code> 后会再跑一轮<strong>自由内循环</strong>，由模型产出最终答复（结论交付）；</li>
-      <li><strong>三条出口</strong>：未收敛（撞轮次上限）⇒ 判失败后<strong>继续</strong>；无计划且收敛 ⇒ <strong>结束</strong>；有计划、收敛但<strong>未提交</strong> ⇒ <strong>挂起</strong>（Attempt 不落终态，等用户输入）；</li>
-      <li>计划 <code>FAILED</code>（重划用尽）也会补一轮<strong>结论交付</strong>，把失败原因与已沉淀内容告诉用户；终止 / 模型不可用 / 挂起不补；</li>
-      <li>折叠判定挂在<strong>内循环每次模型请求之前</strong>（不是每个外层迭代），且 <code>messages</code> 每轮按最新窗口重建；</li>
-      <li>经验检索的触发点是<strong>计划诞生 / 计划重划</strong>，不是每轮迭代；重划以“无 step 内循环 + <code>replan_plan</code>”发起，不是插一个 step。</li>
-    </ul>
-
-    <h3>3.7.1 一次尝试（<code>Attempt</code>）的边界</h3>
-    <p><code>Attempt</code> = <strong>一个 step 的一次完整执行周期</strong>（可被多次用户输入切成多段 ReAct，但不切分 attempt）。</p>
-    <table>
-      <thead><tr><th>结束方式</th><th>outcome</th><th>消耗重试名额</th></tr></thead>
-      <tbody>
-        <tr><td><code>submit_step</code> → 验证通过</td><td><code>SUCCEEDED</code></td><td>—</td></tr>
-        <tr><td>验证失败 / 执行失败</td><td><code>FAILED</code></td><td>是</td></tr>
-        <tr><td><strong>终止</strong>（Esc / 预算拒绝 / 子代理超时）</td><td><strong>不结束</strong>，下次输入接着跑（不算失败）</td><td>否</td></tr>
-        <tr><td><strong>收敛但未提交</strong></td><td><strong>不结束</strong>，用户输入后续跑</td><td>否</td></tr>
-      </tbody>
-    </table>
-    <p><code>recordRange</code> 始终连续（用户输入、注入、摘要都是 <code>Record</code>）；
-    <code>retryCount</code> = <code>FAILED</code> 的次数；<code>maxReActRounds</code> 按"自上次用户输入以来的连续轮数"计。</p>
-
-    <table>
-      <thead><tr><th>条件</th><th>结果</th></tr></thead>
-      <tbody>
-        <tr><td>无计划 + 内循环收敛</td><td>本轮交互结束，会话停在原处（会话没有状态，见《模块-感知》§7.1 规则 7）</td></tr>
-        <tr><td>内循环里 generate_plan 成功</td><td>本轮收敛后，下一轮迭代发现"有计划了",转入计划执行</td></tr>
-        <tr><td>计划 COMPLETED</td><td>先由 <code>PlanCompletionCurator</code> fork 窗口判定「经验? / 技能?」并落盘 + 写告知记录，再跑一轮自由内循环产出最终答复（结论交付）</td></tr>
-        <tr><td>计划 FAILED（外循环判定重划用尽）</td><td><code>terminate()</code> → 沉淀并写告知记录 → <strong>补一轮结论交付</strong>（工具白名单置空）→ 收敛退出；终止 / 模型不可用 / 挂起不补</td></tr>
-        <tr><td>模型不可用</td><td><code>run()</code> 立即返回；不推进状态、不耗重试、不触发反思/重划；<strong>未闭合的工具调用补一条中止结果</strong>；仅提示</td></tr>
-        <tr><td>请求超限</td><td>强制折叠一次后重试；不耗重试；仍超限按模型不可用处理</td></tr>
-        <tr><td>模型切换（降级 / 用户显式）</td><td>只允许在工具轮闭合后；新模型不再接收旧模型的 reasoning/thinking</td></tr>
-      </tbody>
-    </table>
-
-    <h3>3.7.2 分层实现约定</h3>
-    <table>
-      <thead><tr><th>约定</th><th>内容</th></tr></thead>
-      <tbody>
-        <tr><td><strong>提交顺序</strong></td><td>一次状态转移内固定「不可变事实 → 追加流水 → 替换聚合」；由 <code>CommitScope</code> 强制，应用层只 stage</td></tr>
-        <tr><td><strong>事件只通知</strong></td><td>领域事件在提交后同步派发，<strong>不得驱动任何 IO 长任务</strong>；检索/沉淀由 <code>ExecutionLoop</code> 显式调用</td></tr>
-        <tr><td><strong>持久化形态</strong></td><td>文件系统 + 单写者；<code>RecordRange</code> 基于 <code>seq</code>（不基于文件位置），流水超 32 MiB 滚动</td></tr>
-      </tbody>
-    </table>
-    <p>详见 <a href="08-application.html">第 8 章</a> 8.8 与 <a href="09-infrastructure.html">第 9 章</a> 9.6。</p>
-
-    <h2><span class="sec">3.8</span>生命周期节点全景</h2>
+    <h2><span class="sec">3.6</span>生命周期节点全景</h2>
     <p>四份模块文档里，"每个聚合的生命周期"都用同一套节点词表。这里汇总一次。</p>
     <table>
       <thead><tr><th>节点</th><th>含义</th><th>涉及聚合</th></tr></thead>
@@ -1095,7 +999,7 @@ flowchart LR
       </tbody>
     </table>
 
-    <h2><span class="sec">3.9</span>跨模块只靠 ID 说话</h2>
+    <h2><span class="sec">3.7</span>跨模块只靠 ID 说话</h2>
     <table>
       <thead><tr><th>从</th><th>到</th><th>持有什么</th><th>用途</th></tr></thead>
       <tbody>
@@ -1111,7 +1015,7 @@ flowchart LR
       </tbody>
     </table>
 
-    <h2><span class="sec">3.10</span>事件全景</h2>
+    <h2><span class="sec">3.8</span>事件全景</h2>
     <p>
       领域事件由<strong>聚合根</strong>在状态真的改变后发出，代表"这件事已经发生了"。
       应用层在事务提交后才发布，订阅方只看 ID 和事件内容。
@@ -1150,7 +1054,7 @@ flowchart LR
       事件清单、生命周期规则，以及关键服务的时序图。</p>
     </div>
 
-    <h2><span class="sec">3.11</span>分层视图与端口全景</h2>
+    <h2><span class="sec">3.9</span>分层视图与端口全景</h2>
     <pre class="mermaid">flowchart TD
     SHELL["外壳&lt;br/&gt;本期 TUI"] --&gt; APP["应用层&lt;br/&gt;6 用例 + 12 组件"]
     APP --&gt; DOM["领域层&lt;br/&gt;12 聚合 + 领域服务 + 领域策略"]
@@ -1162,13 +1066,12 @@ flowchart LR
     <table>
       <thead><tr><th>组</th><th>端口</th></tr></thead>
       <tbody>
-        <tr><td>持久化</td><td><code>CommitScope</code>、<code>SessionRepository</code>、<code>RecordStore</code>、<code>PlanRepository</code>、<code>VerificationReportRepository</code>、<code>ReflectionRepository</code>、<code>ExperienceRepository</code>、<code>BudgetRepository</code>、<code>PolicyRepository</code>、<code>CatalogRepository</code>、<code>ArtifactStore</code>、<strong><code>PluginRepository</code></strong></td></tr>
-        <tr><td>模型与外部</td><td><code>ModelInvocationPort</code>（<code>invoke</code> / <code>invokeStreaming</code>）、<code>ExternalToolPort</code>、<code>SkillSopProvider</code>、<strong><code>PluginRuntimePort</code></strong></td></tr>
-        <tr><td>人机与进度</td><td><code>HumanInteractionPort</code>、<code>ProgressPort</code>（<strong>实现方：外壳</strong>，见《模块-基础设施层》「模块边界」④）、<code>DomainEventPublisher</code></td></tr>
+        <tr><td>持久化</td><td><code>CommitScope</code>、<code>SessionRepository</code>、<code>RecordStore</code>、<code>PlanRepository</code>、<code>VerificationReportRepository</code>、<code>ReflectionRepository</code>、<code>ExperienceRepository</code>、<code>BudgetRepository</code>、<code>PolicyRepository</code>、<code>CatalogRepository</code>、<code>ArtifactStore</code>、<code>PluginRepository</code></td></tr>
+        <tr><td>模型与外部</td><td><code>ModelInvocationPort</code>（<code>invoke</code> / <code>invokeStreaming</code>）、<code>ExternalToolPort</code>、<code>SkillSopProvider</code>、<code>PluginRuntimePort</code></td></tr>
+        <tr><td>人机与进度</td><td><code>HumanInteractionPort</code>、<code>ProgressPort</code>（<strong>实现方：外壳</strong>）、<code>DomainEventPublisher</code></td></tr>
         <tr><td>时间与生命周期</td><td><code>Clock</code>、<code>TokenCounter</code>、<code>InstanceLock</code>、<code>SchemaMigrator</code></td></tr>
       </tbody>
     </table>
-    <p>相对早期设计的两处收缩：取消 <code>SubagentRunnerPort</code>（检索/归纳已在应用层，直接调 <code>SubagentLauncher</code>）、<code>InternalToolHandler</code> 收窄为 <code>SkillSopProvider</code>。</p>
 
     <div class="page-foot" id="pagenav"></div>
   </main>
