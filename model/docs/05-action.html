@@ -450,7 +450,7 @@ flowchart LR
         <tr><td><code>replan_plan</code></td><td>剩余步骤草案（<code>steps</code>，形状同 <code>generate_plan</code>）</td><td>"计划已重划（第 N 代）"或失败原因</td><td><code>Plan.applyReplan()</code> 替换未执行尾部、代次 +1；外循环随后重分配经验并发进度事件 <code>PLAN_REPLAN</code></td><td>规划</td></tr>
         <tr><td><code>submit_step</code></td><td><code>summary</code>（必填）、<code>artifacts?</code></td><td>"已登记"</td><td>内循环据此置 <code>submitted</code>，交外循环验收</td><td>规划（由内循环识别）</td></tr>
         <tr><td><code>ask_user</code></td><td>问题文本</td><td>用户回答</td><td>阻塞同一 ReAct 循环；记 <code>TOOL_REQUEST</code> + <code>TOOL_RESULT</code></td><td>行动</td></tr>
-        <tr><td><code>spawn_subagents</code></td><td><code>List&lt;SubagentRequest{agentId, modelId, task}&gt;</code></td><td><code>List&lt;SubagentResult{sessionId, conclusion}&gt;</code></td><td>并行创建子会话、join-all、各子独立超时</td><td>应用（<code>SubagentLauncher</code>，内部调 <code>StartSessionUseCase</code>）</td></tr>
+        <tr><td><code>spawn_subagents</code></td><td><code>List&lt;SubagentRequest{agentId, modelId, task}&gt;</code></td><td><code>List&lt;SubagentResult{sessionId, conclusion}&gt;</code></td><td>并行创建子会话、join-all、各子独立超时；<strong>超时即终止该子代理</strong>，主会话继续</td><td>应用（<code>SubagentLauncher</code>，内部调 <code>StartSessionUseCase</code>）</td></tr>
         <tr><td><code>load_skill</code></td><td><code>skillName</code></td><td>SOP 全文</td><td>注入一条 <code>role=SYSTEM</code> 的 Record</td><td>基础设施（<code>SkillSopProvider</code>）</td></tr>
         <tr><td><code>read_file</code></td><td><code>path</code>、<code>offset?</code>、<code>limit?</code></td><td>带行号的文本</td><td>无（只读）</td><td>基础设施（本地能力）</td></tr>
         <tr><td><code>list_dir</code></td><td><code>path?</code>、<code>depth?</code>、<code>pattern?</code></td><td>条目清单</td><td>无（只读）</td><td>基础设施（本地能力）</td></tr>
@@ -485,7 +485,7 @@ flowchart LR
     <h3>5.4.4 <code>Budget</code></h3>
     <ul>
       <li>单位 <strong>token</strong>，不换算金额。</li>
-      <li><strong>只预警、不中断</strong>：达到 <code>budgetWarnRatio</code> → 外循环经 <code>ask_user</code> 询问是否继续；同一会话族只报一次。<br/>
+      <li><strong>只预警、不中断</strong>：达到 <code>budgetWarnRatio</code> → 外循环经 <code>ask_user</code> 询问是否继续；同一会话族只报一次。用户<strong>拒绝继续</strong>等价于按一次 Esc（终止本轮，见<a href="08-application.html">第 8 章</a> 8.9.4.1）；<code>warned</code> 已置真，后续不再二次确认。<br/>
           <code>budgetLimitTokens</code> 是会话族的<strong>总额度</strong>（token，用户可调），<code>budgetWarnRatio</code> 是它的百分比——两者缺一不可，否则"越过 80%"没有分母。</li>
       <li>并发（<code>spawn_subagents</code>）：子会话<strong>本地累计</strong>，结束后 <code>settleFromSubSession</code> 一次性归集到根。</li>
       <li><strong>顺带记一次观测</strong>：<code>lastPromptTokens</code> / <code>lastPromptEstimated</code> / <code>lastPromptSessionId</code> 是“最近一次模型请求的输入用量”，由 <code>BudgetService.recordTurnUsage</code> 写下（厂商给的 <code>prompt_tokens</code>；厂商没给时是本地估算，<code>lastPromptEstimated = true</code>）。<strong>辅助调用</strong>（生成标题、检索经验、反思、重划、摘要、验证）走 <code>recordUsage</code>，只记账不写观测——它们的小请求会把真实窗口的数字盖掉。它只喂界面展示（一轮结束时汇总行里的 <code>上下文 18.2k / 50k</code>），<strong>不参与</strong>折叠判定——判定在请求前做，那时还没有厂商值。折叠发生后清空这三项：旧数值已经不再描述当前窗口，界面回到 <code>— / 50k</code>。</li>
@@ -575,7 +575,7 @@ flowchart LR
       <li><strong>白名单授权的工具不受“代理绑定”限制</strong>：<code>SessionToolScope</code> 是外循环的显式授权，优先于 <code>AgentDefinition.toolIds</code>；否则 <code>replan_plan</code> 这类内部工具只能进代理清单，日常对话里也会被模型看见。</li>
       <li>工具<strong>严格串行执行</strong>，不存在并发工具调用。</li>
       <li>一次模型响应里出现多个工具调用时，<strong>逐个执行、各自独立成败</strong>（可部分成功）。</li>
-      <li><strong>工具失败不是领域状态</strong>：超时 / 异常 / 无返回都作为"一种工具结果"回灌模型，ReAct 继续。</li>
+      <li><strong>工具失败不是领域状态</strong>：超时 / 异常 / 无返回都作为"一种工具结果"回灌模型，ReAct 继续。唯一例外是本轮被<strong>终止</strong>：此时不再回灌，未闭合的调用由内循环补一条中止 <code>TOOL_RESULT</code>（见<a href="08-application.html">第 8 章</a> 8.9.4.1）。</li>
       <li><strong>超时由工具自带</strong>（<code>timeoutMillis</code>）；<code>ask_user</code> 可无限期等待。</li>
       <li><strong>执行前放行审批</strong>：<code>sideEffect ≠ READ_ONLY</code> 且不在 <code>trustedToolIds</code> 中 ⇒ 先 <code>ask_user</code> 放行；信任清单可覆盖不可逆工具。
         <strong>插件来源的工具</strong>：<code>source.type = PLUGIN</code> 且其 <code>PluginManifest.trusted = true</code> ⇒ 视为已放行（<strong>安装时的一次同意 = 一次针对整包的放行审批</strong>）。
@@ -714,7 +714,7 @@ flowchart LR
     B -- 解析失败 --&gt; ASK[ask_user 审批&lt;br/&gt;文案：无法安全解析]
     B -- 成功 --&gt; C{"逐段匹配判定项&lt;br/&gt;（含 sh -c / eval 实参递归）"}
     C -- 命中 --&gt; ASK2[ask_user 审批&lt;br/&gt;文案：命中规则名 + 原始命令]
-    C -- 未命中 --&gt; RUN[执行&lt;br/&gt;cwd 限根内、超时杀进程树]
+    C -- 未命中 --&gt; RUN[执行&lt;br/&gt;cwd 限根内、超时或终止时杀进程树]
     ASK -- 同意 --&gt; RUN
     ASK2 -- 同意 --&gt; RUN
     ASK -- 拒绝 --&gt; X[返回“用户拒绝执行”结果]
@@ -739,14 +739,14 @@ sequenceDiagram
         SF-->>C2: 独立完整会话
     end
     par 各自独立超时（从各自实际开始运行时计时）
-        C1-->>TE: 结论或“超时未完成”
+        C1-->>TE: 结论，或超时则先终止该子代理再报“已终止（超时）”
     and
-        C2-->>TE: 结论或“超时未完成”
+        C2-->>TE: 结论，或超时则先终止该子代理再报“已终止（超时）”
     end
     TE->>BS: settleFromSubSession(每个子会话, 本地累计 tokens)
     TE-->>TE: join-all 完成，返回 List&lt;SubagentResult&gt;
     </pre>
-    <p><strong>要点</strong>：各子代理<strong>独立成败</strong>，不整体失败；中断时已完成的保留、未完成的按中断处理。</p>
+    <p><strong>要点</strong>：各子代理<strong>独立成败</strong>，不整体失败；本轮被终止时已完成的保留、未完成的按终止处理。子代理的超时<strong>只终止该子代理</strong>（主会话继续）；终止的生效边界与用户按 Esc 相同——令牌穿到模型调用与工具执行（见<a href="08-application.html">第 8 章</a> 8.9.4.1），不靠线程中断。</p>
     <div class="callout">
       <div class="ct">插件来源的工具走同一条路</div>
       <code>source.type = PLUGIN</code> 只是来源标记（审计、界面、免审批判定）；执行仍然查同一个处理器注册表，<code>INTERNAL</code> 与 <code>PLUGIN</code> 的唯一差别是"信任从哪来"。
@@ -832,7 +832,7 @@ sequenceDiagram
         <tr><td><strong>计划诞生</strong></td><td><code>PlanFactory</code> 创建 <code>Plan</code>（并触发经验分配）</td></tr>
         <tr><td><strong>步骤启动</strong></td><td>取当前 step，创建 <code>Attempt</code>（开区间）</td></tr>
         <tr><td><strong>步骤提交验收</strong></td><td><code>submit_step</code> → 触发验证 / 或免验证直接完成</td></tr>
-        <tr><td><strong>步骤固化 / 判败 / 中断</strong></td><td>step 的三种结束：<code>SUCCEEDED</code> / <code>FAILED</code> / <code>INTERRUPTED</code></td></tr>
+        <tr><td><strong>步骤固化 / 判败</strong></td><td>step 的两种结束：<code>SUCCEEDED</code> / <code>FAILED</code>（“没做完”不结束 step，续跑接着做）</td></tr>
         <tr><td><strong>步骤重试</strong></td><td>失败后新建 <code>Attempt</code>；达阈值则产生 <code>Reflection</code></td></tr>
         <tr><td><strong>计划重划</strong></td><td><code>replanGeneration + 1</code>，未执行 step 置 <code>SUPERSEDED</code> 并重新分配经验</td></tr>
         <tr><td><strong>计划完结</strong></td><td><code>COMPLETED</code> / <code>FAILED</code>，触发经验沉淀</td></tr>

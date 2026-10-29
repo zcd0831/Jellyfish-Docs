@@ -638,7 +638,7 @@
         <tr><td><strong>计划诞生</strong></td><td><code>PlanFactory</code> 创建 <code>Plan</code>（并触发经验分配）</td></tr>
         <tr><td><strong>步骤启动</strong></td><td>取当前 step，创建 <code>Attempt</code>（开区间）</td></tr>
         <tr><td><strong>步骤提交验收</strong></td><td><code>submit_step</code> → 触发验证 / 或免验证直接完成</td></tr>
-        <tr><td><strong>步骤固化 / 判败 / 中断</strong></td><td>step 的三种结束：<code>SUCCEEDED</code> / <code>FAILED</code> / <code>INTERRUPTED</code></td></tr>
+        <tr><td><strong>步骤固化 / 判败</strong></td><td>step 的两种结束：<code>SUCCEEDED</code> / <code>FAILED</code>（“没做完”不结束 step，续跑接着做）</td></tr>
         <tr><td><strong>步骤重试</strong></td><td>失败后新建 <code>Attempt</code>；达阈值则产生 <code>Reflection</code></td></tr>
         <tr><td><strong>计划重划</strong></td><td><code>replanGeneration + 1</code>，未执行 step 置 <code>SUPERSEDED</code> 并重新分配经验</td></tr>
         <tr><td><strong>计划完结</strong></td><td><code>COMPLETED</code> / <code>FAILED</code>，触发经验沉淀；<code>COMPLETED</code> 且本次未用技能时另判技能沉淀</td></tr>

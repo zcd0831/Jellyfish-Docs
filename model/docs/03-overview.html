@@ -400,7 +400,6 @@ classDiagram
             +assignExperiences(StepId, List~ExperienceId~)
             +markStepSucceeded(StepId, String, VerificationReportId)
             +markStepFailed(StepId, VerificationReportId)
-            +markAttemptInterrupted(StepId, int)
             +recordReflection(StepId, int, ReflectionId)
             +recordSkillUsage(StepId, int, SkillId)
             +applyReplan(List~PlanStep~)
@@ -461,13 +460,11 @@ classDiagram
             SUCCEEDED
             FAILED
             SUPERSEDED
-            CANCELLED
         }
         class AttemptOutcome {
             &lt;&lt;Enumeration&gt;&gt;
             SUCCEEDED
             FAILED
-            INTERRUPTED
         }
         class VerificationOutcome {
             &lt;&lt;Enumeration&gt;&gt;
@@ -988,7 +985,7 @@ flowchart LR
     <table>
       <thead><tr><th>聚合</th><th>模块</th><th>一句话</th><th>不变量（红线）</th></tr></thead>
       <tbody>
-        <tr><td><code>Session</code></td><td>感知</td><td>会话上下文事实流</td><td>① 记录只追加，被引用的区间永不删改；② 快照创建即冻结；③ Agent 不可切换；④ 父取消级联子；⑤ <strong>没有状态</strong>：存在即可用（见《模块-感知》§7.1 规则 7）</td></tr>
+        <tr><td><code>Session</code></td><td>感知</td><td>会话上下文事实流</td><td>① 记录只追加，被引用的区间永不删改；② 快照创建即冻结；③ Agent 不可切换；④ 父终止级联子；⑤ <strong>没有状态</strong>：存在即可用（见《模块-感知》§7.1 规则 7）</td></tr>
         <tr><td><code>RuntimePolicy</code></td><td>感知</td><td>运行环境策略单例</td><td>① 全局唯一；② 不进会话快照；③ 只有用户可改</td></tr>
         <tr><td><code>ToolDefinition</code></td><td>行动</td><td>一个可调用的动作定义</td><td>① 入参须过 inputSchema；② INTERNAL 必须指向已注册处理器</td></tr>
         <tr><td><code>Provider</code></td><td>行动</td><td>供应商与凭据持有者</td><td>① 凭据只存于此；② 一 Provider 多 Model</td></tr>
@@ -1032,7 +1029,7 @@ flowchart LR
       <li><code>generate_plan</code> 成功后<strong>不打断内循环</strong>，模型确认后自然收敛，下一轮迭代转入计划执行；一个 <code>run</code> 里可以<strong>串行</strong>产出多个计划，每次出现新的 <code>planId</code> 都重新播报 <code>PLAN_CREATED</code>（重划用 <code>PLAN_REPLAN</code>）；</li>
       <li>计划 <code>COMPLETED</code> 后会再跑一轮<strong>自由内循环</strong>，由模型产出最终答复（结论交付）；</li>
       <li><strong>三条出口</strong>：未收敛（撞轮次上限）⇒ 判失败后<strong>继续</strong>；无计划且收敛 ⇒ <strong>结束</strong>；有计划、收敛但<strong>未提交</strong> ⇒ <strong>挂起</strong>（Attempt 不落终态，等用户输入）；</li>
-      <li>计划 <code>FAILED</code>（重划用尽）也会补一轮<strong>结论交付</strong>，把失败原因与已沉淀内容告诉用户；取消 / 模型不可用 / 挂起不补；</li>
+      <li>计划 <code>FAILED</code>（重划用尽）也会补一轮<strong>结论交付</strong>，把失败原因与已沉淀内容告诉用户；终止 / 模型不可用 / 挂起不补；</li>
       <li>折叠判定挂在<strong>内循环每次模型请求之前</strong>（不是每个外层迭代），且 <code>messages</code> 每轮按最新窗口重建；</li>
       <li>经验检索的触发点是<strong>计划诞生 / 计划重划</strong>，不是每轮迭代；重划以“无 step 内循环 + <code>replan_plan</code>”发起，不是插一个 step。</li>
     </ul>
@@ -1044,7 +1041,7 @@ flowchart LR
       <tbody>
         <tr><td><code>submit_step</code> → 验证通过</td><td><code>SUCCEEDED</code></td><td>—</td></tr>
         <tr><td>验证失败 / 执行失败</td><td><code>FAILED</code></td><td>是</td></tr>
-        <tr><td>中断（Ctrl-C / 进程退出）</td><td><code>INTERRUPTED</code></td><td>否</td></tr>
+        <tr><td><strong>终止</strong>（Esc / 预算拒绝 / 子代理超时）</td><td><strong>不结束</strong>，下次输入接着跑（不算失败）</td><td>否</td></tr>
         <tr><td><strong>收敛但未提交</strong></td><td><strong>不结束</strong>，用户输入后续跑</td><td>否</td></tr>
       </tbody>
     </table>
@@ -1057,7 +1054,7 @@ flowchart LR
         <tr><td>无计划 + 内循环收敛</td><td>本轮交互结束，会话停在原处（会话没有状态，见《模块-感知》§7.1 规则 7）</td></tr>
         <tr><td>内循环里 generate_plan 成功</td><td>本轮收敛后，下一轮迭代发现"有计划了",转入计划执行</td></tr>
         <tr><td>计划 COMPLETED</td><td>先由 <code>PlanCompletionCurator</code> fork 窗口判定「经验? / 技能?」并落盘 + 写告知记录，再跑一轮自由内循环产出最终答复（结论交付）</td></tr>
-        <tr><td>计划 FAILED（外循环判定重划用尽）</td><td><code>terminate()</code> → 沉淀并写告知记录 → <strong>补一轮结论交付</strong>（工具白名单置空）→ 收敛退出；取消 / 模型不可用 / 挂起不补</td></tr>
+        <tr><td>计划 FAILED（外循环判定重划用尽）</td><td><code>terminate()</code> → 沉淀并写告知记录 → <strong>补一轮结论交付</strong>（工具白名单置空）→ 收敛退出；终止 / 模型不可用 / 挂起不补</td></tr>
         <tr><td>模型不可用</td><td><code>run()</code> 立即返回；不推进状态、不耗重试、不触发反思/重划；<strong>未闭合的工具调用补一条中止结果</strong>；仅提示</td></tr>
         <tr><td>请求超限</td><td>强制折叠一次后重试；不耗重试；仍超限按模型不可用处理</td></tr>
         <tr><td>模型切换（降级 / 用户显式）</td><td>只允许在工具轮闭合后；新模型不再接收旧模型的 reasoning/thinking</td></tr>
@@ -1088,7 +1085,7 @@ flowchart LR
         <tr><td><strong>计划诞生</strong></td><td>校验通过创建计划，并分配经验</td><td>Plan、Experience</td></tr>
         <tr><td><strong>步骤启动</strong></td><td>取当前步骤，创建一次尝试</td><td>Plan、Attempt</td></tr>
         <tr><td><strong>步骤提交验收</strong></td><td>submit_step → 触发验证 / 或免验证直接完成</td><td>VerificationReport、Plan</td></tr>
-        <tr><td><strong>步骤固化 / 判败 / 中断</strong></td><td>步骤的三种结束</td><td>Plan、Attempt</td></tr>
+        <tr><td><strong>步骤固化 / 判败</strong></td><td>步骤的两种结束</td><td>Plan、Attempt</td></tr>
         <tr><td><strong>步骤重试</strong></td><td>失败后新建尝试；达阈值产生反思</td><td>Attempt、Reflection</td></tr>
         <tr><td><strong>计划重划</strong></td><td>代次 +1，未执行的步骤置为 SUPERSEDED 并重分配经验；以“无 step 内循环 + <code>replan_plan</code>”发起，成功后发进度事件 <code>PLAN_REPLAN</code></td><td>Plan、Experience</td></tr>
         <tr><td><strong>计划完结</strong></td><td>成功或失败，触发经验沉淀；成功且本次未用技能时另判技能沉淀</td><td>Plan、Experience、SkillDefinition</td></tr>
@@ -1121,7 +1118,7 @@ flowchart LR
     </p>
     <div class="callout">
       <div class="ct">总口径：领域事件只通知</div>
-      事件不得驱动任何 IO，也不得作为跨模块协作的触发手段；需要别的模块做事时，由应用层<strong>显式调用</strong>（<code>ExecutionLoop</code> 调检索 / 沉淀 / 反馈，<code>ManageSessionUseCase</code> 做级联取消）。因此下表的「谁关心」一列只列界面 / 审计这类无副作用消费。
+      事件不得驱动任何 IO，也不得作为跨模块协作的触发手段；需要别的模块做事时，由应用层<strong>显式调用</strong>（<code>ExecutionLoop</code> 调检索 / 沉淀 / 反馈，<code>ManageSessionUseCase</code> 做级联终止）。因此下表的「谁关心」一列只列界面 / 审计这类无副作用消费。
     </div>
     <table>
       <thead><tr><th>事件</th><th>谁发出</th><th>什么时候</th><th>谁关心</th></tr></thead>
@@ -1139,7 +1136,7 @@ flowchart LR
         <tr><td><code>SkillRevised</code></td><td>SkillDefinition</td><td>改写了可变技能</td><td>界面 / 审计</td></tr>
         <tr><td><code>BudgetWarning</code></td><td>Budget</td><td>首次越过预警阈值</td><td>内循环 → 问用户（<strong>同一调用栈内的即时通知</strong>，等价于记账方法的返回值，不是异步订阅）</td></tr>
         <tr><td><code>SummarizationCompleted</code></td><td>Session</td><td>摘要记录已追加</td><td>界面 / 审计</td></tr>
-        <tr><td><code>SessionCancelled</code></td><td>Session</td><td>用户取消会话</td><td><strong>无功能性订阅方</strong>：级联取消由 <code>ManageSessionUseCase</code> 在同一事务内逐个处理</td></tr>
+        <tr><td><code>SessionCancelled</code></td><td>Session</td><td>会话被终止（Esc / 预算拒绝 / 级联）</td><td><strong>无功能性订阅方</strong>：级联终止由 <code>ManageSessionUseCase</code> 在同一事务内逐个处理</td></tr>
         <tr><td><code>ModelSwitched</code></td><td>Session</td><td>降级命中备用链</td><td>审计 / 界面</td></tr>
         <tr><td><code>PolicyAdjusted</code></td><td>RuntimePolicy</td><td>用户修改策略成功</td><td>只失效本地读取缓存（<strong>缓存必须可失效</strong>），不驱动任何动作</td></tr>
         <tr><td><code>ToolDefinitionUpdatedEvent</code></td><td>ToolDefinition</td><td>元数据或 schema 更新</td><td>运行中会话不订阅（快照已冻结）</td></tr>

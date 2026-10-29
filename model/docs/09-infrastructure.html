@@ -370,6 +370,7 @@ sequenceDiagram
       <li><strong><code>reasoning_content</code> 的映射</strong>（见 §10 第 3、5 条）：解析时收进 <code>ModelInvocationResult.reasoning</code>；组装时只有在<strong>目标模型就是产者</strong>且 <code>reasoning</code> 非空时才输出该字段（产者由应用层按 <code>producerModelId</code> 判定）。流式累加器必须同时累加 <code>delta.content</code> 与 <code>delta.reasoning_content</code>；流断在中途 ⇒ 整条不落（“半截输出不落 Record”）。</li>
       <li><strong>消息形态由适配器吸收</strong>：适配器拿到的是 canonical <code>ChatMessage</code>（<code>content</code> 与 <code>tool_calls</code> 可能同处一条）；OpenAI 直接透传，Anthropic 要翻成 content blocks 并把同轮的 <code>tool_result</code> 归到<strong>紧接的 user turn</strong>，Gemini 要翻成 parts 并<strong>保序</strong>（其配对语义与 id 不同）。<code>ModelInvoker</code> 不参与任何字段映射。</li>
       <li><strong>私有状态的载荷由产者协议自己解释</strong>：<code>Record.reasoning</code> 是不透明字符串——OpenAI 系放原文 <code>reasoning_content</code>；Anthropic 放它自己的 thinking blocks JSON（含 <code>signature</code>），回放时排在 <code>text</code>/<code>tool_use</code> 之前；<strong>Gemini 的 <code>thoughtSignature</code> 尚未进入 canonical 私有状态</strong>，开启 thinking 的 Gemini 工具轮暂不保证可续接（后续切片）。</li>
+      <li><strong>终止：请求句柄按调用持有</strong>：<code>Call.cancel()</code> 是唯一能打断阻塞读的手段（<code>Thread.interrupt</code> 对同步 HTTP 读无效）；因此 <code>HttpJsonClient</code> 必须<strong>每次调用</strong>持有自己的 <code>Call</code> 与取消标记，<strong>不得</strong>用共享单槽位字段——父会话与并行子代理共用一个客户端实例，共享槽位会把一个会话的终止错打到另一个的请求上。被取消的调用直接抛 <code>CancellationException</code>（不重试、不降级），口径见 <a href="08-application.html">第 8 章</a> 8.9.4.1。</li>
     </ol>
 
     <h2><span class="sec">9.12</span>插件运行时（PF4J）的实现要点</h2>

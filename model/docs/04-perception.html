@@ -279,7 +279,7 @@ flowchart LR
         <tr>
           <td><code>Session</code></td>
           <td>一次会话（可嵌套）的全部上下文事实：记录流水、系统提示词快照、窗口与摘要。由 <code>parentSessionId</code> 组成会话树</td>
-          <td>① <code>Record</code> 只追加，被 <code>Attempt.recordRange</code> 引用的记录永不删除/改写；② 快照在会话开启时冻结，运行中不再变；③ Agent 不可切换，Model 可切换；④ 父子会话一致（父取消级联）；⑤ <strong>没有状态</strong>：会话是持久化容器，存在即可用（见《模块-感知》§7.1 规则 7）</td>
+          <td>① <code>Record</code> 只追加，被 <code>Attempt.recordRange</code> 引用的记录永不删除/改写；② 快照在会话开启时冻结，运行中不再变；③ Agent 不可切换，Model 可切换；④ 父子会话一致（父终止级联）；⑤ <strong>没有状态</strong>：会话是持久化容器，存在即可用（见《模块-感知》§7.1 规则 7）</td>
         </tr>
         <tr>
           <td><code>RuntimePolicy</code></td>
@@ -367,7 +367,7 @@ flowchart LR
     <table>
       <thead><tr><th>事件</th><th>谁发出</th><th>什么时候</th><th>谁关心</th></tr></thead>
       <tbody>
-        <tr><td><code>SessionCancelled</code></td><td>Session</td><td>用户取消会话</td><td>级联取消子会话</td></tr>
+        <tr><td><code>SessionCancelled</code></td><td>Session</td><td>会话被终止（Esc / 预算拒绝 / 级联）</td><td>级联终止子会话</td></tr>
         <tr><td><code>ModelSwitched</code></td><td>Session</td><td>模型故障、降级策略命中</td><td>审计 / 界面</td></tr>
         <tr><td><code>SummarizationCompleted</code></td><td>Session</td><td><code>markSummarized()</code> 完成（<code>SUMMARY</code> 已追加，窗口将在下次推导时生效）</td><td>界面 / 审计</td></tr>
         <tr><td><code>PolicyAdjusted</code></td><td>RuntimePolicy</td><td>用户修改策略成功后</td><td>行动（备用模型链 / 信任清单缓存）、记忆（容量参数）、规划（阈值）</td></tr>
@@ -383,7 +383,7 @@ flowchart LR
       <tbody>
         <tr>
           <td><strong>会话开启</strong>（用户发起对话）<br><strong>子代理派遣</strong>（spawn_subagents）</td>
-          <td>迭代中不断追加 Record；上下文折叠；模型降级；取消</td>
+          <td>迭代中不断追加 Record；上下文折叠；模型降级；终止</td>
           <td><strong>归档</strong>（压成 zip 移走，应用不再可见，见《模块-感知》§7.1 规则 7）<br><strong>会话销毁</strong>（物理删除）</td>
           <td><strong>会话续跑</strong>（按 sessionId 加载，<code>StartupReconciler</code> 先对账）</td>
         </tr>
@@ -398,7 +398,7 @@ flowchart LR
       <li><strong>快照冻结</strong>：<code>SystemPromptSnapshot</code> 在会话开启时生成并冻结（<strong>内容</strong>快照）；运行中工具/技能定义变更<strong>不影响</strong>进行中的会话。
         <strong>技能有两层，冻结的只有浅层</strong>：可见清单（哪些 <code>skillId</code>）+ 三件套（<code>name / description / triggerCondition</code>）冻结；<strong>SOP 正文不冻结</strong>——<code>load_skill</code> 每次现读 <code>SKILL.md</code>，因此同一会话前后两次 <code>load_skill</code> 可能拿到不同正文（技能被改进时）。这是有意接受的漂移（S3）：<strong>正文是外部资产，不是会话事实</strong>，也不受 <code>Record</code> 的 append-only 约束。会话中途新沉淀的技能<strong>不进</strong>当前清单，下个会话才可见。</li>
       <li><strong>流水只追加</strong>：<code>Record</code> 不得修改；被 <code>Attempt.recordRange</code> 引用的区间<strong>永不删除、永不改写</strong>（本地应用的磁盘控制只能靠归档/导出）。</li>
-      <li><strong>会话树</strong>：<code>parentSessionId</code> 组树；<strong>父会话取消 ⇒ 级联取消所有子会话</strong>；<strong>子代理不得再开子代理</strong>（深度恒为 1）。</li>
+      <li><strong>会话树</strong>：<code>parentSessionId</code> 组树；<strong>父会话终止 ⇒ 级联终止所有子会话</strong>（终止信号经令牌传到子会话，见<a href="08-application.html">第 8 章</a> 8.9.4.1）；<strong>子代理不得再开子代理</strong>（深度恒为 1）。</li>
       <li><strong>没有状态</strong>：<code>sessions/&lt;id&gt;/</code> 存在即可用，不存在即不可用（含已归档，见《模块-感知》§7.1 规则 7）。“在跑”是进程内事实，不落盘；归档 = 压成包移走，此后应用不再认识它。删除 = 物理消失。</li>
       <li><strong>销毁</strong>：物理删除该会话族的 <code>Record</code>、<code>Plan</code>、<code>Budget</code>；<strong>已沉淀的 <code>Experience</code> 保留</strong>（记忆模块全局资产）。</li>
       <li><strong>上下文组装</strong>（<code>buildContextForLlm(policy)</code>）是<strong>两区 + 累积窗口</strong>，没有“条数上限”：
@@ -421,7 +421,7 @@ flowchart LR
       <li><strong>摘要是“影子主请求”</strong>：同一快照、同一 tools 快照、<code>messages</code> = 当前窗口 + 末尾追加一条 <code>user</code> 摘要指令。指令<strong>不落 <code>Record</code></strong>；模型回复<strong>只用于生成 <code>SUMMARY</code></strong>，不落 <code>ASSISTANT</code> 记录、不生成 <code>turnId</code>、不参与轮对齐。指令必须放在<strong>末尾</strong>（放最前会破坏缓存前缀，也会被长对话淹没）。</li>
       <li><strong>折叠后窗口回落到配置条数</strong>：保留区 = 覆盖边界之后最近的整轮、累计记录条数 ≥ <code>collapseRetainRecordCount</code>；<code>summaryCoversUpTo</code> = 保留区前一条的 <code>sequence</code>，且<strong>单调不减</strong>。新摘要<strong>吞并旧摘要</strong>（素材天然含旧摘要正文——它本来就在窗口最前），旧 <code>SUMMARY</code> 记录留在流水里但不再进窗口。</li>
       <li><strong>摘要指令必须要求保留</strong>：用户目标与约束、已确认事实、<strong>已完成的步骤及其结论/失败原因</strong>、已做操作与结果、待办、已加载技能与经验要点。理由：沉淀与反思只 fork 当前窗口，长计划早期步骤的原文已被折叠，证据只能来自摘要（见《模块-记忆》§8.6）。</li>
-      <li><strong>折叠失败分两种，不可合并处理</strong>：① <strong>因输入超限失败</strong> ⇒ 从待摘要区间的<strong>最旧一整轮</strong>开始丢弃素材后重试，被丢弃的区间必须在摘要正文里声明“更早的 N 条记录（seq a..b）因超出输入上限未纳入摘要”；丢弃不得触及保留区。② <strong>因模型不可用/取消失败</strong> ⇒ 返回、不推进任何状态、不落半截 <code>SUMMARY</code>、不丢任何记录。</li>
+      <li><strong>折叠失败分两种，不可合并处理</strong>：① <strong>因输入超限失败</strong> ⇒ 从待摘要区间的<strong>最旧一整轮</strong>开始丢弃素材后重试，被丢弃的区间必须在摘要正文里声明“更早的 N 条记录（seq a..b）因超出输入上限未纳入摘要”；丢弃不得触及保留区。② <strong>因模型不可用/终止</strong> ⇒ 返回、不推进任何状态、不落半截 <code>SUMMARY</code>、不丢任何记录。</li>
       <li><strong>折叠只能发生在工具轮闭合之后、下一次请求之前</strong>；<code>SUMMARY</code> <strong>不进入</strong> <code>Attempt.recordRange</code>（<code>extendAttemptRange</code> 推进区间时跳过 <code>SUMMARY</code>），否则摘要会被当成执行证据。摘要请求里模型若返回 <code>tool_calls</code> ⇒ 不执行，按摘要失败处理。</li>
     </ol>
 
@@ -500,7 +500,7 @@ sequenceDiagram
       <li><strong>折叠就是“把窗口收回配置条数”</strong>：保留区 = 覆盖边界之后最近的整轮、累计记录条数 ≥ <code>collapseRetainRecordCount</code>（软上限，默认 20）；<code>summaryCoversUpTo</code> = 保留区前一条的 <code>sequence</code>，且<strong>单调不减</strong>。折叠只发生在工具轮闭合之后。</li>
       <li><strong>新摘要吞并旧摘要</strong>：素材 = 旧 <code>SUMMARY</code> 正文 + 覆盖边界之后到保留区之前的全部记录（含 SYSTEM 注入）。旧摘要本来就在窗口最前，所以“吞并”天然成立；旧 <code>SUMMARY</code> 记录留在流水里但不再进窗口。</li>
       <li><strong>摘要指令必须要求保留</strong>：目标与约束、已确认事实、<strong>已完成的步骤及其结论/失败原因</strong>、已做操作与结果、待办、已加载技能与经验要点（沉淀与反思只 fork 当前窗口，早期证据只能靠它）。</li>
-      <li><strong>失败分两种</strong>：① <strong>因输入超限失败</strong> ⇒ 从待摘要区间<strong>最旧一整轮</strong>开始丢素材后重试，被丢区间必须在摘要正文里声明（不得触及保留区）；② <strong>因模型不可用/取消失败</strong> ⇒ 返回、不推进状态、不落半截 <code>SUMMARY</code>、不丢记录。</li>
+      <li><strong>失败分两种</strong>：① <strong>因输入超限失败</strong> ⇒ 从待摘要区间<strong>最旧一整轮</strong>开始丢素材后重试，被丢区间必须在摘要正文里声明（不得触及保留区）；② <strong>因模型不可用/终止</strong> ⇒ 返回、不推进状态、不落半截 <code>SUMMARY</code>、不丢记录。</li>
       <li><strong>有效上限</strong> = <code>min(summarizationTokenThreshold, maxInputTokens − inputSafetyMargin)</code>（<code>inputSafetyMargin</code> 默认 <strong>10000</strong>）。它的语义是“<strong>主请求与摘要请求共用的安全余量</strong>”（抵御估算偏差、摘要指令与快照边角），<strong>不是输出预留</strong>——输入与输出是两个独立上限。</li>
       <li><strong>计量口径唯一</strong>：本服务不自己实现 tokenizer，一律经 <code>ModelInvocationPort</code> 计量；摘由<strong>当前会话模型</strong>生成，token 记到<strong>会话族根</strong>。摘要请求里模型若返回 <code>tool_calls</code> ⇒ 不执行，按失败处理。</li>
       <li><strong>承接“请求超限”的补充折叠</strong>：行动 <code>ModelInvoker</code> 抛「请求超限」时，外循环调本服务<strong>强制折叠一次</strong>再重试；<strong>不消耗重试名额</strong>；仍超限则同“模型不可用”返回并提示。这条与前置判定要去重，同一轮不得折两次。</li>
@@ -582,7 +582,7 @@ flowchart TD
         <tr><td><strong>计划诞生</strong></td><td><code>PlanFactory</code> 创建 <code>Plan</code>（并触发经验分配）</td></tr>
         <tr><td><strong>步骤启动</strong></td><td>取当前 step，创建 <code>Attempt</code>（开区间）</td></tr>
         <tr><td><strong>步骤提交验收</strong></td><td><code>submit_step</code> → 触发验证 / 或免验证直接完成</td></tr>
-        <tr><td><strong>步骤固化 / 判败 / 中断</strong></td><td>step 的三种结束：<code>SUCCEEDED</code> / <code>FAILED</code> / <code>INTERRUPTED</code></td></tr>
+        <tr><td><strong>步骤固化 / 判败</strong></td><td>step 的两种结束：<code>SUCCEEDED</code> / <code>FAILED</code>（“没做完”不结束 step，续跑接着做）</td></tr>
         <tr><td><strong>步骤重试</strong></td><td>失败后新建 <code>Attempt</code>；达阈值则产生 <code>Reflection</code></td></tr>
         <tr><td><strong>计划重划</strong></td><td><code>replanGeneration + 1</code>，未执行 step 置 <code>SUPERSEDED</code> 并重新分配经验</td></tr>
         <tr><td><strong>计划完结</strong></td><td><code>COMPLETED</code> / <code>FAILED</code>，触发经验沉淀</td></tr>

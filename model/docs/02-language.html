@@ -67,7 +67,7 @@
         <tr><td><strong>反思</strong></td><td><code>Reflection</code></td><td>失败到一定次数后，让一个"军师"代理分析为什么失败，结论会喂给下一次尝试。</td></tr>
         <tr><td><strong>重划</strong></td><td>replan</td><td>重做计划：只替换<strong>还没执行</strong>的那部分，已完成的步骤保留。</td></tr>
         <tr><td><strong>固化</strong></td><td>succeeded 不可变</td><td>步骤成功后，它的产出与记录就锁死，不再改动。</td></tr>
-        <tr><td><strong>中断</strong></td><td><code>INTERRUPTED</code></td><td>你按了 Ctrl-C 或关掉程序。这次尝试作废，但<strong>不算一次失败</strong>。</td></tr>
+        <tr><td><strong>终止</strong></td><td><code>CANCELLED</code>（本轮）</td><td>你按了一次 Esc（或预算预警处拒绝继续、某个子代理跑到超时）。<strong>这一轮作废，但不算一次失败</strong>：尝试不结束，下次输入接着做。</td></tr>
       </tbody>
     </table>
 
@@ -137,7 +137,7 @@
       <tbody>
         <tr><td>装什么</td><td>所有说过的话</td><td>一串要做的步骤</td><td>某一步的一次执行</td></tr>
         <tr><td>一个会话里有几个</td><td>—</td><td>0 到多个（闲聊就是 0）</td><td>每步可以有多个（重试就有多个）</td></tr>
-        <tr><td>什么时候结束</td><td>归档或删除</td><td>成功 / 失败</td><td>提交 / 失败 / 中断</td></tr>
+        <tr><td>什么时候结束</td><td>归档或删除</td><td>成功 / 失败</td><td>提交 / 失败</td></tr>
       </tbody>
     </table>
 
@@ -198,8 +198,8 @@
       <thead><tr><th>枚举</th><th>取值</th><th>用在哪</th></tr></thead>
       <tbody>
         <tr><td><code>PlanStatus</code></td><td>EXECUTING / REPLANNING / COMPLETED / FAILED</td><td>计划走到哪</td></tr>
-        <tr><td><code>StepStatus</code></td><td>PENDING / RUNNING / VERIFYING / SUCCEEDED / FAILED / SUPERSEDED / CANCELLED</td><td>单个步骤</td></tr>
-        <tr><td><code>AttemptOutcome</code></td><td>SUCCEEDED / FAILED / INTERRUPTED</td><td>一次尝试的结局（只有这三种是边界）</td></tr>
+        <tr><td><code>StepStatus</code></td><td>PENDING / RUNNING / VERIFYING / SUCCEEDED / FAILED / SUPERSEDED</td><td>单个步骤</td></tr>
+        <tr><td><code>AttemptOutcome</code></td><td>SUCCEEDED / FAILED</td><td>一次尝试的结局（只有这两种是边界；“没做完”不结束尝试）</td></tr>
         <tr><td><code>VerificationOutcome</code></td><td>PASSED / FAILED / UNDETERMINED</td><td>验证结论（三态，中间那态会转人工）</td></tr>
         <tr><td><code>VerificationType</code></td><td>DETERMINISTIC / ENV_FEEDBACK / LLM_JUDGE / HUMAN_APPROVAL</td><td>验证链的四道，顺序固定</td></tr>
         <tr><td><code>RecordRole</code></td><td>SYSTEM / USER / ASSISTANT / TOOL_REQUEST / TOOL_RESULT / SUMMARY</td><td>流水里每条记录的身份</td></tr>
