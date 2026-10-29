@@ -20,9 +20,9 @@
     <p><strong>一句话：领域层只决定，应用层只执行。</strong></p>
 
     <div class="chips">
-      <span class="chip">用例 6</span>
-      <span class="chip">应用组件 12</span>
-      <span class="chip">端口 21</span>
+      <span class="chip">用例 8</span>
+      <span class="chip">应用组件 17</span>
+      <span class="chip">端口 24</span>
       <span class="chip v">不含业务规则</span>
     </div>
 
@@ -30,7 +30,7 @@
     <table>
       <thead><tr><th>方向</th><th>内容</th></tr></thead>
       <tbody>
-        <tr><td>本层对象</td><td>7 个用例服务 + 17 个应用内组件</td></tr>
+        <tr><td>本层对象</td><td>8 个用例服务 + 17 个应用内组件</td></tr>
         <tr><td>本层依赖</td><td>领域层（聚合方法、领域服务、领域策略）——只读调用，不实现规则；24 个端口（只认接口）</td></tr>
         <tr><td>谁依赖本层</td><td>外壳（本期只做 TUI；端口契约不变）只调用例服务</td></tr>
         <tr><td>本层<strong>不</strong>负责</td><td>状态机与不变量（领域层）、文件与网络与终端（基础设施层）</td></tr>
@@ -48,8 +48,8 @@
 
     <h2><span class="sec">8.2</span>分层视图</h2>
     <pre class="mermaid">flowchart TD
-    SHELL["外壳&lt;br/&gt;TUI / CLI / Server"] --&gt; UC["应用层&lt;br/&gt;7 个用例 + 17 个组件"]
-    UC --&gt; DOM["领域层&lt;br/&gt;12 聚合 + 领域服务 + 领域策略"]
+    SHELL["外壳&lt;br/&gt;TUI / CLI / Server"] --&gt; UC["应用层&lt;br/&gt;8 个用例 + 17 个组件"]
+    UC --&gt; DOM["领域层&lt;br/&gt;13 聚合 + 领域服务 + 领域策略"]
     UC --&gt; PORT["24 个端口"]
     PORT --&gt; INFRA["基础设施层&lt;br/&gt;文件 / 模型 / 终端 / 时钟"]
     INFRA -.实现.-&gt; PORT</pre>
@@ -69,6 +69,7 @@
         U5[AdjustPolicyUseCase]
         U6[ManageCatalogUseCase]
         U7[ManagePluginsUseCase]
+        U8[SwitchModelUseCase]
     end
     subgraph 应用组件
         EL[ExecutionLoop]
@@ -87,8 +88,8 @@
         SR[StartupReconciler]
         PA[PluginAssembler]
     end
-    TUI --&gt; U1 &amp; U2 &amp; U3 &amp; U4 &amp; U5 &amp; U6 &amp; U7
-    CLI --&gt; U1 &amp; U2 &amp; U3 &amp; U4 &amp; U5 &amp; U6 &amp; U7
+    TUI --&gt; U1 &amp; U2 &amp; U3 &amp; U4 &amp; U5 &amp; U6 &amp; U7 &amp; U8
+    CLI --&gt; U1 &amp; U2 &amp; U3 &amp; U4 &amp; U5 &amp; U6 &amp; U7 &amp; U8
     U1 --&gt; TG &amp; EL
     U2 --&gt; EL
     U3 --&gt; SR &amp; EL
@@ -106,6 +107,7 @@
         U5[AdjustPolicy]
         U6[ManageCatalog]
         U7[ManagePlugins]
+        U8[SwitchModel]
     end
     subgraph 组件
         EL[ExecutionLoop]
@@ -192,6 +194,7 @@
     U5 --&gt;|load / save| R5
     U6 --&gt;|"tools / agents / providers / models / skills"| R5
     U7 --&gt;|"install / grant / revoke"| P8
+    U8 --&gt;|"switchModel / save"| R1
     PA --&gt;|"启停 ⇒ 处理器注册表 + 端口路由表"| P8</pre>
     <p class="diagram-note">图 8-3　用例 → 组件 → 端口（虚线省略了部分只读关系）</p>
 
@@ -272,7 +275,7 @@
     </div>
 
     <h2><span class="sec">8.6</span>应用内组件清单</h2>
-    <p><strong>核心组件（16 个）</strong></p>
+    <p><strong>核心组件（17 个）</strong></p>
     <table>
       <thead><tr><th>组件</th><th>职责</th><th>关键协作</th></tr></thead>
       <tbody>
@@ -311,7 +314,7 @@
 
     <div class="callout">
       <div class="ct">数字口径</div>
-      7 个用例 + <strong>17 个核心组件</strong> + <strong>14 个工具处理器 / 钩子</strong>（早期增 <code>PlanCompletionCurator</code> / <code>SkillDistillationService</code>；增 <code>PluginAssembler</code>；M45 增 8 个本地能力处理器）。后 14 个是被分发的处理单元（处理器 / 注册表 / 验证钩子），按职责单列一组，不改变用例编排。
+      8 个用例 + <strong>17 个核心组件</strong> + <strong>14 个工具处理器 / 钩子</strong>（早期增 <code>PlanCompletionCurator</code> / <code>SkillDistillationService</code>；增 <code>PluginAssembler</code>；M45 增 8 个本地能力处理器）。后 14 个是被分发的处理单元（处理器 / 注册表 / 验证钩子），按职责单列一组，不改变用例编排。
     </div>
 
     <h3><span class="sec">8.6.1</span>应用层的内部实现类</h3>
@@ -347,7 +350,7 @@
               <li>外壳按 <code>Kind</code> 决定呈现方式（状态行 or 常驻行），<strong>应用层不关心排版</strong>。</li>
             </ul></blockquote>
 
-    <h2><span class="sec">8.7</span>端口清单（23 个）</h2>
+    <h2><span class="sec">8.7</span>端口清单（24 个）</h2>
     <table>
       <thead><tr><th>端口</th><th>职责</th><th>关键方法</th><th>实现方</th></tr></thead>
       <tbody>

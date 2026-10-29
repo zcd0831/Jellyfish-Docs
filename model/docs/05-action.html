@@ -19,7 +19,7 @@
     </p>
 
     <div class="chips">
-      <span class="chip">聚合 5</span>
+      <span class="chip">聚合 6</span>
       <span class="chip">领域服务 3</span>
       <span class="chip">端口 1 实现 · 1 声明</span>
       <span class="chip">领域事件 2</span>
@@ -29,8 +29,8 @@
     <table>
       <thead><tr><th>方向</th><th>内容</th></tr></thead>
       <tbody>
-        <tr><td>本模块聚合</td><td><code>ToolDefinition</code>、<code>Provider</code>、<code>Model</code>、<code>AgentDefinition</code>、<code>Budget</code></td></tr>
-        <tr><td>本模块对象所在的层</td><td><strong>领域层</strong>：5 个聚合及其规则；<strong>应用层</strong>：<code>ToolExecutor</code>、<code>BudgetService</code>；<strong>基础设施层</strong>：<code>ModelInvoker</code>（<code>SkillSopProvider</code> 是记忆模块声明的端口，由基础设施实现，不属于本模块对象）</td></tr>
+        <tr><td>本模块聚合</td><td><code>ToolDefinition</code>、<code>Provider</code>、<code>Model</code>、<code>AgentDefinition</code>、<code>Budget</code>、<code>PluginManifest</code></td></tr>
+        <tr><td>本模块对象所在的层</td><td><strong>领域层</strong>：6 个聚合及其规则；<strong>应用层</strong>：<code>ToolExecutor</code>、<code>BudgetService</code>；<strong>基础设施层</strong>：<code>ModelInvoker</code>（<code>SkillSopProvider</code> 是记忆模块声明的端口，由基础设施实现，不属于本模块对象）</td></tr>
         <tr><td>被本模块引用的外部 ID（仅 ID）</td><td><code>SessionId</code>（感知，<code>Budget.sessionFamilyRootId</code>、子会话创建）、<code>SkillId</code>（记忆，仅作为绑定 ID）</td></tr>
         <tr><td>被外部引用的本模块对象</td><td><code>RuntimePolicy</code> 的读取者（感知持有）、<code>ToolId</code> / <code>ModelId</code> / <code>AgentId</code> 被各模块引用</td></tr>
       </tbody>

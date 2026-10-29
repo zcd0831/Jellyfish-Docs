@@ -947,7 +947,7 @@ flowchart LR
           <td>端口背后：文件、模型、终端、时钟</td>
           <td>—</td>
           <td>22 个适配器（见 <a href="09-infrastructure.html">第 9 章</a>）</td>
-          <td>实现 21 个端口（<code>HumanInteractionPort</code> / <code>ProgressPort</code> 由外壳实现）</td>
+          <td>实现 21 个端口（<code>HumanInteractionPort</code> / <code>ProgressPort</code> 由外壳实现，<code>CancellationRegistry</code> 由应用层实现）</td>
         </tr>
       </tbody>
     </table>
@@ -1070,6 +1070,7 @@ flowchart LR
         <tr><td>模型与外部</td><td><code>ModelInvocationPort</code>（<code>invoke</code> / <code>invokeStreaming</code>）、<code>ExternalToolPort</code>、<code>SkillSopProvider</code>、<code>PluginRuntimePort</code></td></tr>
         <tr><td>人机与进度</td><td><code>HumanInteractionPort</code>、<code>ProgressPort</code>（<strong>实现方：外壳</strong>）、<code>DomainEventPublisher</code></td></tr>
         <tr><td>时间与生命周期</td><td><code>Clock</code>、<code>TokenCounter</code>、<code>InstanceLock</code>、<code>SchemaMigrator</code></td></tr>
+        <tr><td>终止</td><td><code>CancellationRegistry</code>（<strong>实现方：应用层</strong>；模型调用与工具执行据此判断本轮是否已被终止）</td></tr>
       </tbody>
     </table>
 
