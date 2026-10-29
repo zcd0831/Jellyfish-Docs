@@ -30,8 +30,8 @@
     <table>
       <thead><tr><th>方向</th><th>内容</th></tr></thead>
       <tbody>
-        <tr><td>本层对象</td><td>7 个用例服务 + 15 个应用内组件</td></tr>
-        <tr><td>本层依赖</td><td>领域层（聚合方法、领域服务、领域策略）——只读调用，不实现规则；23 个端口（只认接口）</td></tr>
+        <tr><td>本层对象</td><td>7 个用例服务 + 17 个应用内组件</td></tr>
+        <tr><td>本层依赖</td><td>领域层（聚合方法、领域服务、领域策略）——只读调用，不实现规则；24 个端口（只认接口）</td></tr>
         <tr><td>谁依赖本层</td><td>外壳（本期只做 TUI；端口契约不变）只调用例服务</td></tr>
         <tr><td>本层<strong>不</strong>负责</td><td>状态机与不变量（领域层）、文件与网络与终端（基础设施层）</td></tr>
       </tbody>
@@ -48,9 +48,9 @@
 
     <h2><span class="sec">8.2</span>分层视图</h2>
     <pre class="mermaid">flowchart TD
-    SHELL["外壳&lt;br/&gt;TUI / CLI / Server"] --&gt; UC["应用层&lt;br/&gt;7 个用例 + 15 个组件"]
+    SHELL["外壳&lt;br/&gt;TUI / CLI / Server"] --&gt; UC["应用层&lt;br/&gt;7 个用例 + 17 个组件"]
     UC --&gt; DOM["领域层&lt;br/&gt;12 聚合 + 领域服务 + 领域策略"]
-    UC --&gt; PORT["23 个端口"]
+    UC --&gt; PORT["24 个端口"]
     PORT --&gt; INFRA["基础设施层&lt;br/&gt;文件 / 模型 / 终端 / 时钟"]
     INFRA -.实现.-&gt; PORT</pre>
     <p class="diagram-note">图 8-1　依赖方向：外壳 → 应用层 → 领域层 / 端口 ← 基础设施层；反向不存在</p>
@@ -289,6 +289,7 @@
         <tr><td><code>SkillDistillationService</code></td><td>接收技能产物：校验四件套 → <code>CREATE / MERGE</code> 判定（<code>mutable</code>、<code>ACTIVE</code>、容量）→ <code>create</code> / <code>revise</code> → 写 <code>SKILL.md</code></td><td><code>SkillDefinition</code>、<code>CatalogRepository</code>、<code>RuntimePolicy</code>、<code>CommitScope</code></td></tr>
         <tr><td><code>ExperienceFeedbackService</code></td><td>step 结束后回写奖惩（规则在 <code>Experience</code> 聚合内）</td><td><code>ExperienceRepository</code></td></tr>
         <tr><td><code>SessionTitleGenerator</code></td><td>首条输入 → 标题（失败降级首句截断）</td><td><code>ModelInvocationPort</code>、<code>BudgetService</code></td></tr>
+        <tr><td><strong><code>SessionCancellations</code></strong></td><td>终止信号登记表：一个在跑会话一个令牌，父终止级联子；只活在进程内（8.9.4.1）</td><td><code>RunSessionUseCase</code>、<code>SubagentLauncher</code>、<code>ManageSessionUseCase</code>、模型调用与工具执行（经 <code>CancellationRegistry</code> 读）</td></tr>
         <tr><td><code>BudgetService</code></td><td>把会话族内任意消耗归集到根 <code>Budget</code>，越过阈值 raise <code>BudgetWarning</code></td><td><code>BudgetRepository</code>、<code>PolicyRepository</code></td></tr>
         <tr><td><code>StartupReconciler</code></td><td>启动时按 5 条规则补齐崩溃残留（见 8.10）</td><td>各仓储、<code>CommitScope</code></td></tr>
         <tr><td><code>PluginAssembler</code></td><td>插件启停的唯一落点：装载/卸载 jar，把扩展对象注册进处理器注册表与端口路由表（<strong>只换实现，不动声明</strong>）</td><td><code>PluginRuntimePort</code>、<code>PluginRepository</code>、端口路由表</td></tr>
@@ -310,7 +311,7 @@
 
     <div class="callout">
       <div class="ct">数字口径</div>
-      7 个用例 + <strong>16 个核心组件</strong> + <strong>14 个工具处理器 / 钩子</strong>（早期增 <code>PlanCompletionCurator</code> / <code>SkillDistillationService</code>；增 <code>PluginAssembler</code>；M45 增 8 个本地能力处理器）。后 14 个是被分发的处理单元（处理器 / 注册表 / 验证钩子），按职责单列一组，不改变用例编排。
+      7 个用例 + <strong>17 个核心组件</strong> + <strong>14 个工具处理器 / 钩子</strong>（早期增 <code>PlanCompletionCurator</code> / <code>SkillDistillationService</code>；增 <code>PluginAssembler</code>；M45 增 8 个本地能力处理器）。后 14 个是被分发的处理单元（处理器 / 注册表 / 验证钩子），按职责单列一组，不改变用例编排。
     </div>
 
     <h3><span class="sec">8.6.1</span>应用层的内部实现类</h3>
@@ -324,6 +325,8 @@
         <tr><td><code>ModelInvocationException</code></td><td>端口失败时抛出，携带上下文自己的 <code>DomainError</code>（<code>M_*</code>）</td></tr>
         <tr><td><code>Json</code> / <code>JsonText</code></td><td>应用层自带的极简 JSON 解析与转义：<strong>不引 JSON 库</strong>（模块边界见《模块-应用层》「模块边界」）</td></tr>
         <tr><td><code>SessionTranscript</code></td><td>会话回放的只读视图：会话头（标题 / 模型 / 创建时间）+ 最近若干条记录 + “是否还有更早” + 上下文占用标签</td></tr>
+        <tr><td><strong><code>SessionCancellations</code></strong></td><td>在跑会话的终止信号登记表：「会话 id → 令牌」与「父会话 id → 子会话 id 集合」两张<strong>进程内</strong>表；登记时先看父令牌（spawn 与终止撞车不漏），注销时摘掉自己的回调与父子链接（8.9.4.1）</td></tr>
+        <tr><td><strong><code>CancellationRegistry</code></strong></td><td>按会话取终止信号的只读接口：基础设施（传输层、本地工具）通过它判断本轮是否已被终止</td></tr>
         <tr><td><code>RunSessionProvider</code></td><td>延迟取 <code>RunSessionUseCase</code>：子代理启动器 → 用例 → 外循环 → 内循环 → 工具执行 → 启动器 是构造环，用"取的时候才要"打断它（应用层不引容器类型）</td></tr>
         <tr><td><code>CommandParsing</code></td><td><code>run_command</code> 的<strong>浅结构解析</strong>（纯字符串、不碰文件与进程）：引号消解后得到每段的 <code>程序 / 参数 / 操作数 / 重定向</code> 与段间拓扑；<code>sh -c</code> / <code>eval</code> 的实参递归解析（深度上限 2）。<strong>解析失败要能被上层区分出来</strong>——fail-closed 的前提（行动 5.8.1 规则 10）</td></tr>
         <tr><td><code>CommandRules</code></td><td>绊线判定项（结构化谓词，不是正则）与结论三态：<code>放行 / 需审批(原因) / 无法解析</code></td></tr>
@@ -366,6 +369,7 @@
         <tr><td><code>SkillSopProvider</code></td><td>按 id 读并渲染 SOP</td><td><code>sop(skillId)</code></td><td>基础设施</td></tr>
         <tr><td><code>HumanInteractionPort</code></td><td><strong>阻塞式</strong>提问（单队列、标来源、可被终止唤醒）</td><td><code>ask(question) → answer</code></td><td>外壳（TUI）；CLI / Server 各自实现</td></tr>
         <tr><td><code>ProgressPort</code></td><td>非领域进度：压缩、子代理并行、计划与步骤推进、工具调用开始/结束、模型降级、用量</td><td><code>emit(event)</code></td><td>外壳（TUI）</td></tr>
+        <tr><td><strong><code>CancellationRegistry</code></strong></td><td>按会话取终止信号：模型调用与工具执行据此判断本轮是否已被终止</td><td><code>forSession(sessionId)</code></td><td><strong>应用层</strong>（<code>SessionCancellations</code>：登记表就在本层，见 8.9.4.1）</td></tr>
         <tr><td><code>DomainEventPublisher</code></td><td>领域事件，<strong>提交后同步派发</strong>（只通知）</td><td><code>publishAfterCommit(events)</code></td><td>基础设施</td></tr>
         <tr><td><code>Clock</code></td><td>时间（便于测试与审计）</td><td><code>now</code></td><td>基础设施</td></tr>
         <tr><td><code>TokenCounter</code></td><td>token 计量（与真实计费一致）</td><td><code>count(messages, modelId)</code></td><td>基础设施</td></tr>

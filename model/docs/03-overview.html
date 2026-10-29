@@ -939,7 +939,7 @@ flowchart LR
           <td><strong>应用层</strong></td>
           <td>用例编排、事务与提交顺序、端口契约、并发</td>
           <td>—（只编排，不持有聚合）</td>
-          <td>7 个用例 + 15 个组件（见 <a href="08-application.html">第 8 章</a>）</td>
+          <td>7 个用例 + 17 个组件（见 <a href="08-application.html">第 8 章</a>）</td>
           <td>定义并被基础设施实现</td>
         </tr>
         <tr>
@@ -1154,7 +1154,7 @@ flowchart LR
     <pre class="mermaid">flowchart TD
     SHELL["外壳&lt;br/&gt;本期 TUI"] --&gt; APP["应用层&lt;br/&gt;6 用例 + 12 组件"]
     APP --&gt; DOM["领域层&lt;br/&gt;12 聚合 + 领域服务 + 领域策略"]
-    APP --&gt; PORTS["23 个端口"]
+    APP --&gt; PORTS["24 个端口"]
     PORTS --&gt; INF["基础设施层&lt;br/&gt;22 个适配器"]
     INF -.实现.-&gt; PORTS</pre>
     <p class="diagram-note">图 3-4　三层依赖：应用层只认端口，基础设施只实现端口，领域层谁都不认</p>
