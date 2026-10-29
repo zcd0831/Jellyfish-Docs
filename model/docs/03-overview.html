@@ -22,11 +22,11 @@
     <div class="cards">
       <div class="card"><div class="k">领域模块</div><div class="t">4 个</div><div class="d">感知 / 行动 / 规划 / 记忆</div></div>
       <div class="card"><div class="k">分层</div><div class="t">2 层</div><div class="d">应用层 / 基础设施层</div></div>
-      <div class="card"><div class="k">聚合</div><div class="t">12 个</div><div class="d">每个聚合都有自己的不变量（红线）</div></div>
+      <div class="card"><div class="k">聚合</div><div class="t">13 个</div><div class="d">每个聚合都有自己的不变量（红线）</div></div>
       <div class="card"><div class="k">领域服务</div><div class="t">3 个</div><div class="d">纯规则：装配、计划校验、验证链</div></div>
-      <div class="card"><div class="k">应用用例 / 组件</div><div class="t">6 / 12</div><div class="d">用例编排与执行循环</div></div>
-      <div class="card"><div class="k">端口</div><div class="t">21 个</div><div class="d">应用层定义，基础设施实现</div></div>
-      <div class="card"><div class="k">领域事件</div><div class="t">15 个</div><div class="d">由聚合根发出，代表状态真的变了</div></div>
+      <div class="card"><div class="k">应用用例 / 组件</div><div class="t">8 / 17</div><div class="d">用例编排与执行循环</div></div>
+      <div class="card"><div class="k">端口</div><div class="t">24 个</div><div class="d">应用层定义，基础设施实现</div></div>
+      <div class="card"><div class="k">领域事件</div><div class="t">17 个</div><div class="d">由聚合根发出，代表状态真的变了</div></div>
       <div class="card"><div class="k">应用事件</div><div class="t">2 个</div><div class="d">过程通知，不对应状态变化</div></div>
     </div>
 
@@ -939,7 +939,7 @@ flowchart LR
           <td><strong>应用层</strong></td>
           <td>用例编排、事务与提交顺序、端口契约、并发</td>
           <td>—（只编排，不持有聚合）</td>
-          <td>7 个用例 + 17 个组件（见 <a href="08-application.html">第 8 章</a>）</td>
+          <td>8 个用例 + 17 个组件（见 <a href="08-application.html">第 8 章</a>）</td>
           <td>定义并被基础设施实现</td>
         </tr>
         <tr>
@@ -1056,8 +1056,8 @@ flowchart LR
 
     <h2><span class="sec">3.9</span>分层视图与端口全景</h2>
     <pre class="mermaid">flowchart TD
-    SHELL["外壳&lt;br/&gt;本期 TUI"] --&gt; APP["应用层&lt;br/&gt;6 用例 + 12 组件"]
-    APP --&gt; DOM["领域层&lt;br/&gt;12 聚合 + 领域服务 + 领域策略"]
+    SHELL["外壳&lt;br/&gt;本期 TUI"] --&gt; APP["应用层&lt;br/&gt;8 用例 + 17 组件"]
+    APP --&gt; DOM["领域层&lt;br/&gt;13 聚合 + 领域服务 + 领域策略"]
     APP --&gt; PORTS["24 个端口"]
     PORTS --&gt; INF["基础设施层&lt;br/&gt;22 个适配器"]
     INF -.实现.-&gt; PORTS</pre>
