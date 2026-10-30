@@ -513,6 +513,7 @@ sequenceDiagram
     participant TG as SessionTitleGenerator
     participant BS as BudgetService
     participant CS as CommitScope
+    participant EP as DomainEventPublisher
 
     UI->>U1: start(agentId?, modelId?, firstInput)
     U1->>U1: 解析 agent/model（缺省取默认），校验存在
@@ -523,8 +524,10 @@ sequenceDiagram
     U1->>BS: 创建会话族 Budget（rootSessionId = 新 id）
     U1->>TG: generate(session)（可失败 → 首句截断）
     U1->>CS: commit
+    U1->>EP: publishAfterCommit(SessionStarted)
     U1-->>UI: sessionId
     </pre>
+    <p><strong>落事实与边界。</strong><code>SessionStarted</code> 由聚合在创建时 raise、应用层提交后派发，<strong>子代理派遣走同一条路径（同样发）</strong>；它只供界面 / 审计（界面据此画会话树），<strong>不驱动任何动作</strong>。内部 fork 型子会话（反思 / 沉淀，8.9.7）<strong>不发</strong>——它不进会话列表。</p>
 
     <h3>8.9.3 <code>ResumeSessionUseCase.resume(sessionId)</code></h3>
     <pre class="mermaid">
@@ -534,14 +537,17 @@ sequenceDiagram
     participant U3 as ResumeSessionUseCase
     participant SR as StartupReconciler
     participant U2 as RunSessionUseCase
+    participant EP as DomainEventPublisher
 
     UI->>U3: resume(sessionId)
     U3->>U3: 读取 meta：若 archived 则拒绝
     U3->>SR: reconcile(session)
     SR-->>U3: 补齐结果（可能修改 plan / attempt）
+    U3->>EP: 应用事件 SessionResumed（不发 SessionStarted）
     U3->>U2: run(sessionId, null, cancellation)
     Note over U2: 计划仍在 EXECUTING 时，取同一步、同一 Attempt 继续（终止与崩溃都不结束 Attempt）
     </pre>
+    <p><strong>落事实与边界。</strong>续跑不产生新的领域事实（聚合只是重新装载既有记录、窗口重新推导），因此<strong>不重发 <code>SessionStarted</code></strong>；界面要提示“续跑中”，只在应用层发应用事件 <code>SessionResumed</code>（与 <code>SummarizationStarted</code> 同级，不进领域事件表）。</p>
 
     <h3>8.9.4 <code>ManageSessionUseCase</code>（终止 / 归档 / 删除）</h3>
     <pre class="mermaid">

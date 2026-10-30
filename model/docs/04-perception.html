@@ -193,6 +193,7 @@
     }
 
     namespace 领域事件 {
+        class SessionStarted
         class SessionCancelled
         class ModelSwitched
         class SummarizationCompleted
@@ -201,6 +202,7 @@
 
     namespace 应用事件 {
         class SummarizationStarted
+        class SessionResumed
     }
 
     Session "1" *-- "0..*" Record : append-only
@@ -222,6 +224,7 @@
     ContextWindowService ..&gt; RuntimePolicy
     ContextWindowService ..&gt; ModelInvocationPort
 
+    Session ..&gt; SessionStarted : raises
     Session ..&gt; SessionCancelled : raises
     Session ..&gt; ModelSwitched : raises
     Session ..&gt; SummarizationCompleted : raises
@@ -365,15 +368,16 @@ flowchart LR
 
     <h2><span class="sec">4.7</span>领域事件</h2>
     <table>
-      <thead><tr><th>事件</th><th>谁发出</th><th>什么时候</th><th>谁关心</th></tr></thead>
+      <thead><tr><th>事件</th><th>谁发出</th><th>什么时候</th></tr></thead>
       <tbody>
-        <tr><td><code>SessionCancelled</code></td><td>Session</td><td>会话被终止（Esc / 预算拒绝 / 级联）</td><td>级联终止子会话</td></tr>
-        <tr><td><code>ModelSwitched</code></td><td>Session</td><td>模型故障、降级策略命中</td><td>审计 / 界面</td></tr>
-        <tr><td><code>SummarizationCompleted</code></td><td>Session</td><td><code>markSummarized()</code> 完成（<code>SUMMARY</code> 已追加，窗口将在下次推导时生效）</td><td>界面 / 审计</td></tr>
-        <tr><td><code>PolicyAdjusted</code></td><td>RuntimePolicy</td><td>用户修改策略成功后</td><td>行动（备用模型链 / 信任清单缓存）、记忆（容量参数）、规划（阈值）</td></tr>
+        <tr><td><code>SessionStarted</code></td><td>Session</td><td>会话创建成功（<code>Session.create</code>）：用户开启与子代理派遣是同一路径；<strong>内部 fork 型子会话不发</strong>（见 4.8.1 规则 1），续跑不重发（见 4.8.1 规则 7）</td></tr>
+        <tr><td><code>SessionCancelled</code></td><td>Session</td><td>会话被终止（Esc / 预算拒绝 / 级联）</td></tr>
+        <tr><td><code>ModelSwitched</code></td><td>Session</td><td>主动切换、模型故障且降级策略命中</td></tr>
+        <tr><td><code>SummarizationCompleted</code></td><td>Session</td><td><code>markSummarized()</code> 完成（<code>SUMMARY</code> 已追加，窗口将在下次推导时生效）</td></tr>
+        <tr><td><code>PolicyAdjusted</code></td><td>RuntimePolicy</td><td>用户修改策略成功后</td></tr>
       </tbody>
     </table>
-    <p><strong>应用事件</strong>：<code>SummarizationStarted</code>——压缩过程开始，没有聚合状态转换，不属领域事件；用户可据此看到"压缩中"。</p>
+    <p><strong>应用事件</strong>：<code>SummarizationStarted</code>——压缩过程开始，没有聚合状态转换，不属领域事件；用户可据此看到"压缩中"。<code>SessionResumed</code>——续跑开始（会话重建、<code>StartupReconciler</code> 对账完成、窗口重新推导），同样没有聚合状态转换，只在应用层发；界面可据此看到"续跑中"。</p>
 
     <h2><span class="sec">4.8</span>聚合生命周期与规则</h2>
 
@@ -384,7 +388,7 @@ flowchart LR
         <tr>
           <td><strong>会话开启</strong>（用户发起对话）<br><strong>子代理派遣</strong>（spawn_subagents）</td>
           <td>迭代中不断追加 Record；上下文折叠；模型降级；终止</td>
-          <td><strong>归档</strong>（压成 zip 移走，应用不再可见，见《模块-感知》§7.1 规则 7）<br><strong>会话销毁</strong>（物理删除）</td>
+          <td><strong>归档</strong>（压成 zip 移走，应用不再可见）<br><strong>会话销毁</strong>（物理删除）</td>
           <td><strong>会话续跑</strong>（按 sessionId 加载，<code>StartupReconciler</code> 先对账）</td>
         </tr>
       </tbody>
@@ -392,14 +396,14 @@ flowchart LR
 
     <h4>规则清单（23 条）</h4>
     <ol>
-      <li><strong>唯一创建入口</strong>：只有应用层 <code>StartSessionUseCase</code> 能创建会话；两个触发点——用户发起对话、主会话发起子代理。</li>
+      <li><strong>唯一创建入口</strong>：只有应用层 <code>StartSessionUseCase</code> 能创建会话；两个触发点——用户发起对话、主会话发起子代理。创建成功后 <code>Session</code> raise <code>SessionStarted</code>（由应用层提交后派发，只供界面 / 审计，<strong>不驱动任何动作</strong>）；<strong>内部 fork 型子会话（反思 / 沉淀）不发</strong>——它不进会话列表（8.9.7），事件只为“界面上看得见的会话”而发。</li>
       <li><strong>创建时必须指定</strong> <code>agentId</code> 与 <code>modelId</code>（缺省取默认）；<strong>Agent 在会话内不可切换</strong>，Model 可切换（<strong>降级或用户显式切换</strong>）。切换只允许在<strong>工具轮已闭合</strong>之后：存在未拿到结果的 <code>TOOL_REQUEST</code> 时拒绝切换（模型私有状态无法跨模型/跨厂商续接）。</li>
       <li><strong>标题</strong>：由 LLM 依据首次输入的意图生成；失败则用首句截断兜底。</li>
       <li><strong>快照冻结</strong>：<code>SystemPromptSnapshot</code> 在会话开启时生成并冻结（<strong>内容</strong>快照）；运行中工具/技能定义变更<strong>不影响</strong>进行中的会话。
-        <strong>技能有两层，冻结的只有浅层</strong>：可见清单（哪些 <code>skillId</code>）+ 三件套（<code>name / description / triggerCondition</code>）冻结；<strong>SOP 正文不冻结</strong>——<code>load_skill</code> 每次现读 <code>SKILL.md</code>，因此同一会话前后两次 <code>load_skill</code> 可能拿到不同正文（技能被改进时）。这是有意接受的漂移（S3）：<strong>正文是外部资产，不是会话事实</strong>，也不受 <code>Record</code> 的 append-only 约束。会话中途新沉淀的技能<strong>不进</strong>当前清单，下个会话才可见。</li>
+        <strong>技能有两层，冻结的只有浅层</strong>：可见清单（哪些 <code>skillId</code>）+ 三件套（<code>name / description / triggerCondition</code>）冻结；<strong>SOP 正文不冻结</strong>——<code>load_skill</code> 每次现读 <code>SKILL.md</code>，因此同一会话前后两次 <code>load_skill</code> 可能拿到不同正文（技能被改进时）。这是有意接受的漂移：<strong>正文是外部资产，不是会话事实</strong>，也不受 <code>Record</code> 的 append-only 约束。会话中途新沉淀的技能<strong>不进</strong>当前清单，下个会话才可见。</li>
       <li><strong>流水只追加</strong>：<code>Record</code> 不得修改；被 <code>Attempt.recordRange</code> 引用的区间<strong>永不删除、永不改写</strong>（本地应用的磁盘控制只能靠归档/导出）。</li>
       <li><strong>会话树</strong>：<code>parentSessionId</code> 组树；<strong>父会话终止 ⇒ 级联终止所有子会话</strong>（终止信号经令牌传到子会话，见<a href="08-application.html">第 8 章</a> 8.9.4.1）；<strong>子代理不得再开子代理</strong>（深度恒为 1）。</li>
-      <li><strong>没有状态</strong>：<code>sessions/&lt;id&gt;/</code> 存在即可用，不存在即不可用（含已归档，见《模块-感知》§7.1 规则 7）。“在跑”是进程内事实，不落盘；归档 = 压成包移走，此后应用不再认识它。删除 = 物理消失。</li>
+      <li><strong>没有状态</strong>：<code>sessions/&lt;id&gt;/</code> 存在即可用，不存在即不可用（含已归档，见《模块-感知》§7.1 规则 7）。“在跑”是进程内事实，不落盘；归档 = 压成包移走，此后应用不再认识它。删除 = 物理消失。<strong>续跑是重新装载既有事实，不是状态迁移，因此不重发 <code>SessionStarted</code></strong>；界面要提示“续跑中”用应用事件 <code>SessionResumed</code>（见 4.7）。</li>
       <li><strong>销毁</strong>：物理删除该会话族的 <code>Record</code>、<code>Plan</code>、<code>Budget</code>；<strong>已沉淀的 <code>Experience</code> 保留</strong>（记忆模块全局资产）。</li>
       <li><strong>上下文组装</strong>（<code>buildContextForLlm(policy)</code>）是<strong>两区 + 累积窗口</strong>，没有“条数上限”：
         <ul>

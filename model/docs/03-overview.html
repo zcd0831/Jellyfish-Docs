@@ -711,6 +711,7 @@ classDiagram
         class ExperiencePenalized
         class BudgetWarning
         class SummarizationCompleted
+        class SessionStarted
         class SessionCancelled
         class ModelSwitched
         class PolicyAdjusted
@@ -719,6 +720,7 @@ classDiagram
 
     namespace 应用事件 {
         class SummarizationStarted
+        class SessionResumed
         class ExperienceDistillationFinished
     }
 
@@ -808,6 +810,7 @@ classDiagram
     SkillDefinition ..&gt; SkillRevised : raises
     Budget ..&gt; BudgetWarning : raises
     Session ..&gt; SummarizationCompleted : raises
+    Session ..&gt; SessionStarted : raises
     Session ..&gt; SessionCancelled : raises
     Session ..&gt; ModelSwitched : raises
     RuntimePolicy ..&gt; PolicyAdjusted : raises
@@ -1040,13 +1043,14 @@ flowchart LR
         <tr><td><code>SkillRevised</code></td><td>SkillDefinition</td><td>改写了可变技能</td><td>界面 / 审计</td></tr>
         <tr><td><code>BudgetWarning</code></td><td>Budget</td><td>首次越过预警阈值</td><td>内循环 → 问用户（<strong>同一调用栈内的即时通知</strong>，等价于记账方法的返回值，不是异步订阅）</td></tr>
         <tr><td><code>SummarizationCompleted</code></td><td>Session</td><td>摘要记录已追加</td><td>界面 / 审计</td></tr>
+        <tr><td><code>SessionStarted</code></td><td>Session</td><td>会话创建成功（用户开启 / 子代理派遣；内部 fork 与续跑不发）</td><td>界面（绘制会话树）/ 审计；<strong>无功能性订阅方</strong></td></tr>
         <tr><td><code>SessionCancelled</code></td><td>Session</td><td>会话被终止（Esc / 预算拒绝 / 级联）</td><td><strong>无功能性订阅方</strong>：级联终止由 <code>ManageSessionUseCase</code> 在同一事务内逐个处理</td></tr>
         <tr><td><code>ModelSwitched</code></td><td>Session</td><td>降级命中备用链</td><td>审计 / 界面</td></tr>
         <tr><td><code>PolicyAdjusted</code></td><td>RuntimePolicy</td><td>用户修改策略成功</td><td>只失效本地读取缓存（<strong>缓存必须可失效</strong>），不驱动任何动作</td></tr>
         <tr><td><code>ToolDefinitionUpdatedEvent</code></td><td>ToolDefinition</td><td>元数据或 schema 更新</td><td>运行中会话不订阅（快照已冻结）</td></tr>
       </tbody>
     </table>
-    <p><strong>应用事件</strong>（不进领域模型）：<code>SummarizationStarted</code>（压缩开始，无状态转换）、<code>ExperienceDistillationFinished</code>（沉淀流程跑完）。</p>
+    <p><strong>应用事件</strong>（不进领域模型）：<code>SummarizationStarted</code>（压缩开始，无状态转换）、<code>SessionResumed</code>（续跑开始，无状态转换）、<code>ExperienceDistillationFinished</code>（沉淀流程跑完）。</p>
 
     <div class="callout">
       <div class="ct">接下来</div>
