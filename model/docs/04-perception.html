@@ -282,7 +282,7 @@ flowchart LR
         <tr>
           <td><code>Session</code></td>
           <td>一次会话（可嵌套）的全部上下文事实：记录流水、系统提示词快照、窗口与摘要。由 <code>parentSessionId</code> 组成会话树</td>
-          <td>① <code>Record</code> 只追加，被 <code>Attempt.recordRange</code> 引用的记录永不删除/改写；② 快照在会话开启时冻结，运行中不再变；③ Agent 不可切换，Model 可切换；④ 父会话终止时级联终止子会话；⑤ <strong>没有状态</strong>：会话是持久化容器，存在即可用</td>
+          <td>① <code>Record</code> 只追加，不得修改、不得删除；② 快照在会话开启时冻结，运行中不再变；③ Agent 不可切换，Model 可切换；④ 父会话终止时级联终止子会话；⑤ <strong>没有状态</strong>：会话是持久化容器，存在即可用</td>
         </tr>
         <tr>
           <td><code>RuntimePolicy</code></td>
@@ -401,7 +401,7 @@ flowchart LR
       <li><strong>标题</strong>：由 LLM 依据首次输入的意图生成；失败则用首句截断兜底。</li>
       <li><strong>快照冻结</strong>：<code>SystemPromptSnapshot</code> 在会话开启时生成并冻结（<strong>内容</strong>快照）；运行中工具/技能定义变更<strong>不影响</strong>进行中的会话。
         <strong>技能有两层，冻结的只有浅层</strong>：可见清单（哪些 <code>skillId</code>）+ 三件套（<code>name / description / triggerCondition</code>）冻结；<strong>SOP 正文不冻结</strong>——<code>load_skill</code> 每次现读 <code>SKILL.md</code>，因此同一会话前后两次 <code>load_skill</code> 可能拿到不同正文（技能被改进时）。这是有意接受的漂移：<strong>正文是外部资产，不是会话事实</strong>，也不受 <code>Record</code> 的 append-only 约束。会话中途新沉淀的技能<strong>不进</strong>当前清单，下个会话才可见。</li>
-      <li><strong>流水只追加</strong>：<code>Record</code> 不得修改；被 <code>Attempt.recordRange</code> 引用的区间<strong>永不删除、永不改写</strong>（本地应用的磁盘控制只能靠归档/导出）。</li>
+      <li><strong>流水只追加</strong>：<code>Record</code> 不得修改、不得删除（本地应用的磁盘控制只能靠<strong>归档 / 导出</strong>）。</li>
       <li><strong>会话树</strong>：<code>parentSessionId</code> 组树；<strong>父会话终止 ⇒ 级联终止所有子会话</strong>（终止信号经令牌传到子会话，见<a href="08-application.html">第 8 章</a> 8.9.4.1）；<strong>子代理不得再开子代理</strong>（深度恒为 1）。</li>
       <li><strong>没有状态</strong>：<code>sessions/&lt;id&gt;/</code> 存在即可用，不存在即不可用（含已归档，见《模块-感知》§7.1 规则 7）。“在跑”是进程内事实，不落盘；归档 = 压成包移走，此后应用不再认识它。删除 = 物理消失。<strong>续跑是重新装载既有事实，不是状态迁移，因此不重发 <code>SessionStarted</code></strong>；界面要提示“续跑中”用应用事件 <code>SessionResumed</code>（见 4.7）。</li>
       <li><strong>销毁</strong>：物理删除该会话族的 <code>Record</code>、<code>Plan</code>、<code>Budget</code>；<strong>已沉淀的 <code>Experience</code> 保留</strong>（记忆模块全局资产）。</li>
@@ -428,7 +428,7 @@ flowchart LR
       <li><strong>折叠后窗口回落到配置条数</strong>：保留区 = 覆盖边界之后最近的整轮、累计记录条数 ≥ <code>collapseRetainRecordCount</code>；<code>summaryCoversUpTo</code> = 保留区前一条的 <code>sequence</code>，且<strong>单调不减</strong>。新摘要<strong>吞并旧摘要</strong>（素材天然含旧摘要正文——它本来就在窗口最前），旧 <code>SUMMARY</code> 记录留在流水里但不再进窗口。</li>
       <li><strong>摘要指令必须要求保留</strong>：用户目标与约束、已确认事实、<strong>已完成的步骤及其结论/失败原因</strong>、已做操作与结果、待办、已加载技能与经验要点。理由：沉淀与反思只 fork 当前窗口，长计划早期步骤的原文已被折叠，证据只能来自摘要（见《模块-记忆》§8.6）。</li>
       <li><strong>折叠失败分两种，不可合并处理</strong>：① <strong>因输入超限失败</strong> ⇒ 从待摘要区间的<strong>最旧一整轮</strong>开始丢弃素材后重试，被丢弃的区间必须在摘要正文里声明“更早的 N 条记录（seq a..b）因超出输入上限未纳入摘要”；丢弃不得触及保留区。② <strong>因模型不可用/终止</strong> ⇒ 返回、不推进任何状态、不落半截 <code>SUMMARY</code>、不丢任何记录。</li>
-      <li><strong>折叠只能发生在工具轮闭合之后、下一次请求之前</strong>；<code>SUMMARY</code> <strong>不进入</strong> <code>Attempt.recordRange</code>（<code>extendAttemptRange</code> 推进区间时跳过 <code>SUMMARY</code>），否则摘要会被当成执行证据。摘要请求里模型若返回 <code>tool_calls</code> ⇒ 不执行，按摘要失败处理。</li>
+      <li><strong>折叠只能发生在工具轮闭合之后、下一次请求之前</strong>：折叠边界必须落在轮边界，否则窗口里会留下"半截工具轮"、请求直接非法（规则 14）。摘要请求里模型若返回 <code>tool_calls</code> ⇒ 不执行，按摘要失败处理。</li>
     </ol>
 
     <h3>4.8.2 <code>RuntimePolicy</code> 的生命周期</h3>
@@ -586,7 +586,7 @@ flowchart TD
         <tr><td><strong>会话续跑</strong></td><td>程序重启后 resume：加载 <code>Session</code> / <code>Plan</code> / <code>Budget</code>；半截工具调用视为失败</td></tr>
         <tr><td><strong>子代理派遣</strong></td><td><code>spawn_subagents</code> 内部创建完整子会话</td></tr>
         <tr><td><strong>计划诞生</strong></td><td><code>PlanFactory</code> 创建 <code>Plan</code>（并触发经验分配）</td></tr>
-        <tr><td><strong>步骤启动</strong></td><td>取当前 step，创建 <code>Attempt</code>（开区间）</td></tr>
+        <tr><td><strong>步骤启动</strong></td><td>取当前 step，创建 <code>Attempt</code></td></tr>
         <tr><td><strong>步骤提交验收</strong></td><td><code>submit_step</code> → 触发验证 / 或免验证直接完成</td></tr>
         <tr><td><strong>步骤固化 / 判败</strong></td><td>step 的两种结束：<code>SUCCEEDED</code> / <code>FAILED</code>（“没做完”不结束 step，续跑接着做）</td></tr>
         <tr><td><strong>步骤重试</strong></td><td>失败后新建 <code>Attempt</code>；达阈值则产生 <code>Reflection</code></td></tr>

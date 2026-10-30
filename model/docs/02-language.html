@@ -58,7 +58,6 @@
         <tr><td><strong>计划</strong></td><td><code>Plan</code></td><td>模型把任务拆成的一串步骤。严格按顺序做，不并行。</td></tr>
         <tr><td><strong>步骤</strong></td><td><code>PlanStep</code></td><td>计划里的一步。它自己声明"这一步该怎么验证"。</td></tr>
         <tr><td><strong>尝试</strong></td><td><code>Attempt</code></td><td>一个步骤的<strong>一次完整执行周期</strong>。可能中间被你插话几次，但仍然是同一次尝试。</td></tr>
-        <tr><td><strong>轨迹区间</strong></td><td><code>RecordRange</code></td><td>这次尝试对应流水里的哪一段。用"起点记录 ID + 终点记录 ID"表示，不重复存内容。</td></tr>
         <tr><td><strong>提交</strong></td><td><code>submit_step</code></td><td>模型声明"这一步我做完了"，并附上产出摘要。模型不提交，这一步就一直没完成。</td></tr>
         <tr><td><strong>收敛</strong></td><td>converged</td><td>模型不再调用工具，这一轮说完了。<strong>注意：收敛不等于完成。</strong></td></tr>
         <tr><td><strong>验证链</strong></td><td><code>VerificationType</code> × 链</td><td>验收这一步的流水线，最多四道：确定性规则 → 外部反馈 → 模型裁判 → 人工审批。</td></tr>
@@ -219,7 +218,7 @@
         <tr><td>状态动词</td><td>统一用 <code>submit</code> / <code>activate</code> / <code>deprecate</code></td><td>不再混用 publish / deactivate</td></tr>
         <tr><td>事件命名</td><td>过去式，"某件事已经发生了"</td><td><code>PlanCompleted</code>、<code>ExperienceCreated</code></td></tr>
         <tr><td>跨聚合引用</td><td>只存 ID，命名 <code>xxxId</code></td><td><code>sessionId</code>、<code>verificationReportId</code></td></tr>
-        <tr><td>值对象</td><td>名词短语，不可变</td><td><code>ContextUsage</code>、<code>RecordRange</code></td></tr>
+        <tr><td>值对象</td><td>名词短语，不可变</td><td><code>ContextUsage</code>、<code>ModelUsage</code></td></tr>
         <tr><td>时间戳</td><td>一律 <code>xxxAt</code> / <code>xxxDate</code></td><td><code>createdAt</code>、<code>decidedAt</code></td></tr>
       </tbody>
     </table>

@@ -34,7 +34,7 @@
       <tbody>
         <tr><td>本模块聚合</td><td><code>Experience</code>、<code>Reflection</code>、<code>SkillDefinition</code></td></tr>
         <tr><td>本模块端口</td><td>在 <strong><code>application.memory.port</code></strong> 声明 <strong><code>SkillSopProvider</code></strong>（只声明接口，由基础设施 <code>FileSkillSopProvider</code> 实现）；本模块<strong>不实现</strong>任何端口。检索/归纳所需的<strong>内置代理能力</strong>由 <code>ModelInvocationPort</code> 提供（<code>builtin.retrieve</code> / <code>builtin.distill</code> 的 prompt，<strong>不建子会话</strong>）</td></tr>
-        <tr><td>被本模块引用的外部 ID（仅 ID）</td><td><code>PlanId</code>、<code>StepId</code>（规划）、<code>RecordRange</code> / <code>SessionId</code>（感知）</td></tr>
+        <tr><td>被本模块引用的外部 ID（仅 ID）</td><td><code>PlanId</code>、<code>StepId</code>（规划）、<code>SessionId</code>（感知）</td></tr>
         <tr><td>被外部引用的本模块对象</td><td><code>ExperienceId</code>（规划 <code>PlanStep.assignedExperienceIds</code>）、<code>ReflectionId</code>（规划 <code>Attempt.reflectionId</code>）、<code>SkillId</code>（行动 <code>AgentDefinition.skillIds</code>）、<code>RuntimePolicy</code> 中的经验参数（只读）</td></tr>
         <tr><td>本模块对象所在的层</td><td><strong>领域层</strong>：<code>Experience</code>、<code>Reflection</code>、<code>SkillDefinition</code>（含其规则）；<strong>应用层</strong>：检索 / 沉淀 / 反馈三个服务；<strong>端口</strong>：<code>SkillSopProvider</code>（接口在 <code>application.memory.port</code>，实现 <code>FileSkillSopProvider</code> 在基础设施）</td></tr>
       </tbody>
@@ -45,7 +45,7 @@
       <ul>
         <li>需要"把经验分配给 step"时，它只<strong>返回分配结果</strong>（<code>Map&lt;StepId, List&lt;ExperienceId&gt;&gt;</code>），由【规划】的 <code>Plan.assignExperiences()</code> 自己改状态；</li>
         <li>需要"读本 Plan 的执行事实"时，由调用方组装 <code>DistillationInput</code> 值对象传入，而不是让记忆去遍历 <code>Plan</code> 聚合；</li>
-        <li>需要"读原始对话"时，按 <code>RecordRange</code> <strong>只读</strong> <code>Session.Record</code>（含子会话）—— 读操作不算依赖，且<strong>绝不追写</strong>。</li>
+        <li>需要"看原始对话"时，由编排者 <strong>fork 当前生效窗口</strong>（素材即窗口，8.9.7）—— <strong>不按区间读</strong>、也<strong>绝不追写</strong> <code>Session.Record</code>。</li>
       </ul>
     </div>
 
@@ -171,7 +171,6 @@
             +StepId stepId
             +String description
             +StepStatus outcome
-            +RecordRange recordRange
             +List~SkillId~ usedSkillIds
             +String failureReason
             +String reflectionConclusion
@@ -180,11 +179,6 @@
             &lt;&lt;ValueObject&gt;&gt;
             +StepId stepId
             +List~ExperienceId~ experienceIds
-        }
-        class RecordRange {
-            &lt;&lt;ValueObject&gt;&gt;
-            +RecordId startRecordId
-            +RecordId endRecordId
         }
     }
 
@@ -337,8 +331,7 @@
         <tr><td><code>RetrievalInput</code></td><td>VO</td><td>检索入参：<code>planId</code> + 每个 step 的简要描述（<strong>不传 <code>Plan</code> 聚合</strong>）</td></tr>
         <tr><td><code>StepBrief</code></td><td>VO</td><td>检索入参的一步：<code>stepId</code> + <code>description</code>；内置检索代理靠它匹配经验（<code>builtin.retrieve</code>，不建子会话）</td></tr>
         <tr><td><code>DistillationInput</code></td><td>VO</td><td>沉淀入参：<code>planId</code>、<code>sessionId</code>、<code>goal</code>、计划结局、每步的 <code>StepTrace</code></td></tr>
-        <tr><td><code>RecordRange</code></td><td>VO</td><td>指向 <code>Session.Record</code> 流水的一段连续区间（<code>startRecordId → endRecordId</code>）；定义见<a href="06-planning.html">第 6 章</a> §5 值对象清单，本章复用以保持自包含</td></tr>
-        <tr><td><code>StepTrace</code></td><td>VO</td><td>一个 step 的执行事实摘要（描述 / 结局 / <code>RecordRange</code> / 失败原因 / 反思结论），<strong>带轨迹区间</strong>供内置归纳代理读取原始对话</td></tr>
+        <tr><td><code>StepTrace</code></td><td>VO</td><td>一个 step 的执行事实摘要（描述 / 结局 / 本次用到的技能 / 失败原因 / 反思结论）；<strong>不带对话区间</strong>——素材由编排者 fork 当前生效窗口带入（8.9.7）</td></tr>
         <tr><td><code>FeedbackInput</code></td><td>VO</td><td>反馈入参：<code>stepId</code> + 本次分配（= 注入）的经验集合 <code>experienceIds</code>。<strong>只有一个集合</strong>：分配与注入同源，没有独立的"建议"（规则 ⑦）</td></tr>
         <tr><td><code>SkillSopProvider</code></td><td>Port</td><td>按 id 读 <code>SKILL.md</code> 并渲染 SOP；由基础设施实现（本模块只是它的消费方之一）</td></tr>
       </tbody>
@@ -440,7 +433,7 @@
       <li><strong>注入形态</strong>：SOP 注入为一条 <code>role = SYSTEM</code> 的 <code>Record</code>，此后不参与滑窗（除非 SYSTEM 占比超限被整体裁剪）。</li>
       <li><strong>只有 <code>ACTIVE</code> 技能</strong>进入新会话快照；<code>DEPRECATED</code> 不占容量额度。</li>
       <li><strong>一致性</strong>：SOP 正文里提到的工具必须在 <code>AgentDefinition.toolIds</code> 内；否则由感知组装快照时告警（不阻断）。机学技能靠骨架约定（"适用"节必须写清何时用），<strong>不做代码校验</strong>。</li>
-      <li><strong>正文不是会话事实</strong>：它不受 <code>Record</code> 的 append-only 约束，也不能被 <code>RecordRange</code> 当作证据；快照<strong>冻结清单与三件套，不冻结正文</strong>（正文每次 <code>load_skill</code> 现读，接受漂移，S3）。</li>
+      <li><strong>正文不是会话事实</strong>：它不受 <code>Record</code> 的 append-only 约束，也不能被当作执行证据；快照<strong>冻结清单与三件套，不冻结正文</strong>（正文每次 <code>load_skill</code> 现读，接受漂移，S3）。</li>
     </ol>
 
     <h2><span class="sec">7.9</span>领域服务的具体操作</h2>
@@ -499,7 +492,7 @@
     <h4>要点</h4>
     <ol>
       <li><strong>零 LLM 依赖</strong>：本服务不持有 <code>ModelInvocationPort</code>，因此"经验规则"可以在没有任何假模型的单测里断言（这是把编排拆出去的收益）。</li>
-      <li><strong>读而不写别人的聚合</strong>：它不读 <code>Session.Record</code>；轨迹由编排者按 <code>RecordRange</code> 只读取好。</li>
+      <li><strong>读而不写别人的聚合</strong>：它不读 <code>Session.Record</code>；轨迹由编排者 fork 当前生效窗口带进素材（8.9.7）。</li>
       <li><strong>每 Plan 上限</strong>：<code>experiencePerPlan</code> 仍是硬上限；编排者每个计划<strong>只交一份产物</strong>，因此天然满足。</li>
       <li><strong>终局失败也沉淀</strong>：<code>PlanFailed</code> 同样会走到这里，初值统一为 <code>experienceInitialConfidence</code>（<strong>无单独参数</strong>）；是否值得保留交给后续 <code>reinforce</code> / <code>penalize</code> 自然收敛。</li>
       <li><strong>写入侧幂等</strong>：入参带来源 <code>planId</code>；若库内对应经验已包含该 <code>planId</code>（合并场景则已记入 <code>sourcePlanIds</code>），本次整段跳过、不发事件。</li>
@@ -636,7 +629,7 @@
         <tr><td><strong>会话续跑</strong></td><td>程序重启后 resume：加载 <code>Session</code> / <code>Plan</code> / <code>Budget</code>；半截工具调用视为失败</td></tr>
         <tr><td><strong>子代理派遣</strong></td><td><code>spawn_subagents</code> 内部创建完整子会话</td></tr>
         <tr><td><strong>计划诞生</strong></td><td><code>PlanFactory</code> 创建 <code>Plan</code>（并触发经验分配）</td></tr>
-        <tr><td><strong>步骤启动</strong></td><td>取当前 step，创建 <code>Attempt</code>（开区间）</td></tr>
+        <tr><td><strong>步骤启动</strong></td><td>取当前 step，创建 <code>Attempt</code></td></tr>
         <tr><td><strong>步骤提交验收</strong></td><td><code>submit_step</code> → 触发验证 / 或免验证直接完成</td></tr>
         <tr><td><strong>步骤固化 / 判败</strong></td><td>step 的两种结束：<code>SUCCEEDED</code> / <code>FAILED</code>（“没做完”不结束 step，续跑接着做）</td></tr>
         <tr><td><strong>步骤重试</strong></td><td>失败后新建 <code>Attempt</code>；达阈值则产生 <code>Reflection</code></td></tr>

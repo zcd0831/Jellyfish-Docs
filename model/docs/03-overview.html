@@ -423,16 +423,10 @@ classDiagram
         class Attempt {
             &lt;&lt;Entity&gt;&gt;
             -int attemptNo
-            -RecordRange recordRange
             -List~SkillId~ usedSkillIds
             -VerificationReportId verificationReportId
             -ReflectionId reflectionId
             -AttemptOutcome outcome
-        }
-        class RecordRange {
-            &lt;&lt;ValueObject&gt;&gt;
-            -RecordId startRecordId
-            -RecordId endRecordId
         }
         class VerificationReport {
             &lt;&lt;AggregateRoot&gt;&gt;
@@ -612,7 +606,6 @@ classDiagram
             -StepId stepId
             -String description
             -StepStatus outcome
-            -RecordRange recordRange
             -List~SkillId~ usedSkillIds
             -String failureReason
             -String reflectionConclusion
@@ -755,7 +748,6 @@ classDiagram
     SessionRunner ..&gt; RunOutcome : 产出
     Plan "1" *-- "1..*" PlanStep
     PlanStep "1" *-- "0..*" Attempt
-    Attempt *-- RecordRange
     Plan --&gt; PlanStatus
     PlanStep --&gt; StepStatus
     Attempt --&gt; AttemptOutcome
@@ -975,7 +967,7 @@ flowchart LR
         <li><strong>需要别人的动作 → 走端口。</strong>
           例：<code>ModelInvocationPort</code>（应用层声明 / 基础设施实现）、<code>ExternalToolPort</code>、<code>SkillSopProvider</code>、<code>HumanInteractionPort</code>。</li>
         <li><strong>只读别人的聚合不算依赖。</strong>
-          例：记忆按 <code>RecordRange</code> 只读 <code>Session.Record</code>；<strong>但绝不追写</strong>。</li>
+          例：沉淀 / 反思只 fork 当前生效窗口、按 <code>SessionId</code> 只读 <code>Session.Record</code>；<strong>但绝不追写</strong>。</li>
       </ol>
     </div>
 
