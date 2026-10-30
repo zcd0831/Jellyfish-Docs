@@ -483,7 +483,7 @@ classDiagram
         }
         class SessionRunner {
             &lt;&lt;ExtensionPoint&gt;&gt;
-            +run(Session, ChunkSink, CancellationToken, RunContext) RunOutcome
+            +run(Session, ChunkSink, RunContext) RunOutcome
         }
         class RunOutcome {
             &lt;&lt;Enumeration&gt;&gt;
@@ -505,7 +505,7 @@ classDiagram
         }
         class ExecutionLoop {
             &lt;&lt;ApplicationService&gt;&gt;
-            +run(Session, ChunkSink, CancellationToken, RunContext) RunOutcome
+            +run(Session, ChunkSink, RunContext) RunOutcome
         }
         class ReActLoop {
             &lt;&lt;ApplicationService&gt;&gt;
@@ -1066,7 +1066,7 @@ flowchart LR
         <tr><td>模型与外部</td><td><code>ModelInvocationPort</code>（<code>invoke</code> / <code>invokeStreaming</code>）、<code>ExternalToolPort</code>、<code>SkillSopProvider</code>、<code>PluginRuntimePort</code></td></tr>
         <tr><td>人机与进度</td><td><code>HumanInteractionPort</code>、<code>ProgressPort</code>（<strong>实现方：外壳</strong>）、<code>DomainEventPublisher</code></td></tr>
         <tr><td>时间与生命周期</td><td><code>Clock</code>、<code>TokenCounter</code>、<code>InstanceLock</code>、<code>SchemaMigrator</code></td></tr>
-        <tr><td>终止</td><td><code>CancellationRegistry</code>（<strong>实现方：应用层</strong>；模型调用与工具执行据此判断本轮是否已被终止）</td></tr>
+        <tr><td>终止</td><td><code>CancellationRegistry</code>（<strong>实现方：应用层</strong>；模型调用、工具执行与<strong>默认外循环（<code>ExecutionLoop</code>）的轮次边界</strong>据此判断本轮是否已被终止）</td></tr>
       </tbody>
     </table>
 

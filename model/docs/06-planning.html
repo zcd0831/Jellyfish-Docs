@@ -151,7 +151,7 @@
     namespace 领域服务 {
         class SessionRunner {
             &lt;&lt;ExtensionPoint&gt;&gt;
-            +run(Session, ChunkSink, CancellationToken, RunContext) RunOutcome
+            +run(Session, ChunkSink, RunContext) RunOutcome
         }
         class RunOutcome {
             &lt;&lt;Enumeration&gt;&gt;
@@ -173,7 +173,7 @@
         }
         class ExecutionLoop {
             &lt;&lt;ApplicationService&gt;&gt;
-            +run(Session, ChunkSink, CancellationToken, RunContext) RunOutcome
+            +run(Session, ChunkSink, RunContext) RunOutcome
         }
         class ReActLoop {
             &lt;&lt;ApplicationService&gt;&gt;
@@ -342,7 +342,7 @@ flowchart LR
       <thead><tr><th>服务</th><th>层</th><th>简介</th><th>跨模块依赖</th></tr></thead>
       <tbody>
         <tr><td><code>SessionRunner</code></td><td>扩展点</td><td>交付一轮运行的统一入口；<strong>默认实现是 <code>ExecutionLoop</code></strong>，插件可实现自己的循环（L3，<code>experimental</code>）</td><td><code>RunContext</code>（把端口与上下文交给实现方）</td></tr>
-        <tr><td><code>ExecutionLoop</code></td><td>应用</td><td><code>SessionRunner</code> 的默认实现：会话执行的总驱动（do-while）：每轮算上下文 → 取 step → 跑一次内循环 → 验证 → 按三条出口推进</td><td><code>ContextWindowService</code>、<code>ReActLoop</code>、<code>VerificationRunner</code>、经验三件套</td></tr>
+        <tr><td><code>ExecutionLoop</code></td><td>应用</td><td><code>SessionRunner</code> 的默认实现：会话执行的总驱动（do-while）：每轮算上下文 → 取 step → 跑一次内循环 → 验证 → 按三条出口推进</td><td><code>ContextWindowService</code>、<code>ReActLoop</code>、<code>VerificationRunner</code>、经验三件套、<code>CancellationRegistry</code></td></tr>
         <tr><td><code>ReActLoop</code></td><td>应用</td><td>单次 ReAct 迭代：组装上下文 → 让模型调工具 → 落记录 → 判定收敛与提交</td><td><code>ToolExecutor</code>、<code>BudgetService</code>、<code>HumanInteractionPort</code>、<code>SubagentLauncher</code></td></tr>
         <tr><td><code>VerificationRunner</code></td><td>应用</td><td>执行 <code>VerificationChain</code> 给出的有序层，产出 <code>VerificationReport</code></td><td><code>VerificationChain</code>（领域）、<code>ModelInvocationPort</code>、<code>HumanInteractionPort</code></td></tr>
         <tr><td><code>VerificationChain</code></td><td>领域</td><td>纯规则：<code>requiredVerifications</code> → 有序层列表；短路与三态合并</td><td>无</td></tr>
@@ -362,7 +362,7 @@ flowchart LR
         <tr><td><code>VerificationOutcome</code></td><td>Enum</td><td>PASSED / FAILED / UNDETERMINED（<code>UNDETERMINED</code> → 转人工）</td></tr>
         <tr><td><code>VerificationType</code></td><td>Enum</td><td>DETERMINISTIC / ENV_FEEDBACK / LLM_JUDGE / HUMAN_APPROVAL，固定顺序即链序</td></tr>
         <tr><td><code>RunOutcome</code></td><td>Enum</td><td>一轮运行的出口：<code>CONVERGED / SUSPENDED / ROUNDS_EXHAUSTED</code>（原本嵌在 <code>ExecutionLoop</code> 里，现已独立）</td></tr>
-        <tr><td><code>RunContext</code></td><td>VO</td><td>交给 <code>SessionRunner</code> 的运行上下文：<code>Session</code>、<code>ChunkSink</code>、<code>CancellationToken</code> + 6 个端口/服务（模型、工具、人机、进度、计划仓储、上下文窗口）</td></tr>
+        <tr><td><code>RunContext</code></td><td>VO</td><td>交给 <code>SessionRunner</code> 的运行上下文：<code>Session</code>、<code>ChunkSink</code>、<code>CancellationToken</code> + 6 个端口/服务（模型、工具、人机、进度、计划仓储、上下文窗口）；<strong>令牌是扩展实现的唯一取用通道</strong>：默认实现（<code>ExecutionLoop</code>）不接收令牌形参，轮次边界改判 <code>CancellationRegistry.forSession(sessionId)</code></td></tr>
         <tr><td><code>IterationResult</code></td><td>VO</td><td>内循环一次迭代的输出：是否收敛、是否提交、提交摘要、<strong>内循环轮次 <code>round</code></strong>（<strong>不是 attempt 序号</strong>——attempt 由外循环自己跟踪）、<strong>本次 load 过的技能</strong>（内循环拿不到 <code>Plan</code>，靠它把技能使用交回外循环）</td></tr>
       </tbody>
     </table>
