@@ -459,7 +459,7 @@ flowchart LR
         <h3>4.9.1 <code>Session.create(...)</code>（领域工厂）</h3>
     <p>会话开启的<strong>端到端时序见 <a href="08-application.html">第 8 章</a> 8.9.2 <code>StartSessionUseCase.start(...)</code></strong>，此处不重复。感知模块只负责其中的两件事：</p>
     <ul>
-      <li><code>Session.create(agentId, modelId, snapshot)</code>：领域工厂方法——造聚合、定初始状态 <code>RUNNING</code>、挂已冻结的快照；</li>
+      <li><code>Session.create(agentId, modelId, snapshot)</code>：领域工厂方法——造聚合、挂已冻结的快照；</li>
       <li><code>SystemPromptAssembler.assemble(...)</code>：内容快照的纯组装（见 4.9.3）。</li>
     </ul>
     <p>预算创建、标题生成、持久化与提交都在应用层；<code>startSubSession</code> 由应用层 <code>SubagentLauncher</code> 调用，<strong>不自建 <code>Budget</code></strong>（沿 <code>parentSessionId</code> 上溯到根）。</p>
@@ -571,30 +571,6 @@ flowchart TD
       <div class="ct">与折叠的分工（不要混）</div>
       <p><code>buildContextForLlm</code> 只负责"算"；<code>ContextWindowService</code> 负责"决定要不要折"；<code>Session.markSummarized()</code> 负责"把摘要写进流水"。</p>
     </div>
-
-
-    <h2><span class="sec">附</span>生命周期节点词表（全站统一）</h2>
-    <p>四份模块文档共用同一套节点词汇，便于横向对照；"节点 → 涉及聚合"的完整对照表见 <a href="03-overview.html">第 3 章 3.8</a>。</p>
-    <table>
-      <thead><tr><th>节点</th><th>含义</th></tr></thead>
-      <tbody>
-        <tr><td><strong>平台初始化</strong></td><td>应用启动：载入 <code>RuntimePolicy</code>，播种内置 Agent / 内置工具 / 内置技能</td></tr>
-        <tr><td><strong>策略调整</strong></td><td>用户修改 <code>RuntimePolicy</code>，立即生效</td></tr>
-        <tr><td><strong>会话开启</strong></td><td>创建 <code>Session</code> + <code>Budget</code>（会话族根）+ 冻结提示词快照 + 生成标题</td></tr>
-        <tr><td><strong>会话续跑</strong></td><td>程序重启后 resume：加载 <code>Session</code> / <code>Plan</code> / <code>Budget</code>；半截工具调用视为失败</td></tr>
-        <tr><td><strong>子代理派遣</strong></td><td><code>spawn_subagents</code> 内部创建完整子会话</td></tr>
-        <tr><td><strong>计划诞生</strong></td><td><code>PlanFactory</code> 创建 <code>Plan</code>（并触发经验分配）</td></tr>
-        <tr><td><strong>步骤启动</strong></td><td>取当前 step，创建 <code>Attempt</code></td></tr>
-        <tr><td><strong>步骤提交验收</strong></td><td><code>submit_step</code> → 触发验证 / 或免验证直接完成</td></tr>
-        <tr><td><strong>步骤固化 / 判败</strong></td><td>step 的两种结束：<code>SUCCEEDED</code> / <code>FAILED</code>（“没做完”不结束 step，续跑接着做）</td></tr>
-        <tr><td><strong>步骤重试</strong></td><td>失败后新建 <code>Attempt</code>；达阈值则产生 <code>Reflection</code></td></tr>
-        <tr><td><strong>计划重划</strong></td><td><code>replanGeneration + 1</code>，未执行 step 置 <code>SUPERSEDED</code> 并重新分配经验</td></tr>
-        <tr><td><strong>计划完结</strong></td><td><code>COMPLETED</code> / <code>FAILED</code>，触发经验沉淀</td></tr>
-        <tr><td><strong>上下文折叠</strong></td><td>token 超阈值 → 生成 <code>SUMMARY</code> → 窗口收窄</td></tr>
-        <tr><td><strong>模型降级</strong></td><td>故障命中备用模型链</td></tr>
-        <tr><td><strong>归档 / 会话销毁</strong></td><td>归档（压成 zip 移走，应用不再认识）/ 物理删除（连带 <code>Record</code> / <code>Plan</code> / <code>Budget</code>，经验保留）</td></tr>
-      </tbody>
-    </table>
 
     <div class="page-foot" id="pagenav"></div>
   </main>
