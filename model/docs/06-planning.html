@@ -367,6 +367,18 @@ flowchart LR
       </tbody>
     </table>
 
+    <h3>6.6.1 一次尝试（<code>Attempt</code>）的边界</h3>
+    <p><code>Attempt</code> = <strong>一个 step 的一次完整执行周期</strong>（可被多次用户输入切成多段 ReAct，但不切分 attempt）。</p>
+    <table>
+        <thead><tr><th>结束方式</th><th>outcome</th><th>消耗重试名额</th></tr></thead>
+        <tbody>
+        <tr><td><code>submit_step</code> → 验证通过</td><td><code>SUCCEEDED</code></td><td>—</td></tr>
+        <tr><td>验证失败 / 执行失败</td><td><code>FAILED</code></td><td>是</td></tr>
+        <tr><td><strong>终止</strong>（Esc / 预算拒绝 / 子代理超时）</td><td><strong>不结束</strong>，下次输入接着跑（不算失败）</td><td>否</td></tr>
+        <tr><td><strong>收敛但未提交</strong></td><td><strong>不结束</strong>，用户输入后续跑</td><td>否</td></tr>
+        </tbody>
+    </table>
+
     <h2><span class="sec">6.7</span>领域事件</h2>
     <table>
       <thead><tr><th>事件</th><th>谁发出</th><th>什么时候</th><th>谁关心</th></tr></thead>
@@ -658,34 +670,6 @@ flowchart TD
         <tr><td><strong>归档 / 会话销毁</strong></td><td>归档（压成 zip 移走，应用不再认识）/ 物理删除（连带 <code>Record</code> / <code>Plan</code> / <code>Budget</code>，经验保留）</td></tr>
       </tbody>
     </table>
-
-      <!-- todo 暂时放这，等下改 -->
-      <h3>3.7.1 一次尝试（<code>Attempt</code>）的边界</h3>
-      <p><code>Attempt</code> = <strong>一个 step 的一次完整执行周期</strong>（可被多次用户输入切成多段 ReAct，但不切分 attempt）。</p>
-      <table>
-          <thead><tr><th>结束方式</th><th>outcome</th><th>消耗重试名额</th></tr></thead>
-          <tbody>
-          <tr><td><code>submit_step</code> → 验证通过</td><td><code>SUCCEEDED</code></td><td>—</td></tr>
-          <tr><td>验证失败 / 执行失败</td><td><code>FAILED</code></td><td>是</td></tr>
-          <tr><td><strong>终止</strong>（Esc / 预算拒绝 / 子代理超时）</td><td><strong>不结束</strong>，下次输入接着跑（不算失败）</td><td>否</td></tr>
-          <tr><td><strong>收敛但未提交</strong></td><td><strong>不结束</strong>，用户输入后续跑</td><td>否</td></tr>
-          </tbody>
-      </table>
-      <p><code>recordRange</code> 始终连续（用户输入、注入、摘要都是 <code>Record</code>）；
-          <code>retryCount</code> = <code>FAILED</code> 的次数；<code>maxReActRounds</code> 按"自上次用户输入以来的连续轮数"计。</p>
-
-      <table>
-          <thead><tr><th>条件</th><th>结果</th></tr></thead>
-          <tbody>
-          <tr><td>无计划 + 内循环收敛</td><td>本轮交互结束，会话停在原处（会话没有状态，见《模块-感知》§7.1 规则 7）</td></tr>
-          <tr><td>内循环里 generate_plan 成功</td><td>本轮收敛后，下一轮迭代发现"有计划了",转入计划执行</td></tr>
-          <tr><td>计划 COMPLETED</td><td>先由 <code>PlanCompletionCurator</code> fork 窗口判定「经验? / 技能?」并落盘 + 写告知记录，再跑一轮自由内循环产出最终答复（结论交付）</td></tr>
-          <tr><td>计划 FAILED（外循环判定重划用尽）</td><td><code>terminate()</code> → 沉淀并写告知记录 → <strong>补一轮结论交付</strong>（工具白名单置空）→ 收敛退出；终止 / 模型不可用 / 挂起不补</td></tr>
-          <tr><td>模型不可用</td><td><code>run()</code> 立即返回；不推进状态、不耗重试、不触发反思/重划；<strong>未闭合的工具调用补一条中止结果</strong>；仅提示</td></tr>
-          <tr><td>请求超限</td><td>强制折叠一次后重试；不耗重试；仍超限按模型不可用处理</td></tr>
-          <tr><td>模型切换（降级 / 用户显式）</td><td>只允许在工具轮闭合后；新模型不再接收旧模型的 reasoning/thinking</td></tr>
-          </tbody>
-      </table>
 
     <div class="page-foot" id="pagenav"></div>
   </main>

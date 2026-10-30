@@ -377,7 +377,7 @@ flowchart LR
         <tr><td><code>PolicyAdjusted</code></td><td>RuntimePolicy</td><td>用户修改策略成功后</td></tr>
       </tbody>
     </table>
-    <p><strong>应用事件</strong>：<code>SummarizationStarted</code>——压缩过程开始，没有聚合状态转换，不属领域事件；用户可据此看到"压缩中"。<code>SessionResumed</code>——续跑开始（会话重建、<code>StartupReconciler</code> 对账完成、窗口重新推导），同样没有聚合状态转换，只在应用层发；界面可据此看到"续跑中"。</p>
+    <p><strong>应用事件</strong>：<code>SummarizationStarted</code>——压缩过程开始，没有聚合状态转换，不属领域事件；用户可据此看到"压缩中"。<code>SessionResumed</code>——续跑开始（会话重建、<code>StartupReconciler</code> 对账完成、窗口重新推导），同样没有聚合状态转换，只在应用层发。</p>
 
     <h2><span class="sec">4.8</span>聚合生命周期与规则</h2>
 
@@ -403,7 +403,7 @@ flowchart LR
         <strong>技能有两层，冻结的只有浅层</strong>：可见清单（哪些 <code>skillId</code>）+ 三件套（<code>name / description / triggerCondition</code>）冻结；<strong>SOP 正文不冻结</strong>——<code>load_skill</code> 每次现读 <code>SKILL.md</code>，因此同一会话前后两次 <code>load_skill</code> 可能拿到不同正文（技能被改进时）。这是有意接受的漂移：<strong>正文是外部资产，不是会话事实</strong>，也不受 <code>Record</code> 的 append-only 约束。会话中途新沉淀的技能<strong>不进</strong>当前清单，下个会话才可见。</li>
       <li><strong>流水只追加</strong>：<code>Record</code> 不得修改、不得删除（本地应用的磁盘控制只能靠<strong>归档 / 导出</strong>）。</li>
       <li><strong>会话树</strong>：<code>parentSessionId</code> 组树；<strong>父会话终止 ⇒ 级联终止所有子会话</strong>（终止信号经令牌传到子会话，见<a href="08-application.html">第 8 章</a> 8.9.4.1）；<strong>子代理不得再开子代理</strong>（深度恒为 1）。</li>
-      <li><strong>没有状态</strong>：<code>sessions/&lt;id&gt;/</code> 存在即可用，不存在即不可用（含已归档，见《模块-感知》§7.1 规则 7）。“在跑”是进程内事实，不落盘；归档 = 压成包移走，此后应用不再认识它。删除 = 物理消失。<strong>续跑是重新装载既有事实，不是状态迁移，因此不重发 <code>SessionStarted</code></strong>；界面要提示“续跑中”用应用事件 <code>SessionResumed</code>（见 4.7）。</li>
+      <li><strong>没有状态</strong>：<code>sessions/&lt;id&gt;/</code> 存在即可用，不存在即不可用。“在跑”是进程内事实，不落盘；归档 = 压成包移走，此后应用不再认识它。删除 = 物理消失。<strong>续跑是重新装载既有事实，不是状态迁移，因此不重发 <code>SessionStarted</code></strong>。</li>
       <li><strong>销毁</strong>：物理删除该会话族的 <code>Record</code>、<code>Plan</code>、<code>Budget</code>；<strong>已沉淀的 <code>Experience</code> 保留</strong>（记忆模块全局资产）。</li>
       <li><strong>上下文组装</strong>（<code>buildContextForLlm(policy)</code>）是<strong>两区 + 累积窗口</strong>，没有“条数上限”：
         <ul>
@@ -412,21 +412,19 @@ flowchart LR
           <li><strong>窗口记录</strong> = 最新一条 <code>SUMMARY</code>（若有）+ <code>sequence &gt; summaryCoversUpTo</code> 的<strong>全部</strong> B 区记录，按 <code>turnId</code> 整轮对齐（规则 14）；<strong>不设条数上限</strong>——前沿（覆盖边界）固定，后沿随对话持续下移，直到折叠把窗口收回配置条数（见 4.9.2）。</li>
         </ul>
       </li>
-      <li><strong><code>SUMMARY</code> 不参与轮对齐与条数计数</strong>；<code>role = SYSTEM</code> 的注入记录参与窗口，但同样不参与整轮分组。<strong>SYSTEM 注入只能被覆盖边界淘汰</strong>（折叠时随区间一起进摘要并要求保留其要点），不再有“系统占比超限整体降级”——原第 ④ 步与 <code>systemRatioLimit</code> 已废弃。</li>
       <li><strong>可推导状态不落库</strong>：窗口边界与用量都是推导结果，不持久化；会话续跑时重新推导。<strong>例外</strong>：<code>SUMMARY.summaryCoversUpTo</code> 是“这份摘要覆盖了哪些记录”的事实，不可重算，必须落库。</li>
       <li><strong>窗口推导不读任何配置</strong>：<code>buildContextForLlm(estimator, inputCeiling)</code> 只接收<strong>计量器</strong>与<strong>有效上限</strong>，既无策略值对象、也不引用 <code>RuntimePolicy</code>；需要阈值的地方（折叠、保留条数）全在应用层判定。</li>
       <li><strong>系统提示词与流水分离</strong>：<code>system</code> 字段<strong>只有</strong>冻结快照；<code>SYSTEM</code> 记录只承载运行期注入（<code>load_skill</code> 的 SOP、工具/经验注入），发给模型时<strong>并入 <code>messages</code>、按 <code>sequence</code> 归位</strong>（与普通记录同受覆盖边界约束）。快照不参与裁剪，也不进摘要素材——它是缓存的稳定前缀。<br/>
-        <strong>“当前步骤”这类运行期时序提示例外</strong>：它由 <code>Plan</code> 推导，<strong>不落 <code>Record</code></strong>，每次请求以一条<strong>瞬时尾部消息</strong>追加在 <code>messages</code> 末尾（“当前步骤（第 N 步）：…”）。<strong>判据不是“可推导所以不许记录”</strong>——“当时模型被告知了哪一步”在重划之后并不可重算，它是真事实；判据是<strong>提示与注入的语义不同</strong>：<code>load_skill</code> 的 SOP、工具 / 经验注入是<strong>信息增量</strong>（窗口里原本没有，不落库就永久丢失 ⇒ 必须落）；“当前步骤”与摘要指令是<strong>信息重述</strong>（内容已在 <code>Plan</code> / 窗口里，每轮重建即可复原，不落库零信息损失）。
-        <strong>落进 append-only 流水等于给它加上“永久有效”的语义</strong>，代价是真实的：同一 step 的每次内循环请求各追加一条（<code>maxReActRounds</code> 默认 20），重划后新旧“第 N 步”并存，模型看到的是<strong>互相冲突的现行指令</strong>而不是历史；这些 <code>SYSTEM</code> 记录<strong>参与 <code>collapseRetainRecordCount</code> 的条数计数</strong>（规则 10 只把 <code>SUMMARY</code> 排除），一个用满轮次的 step 就能把保留区占满、把真正的工具结果挤出去；而且每轮请求多一次落盘提交。<strong>时效性只能靠“每轮重建”表达，append-only 流水没有“仅当轮有效”这个维度</strong>——要支持它就得给 <code>Record</code> 加时态字段，并为窗口推导 / 折叠 / 摘要素材 / <code>Attempt.recordRange</code> 全部补一条过滤规则。</li>
+        <strong>“当前步骤”这类运行期时序提示例外</strong>：它由 <code>Plan</code> 推导，<strong>不落 <code>Record</code></strong>，每次请求以一条<strong>瞬时尾部消息</strong>追加在 <code>messages</code> 末尾（“当前步骤（第 N 步）：…”）。判据是<strong>提示与注入的语义不同</strong>：<code>load_skill</code> 的 SOP、工具 / 经验注入是<strong>信息增量</strong>（窗口里原本没有，不落库就永久丢失 ⇒ 必须落）；“当前步骤”与摘要指令是<strong>信息重述</strong>（内容已在 <code>Plan</code> / 窗口里，每轮重建即可复原，不落库零信息损失）。
+        <strong>落进 append-only 流水等于给它加上“永久有效”的语义</strong>，代价是真实的：重划后新旧“第 N 步”并存，模型看到的是<strong>互相冲突的现行指令</strong>而不是历史；</li>
       <li><strong>模型输出轮是窗口的原子单位</strong>：一轮 = <code>[ASSISTANT] + (TOOL_REQUEST + TOOL_RESULT)⁺</code>（无工具调用则只有 <code>ASSISTANT</code>）。折叠划定保留区时<strong>不得切在轮中间</strong>：首条落在一轮中间 ⇒ 把该轮起点整轮拉进保留区（<code>collapseRetainRecordCount</code> 是软上限）；尾部出现未闭合的 <code>TOOL_REQUEST</code> ⇒ <strong>不变量违反</strong>（不静默修补）。理由：请求合法性的最小单位是这个轮，不是单条记录。</li>
-      <li><strong>模型私有状态只回放给产者</strong>：<code>reasoning</code>（DeepSeek 的 <code>reasoning_content</code>；Anthropic 的签名 thinking、Gemini 的 thoughtSignature 同理）是模型私有状态，必须与 <code>producerModelId</code> 一起记录。回放规则：<strong>只有目标模型 == <code>producerModelId</code> 时才回传</strong>；切换模型后旧状态一律丢弃（签名/语义都不可跨模型搬运）。它<strong>计入 token 计量</strong>（真占输入），<strong>不进摘要、不进展示</strong>；<strong>fork 型子会话会按同模型回放规则看到它</strong>（沉淀/反思的“素材即窗口”，见《模块-记忆》§7.9.6）；半截输出不落（流式中断 ⇒ 整条 assistant 输出连同 <code>reasoning</code> 都不落）。</li>
+      <li><strong>模型私有状态只回放给产者</strong>：<code>reasoning</code>（DeepSeek 的 <code>reasoning_content</code>；Anthropic 的签名 thinking、Gemini 的 thoughtSignature 同理）是模型私有状态，必须与 <code>producerModelId</code> 一起记录。回放规则：<strong>只有目标模型 == <code>producerModelId</code> 时才回传</strong>；切换模型后旧状态一律丢弃（签名/语义都不可跨模型搬运）。它<strong>计入 token 计量</strong>（真占输入），<strong>不进摘要、不进展示</strong>；<strong>fork 型子会话会按同模型回放规则看到它</strong>（沉淀/反思的“素材即窗口”）；半截输出不落（流式中断 ⇒ 整条 assistant 输出连同 <code>reasoning</code> 都不落）。</li>
       <li><strong>一个响应 = 一条 assistant 消息</strong>：同一 <code>turnId</code> 的 <code>content</code>（若有）与<strong>全部</strong> <code>tool_calls</code> 在回放时必须合成<strong>一条</strong> assistant 消息，其 <code>TOOL_RESULT</code> 按 callId 顺序紧随其后；不得把一个响应拆成“文本一条 + 每个调用一条”。这是 OpenAI / Anthropic / Gemini 共同的原生形态，拆开会被端点拒绝（错误文案可能完全与形态无关）。</li>
       <li><strong>最新 <code>SUMMARY</code> 必须真的发给模型</strong>：它由窗口推导带出，调用方（<code>ReActLoop</code>）把它作为一条 <code>user</code> 消息放在 <code>messages</code> 最前；只参与计量不发出去，等于折叠后模型完全丢失历史。</li>
       <li><strong>折叠判定挂在<u>内循环每一次模型请求之前</u></strong>，不是“每个外层迭代一次”；并且 <code>messages</code> 必须按最新窗口<strong>每轮重建</strong>——否则一次内循环里的多轮工具调用会把请求撑爆，折叠了也用不上。触发条件是 <code>usedTokens + 摘要指令估算 &gt; inputCeiling</code>（摘要请求 = 主请求 + 指令，必须把指令 token 算进去）。</li>
-      <li><strong>摘要是“影子主请求”</strong>：同一快照、同一 tools 快照、<code>messages</code> = 当前窗口 + 末尾追加一条 <code>user</code> 摘要指令。指令<strong>不落 <code>Record</code></strong>；模型回复<strong>只用于生成 <code>SUMMARY</code></strong>，不落 <code>ASSISTANT</code> 记录、不生成 <code>turnId</code>、不参与轮对齐。指令必须放在<strong>末尾</strong>（放最前会破坏缓存前缀，也会被长对话淹没）。<br/>
-        指令不落库的理由同规则 13：它是对<strong>已有窗口</strong>的处理请求（信息重述，不是新事实）。落库会让它以“永久有效”的姿态常驻窗口——下一次普通请求模型就会照着再摘要一遍（自噬）；它也不是执行证据，进 <code>Attempt.recordRange</code> 会污染区间（依据同规则 23 排除 <code>SUMMARY</code> 的口径）。</li>
+      <li><strong>摘要是“影子主请求”</strong>：同一快照、同一 tools 快照、<code>messages</code> = 当前窗口 + 末尾追加一条 <code>user</code> 摘要指令。指令<strong>不落 <code>Record</code></strong>；模型回复<strong>只用于生成 <code>SUMMARY</code></strong>，不落 <code>ASSISTANT</code> 记录、不生成 <code>turnId</code>、不参与轮对齐。指令必须放在<strong>末尾</strong>（放最前会破坏缓存前缀，也会被长对话淹没）。</li>
       <li><strong>折叠后窗口回落到配置条数</strong>：保留区 = 覆盖边界之后最近的整轮、累计记录条数 ≥ <code>collapseRetainRecordCount</code>；<code>summaryCoversUpTo</code> = 保留区前一条的 <code>sequence</code>，且<strong>单调不减</strong>。新摘要<strong>吞并旧摘要</strong>（素材天然含旧摘要正文——它本来就在窗口最前），旧 <code>SUMMARY</code> 记录留在流水里但不再进窗口。</li>
-      <li><strong>摘要指令必须要求保留</strong>：用户目标与约束、已确认事实、<strong>已完成的步骤及其结论/失败原因</strong>、已做操作与结果、待办、已加载技能与经验要点。理由：沉淀与反思只 fork 当前窗口，长计划早期步骤的原文已被折叠，证据只能来自摘要（见《模块-记忆》§8.6）。</li>
+      <li><strong>摘要指令必须要求保留</strong>：用户目标与约束、已确认事实、<strong>已完成的步骤及其结论/失败原因</strong>、已做操作与结果、待办、已加载技能与经验要点。理由：沉淀与反思只 fork 当前窗口，长计划早期步骤的原文已被折叠，证据只能来自摘要。</li>
       <li><strong>折叠失败分两种，不可合并处理</strong>：① <strong>因输入超限失败</strong> ⇒ 从待摘要区间的<strong>最旧一整轮</strong>开始丢弃素材后重试，被丢弃的区间必须在摘要正文里声明“更早的 N 条记录（seq a..b）因超出输入上限未纳入摘要”；丢弃不得触及保留区。② <strong>因模型不可用/终止</strong> ⇒ 返回、不推进任何状态、不落半截 <code>SUMMARY</code>、不丢任何记录。</li>
       <li><strong>折叠只能发生在工具轮闭合之后、下一次请求之前</strong>：折叠边界必须落在轮边界，否则窗口里会留下"半截工具轮"、请求直接非法（规则 14）。摘要请求里模型若返回 <code>tool_calls</code> ⇒ 不执行，按摘要失败处理。</li>
     </ol>
