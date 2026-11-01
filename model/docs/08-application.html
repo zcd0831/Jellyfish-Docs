@@ -693,13 +693,14 @@ sequenceDiagram
 
     <h3>8.9.7 fork 型子会话（反思 / 沉淀）与落盘播报</h3>
     <p>反思与沉淀不再是“组装一段素材再调一次模型”，而是<strong>把父会话的生效窗口原样 fork 成内部子会话</strong>（<code>sub/&lt;id&gt;/</code>，与子代理会话同构、无 <code>budget.json</code>），只在末尾追加不同指令。这样信息量完整，且能命中父请求写下的提示词缓存前缀。</p>
-    <h4>子会话的五条硬约束</h4>
+    <h4>子会话的六条硬约束</h4>
     <ol>
       <li><strong>只走内循环</strong>：由 <code>InternalSessionRunner</code> 直接跑一次 <code>ReActLoop</code>，不建 <code>Plan</code>、不进 <code>plans/</code>、不触发验证、<strong>不可再 fork</strong>（工具白名单为空即无 <code>spawn_subagents</code>；反思/沉淀失败也不得再触发反思/沉淀）。</li>
       <li><strong>它是普通子会话，不是一个新字段</strong>：落在 <code>sessions/&lt;root&gt;/sub/&lt;id&gt;/</code>，由此天然不进会话列表、不参与父会话的沉淀递归；不需要在 <code>meta.json</code> 里加标记。因为是普通子会话，它<strong>同样登记终止令牌</strong>（父终止级联）：<strong>fork 期间被终止 ⇒ 不产出 Draft、不写告知记录、不播报</strong>，本轮按 <code>CANCELLED</code> 结束且<strong>不推进任何状态</strong>。</li>
       <li><strong>工具快照不可变</strong>：为保缓存前缀，tools 原样拷贝父会话快照（哪怕大部分用不到）；限制靠 <code>SessionToolScope</code> 白名单<strong>在执行层</strong>拦，越权返回失败 <code>TOOL_RESULT</code>。</li>
       <li><strong>提示词追加在末尾 user</strong>：system 保持快照；末尾 = 反思/沉淀指令（+ 反思时带上失败原因）。代理的 <code>basePrompt</code> 也归入末尾指令，<strong>不得作 system</strong>，否则前缀作废。</li>
       <li><strong>只产出 Draft，不写任何状态</strong>：产物是一段结构化文本（经验草案 / 技能草案，互斥二选一），由父侧解析。子会话流水只作审计，<strong>不作证据</strong>；用量经 <code>settleFromSubSession</code> 归集，<strong>不写 prompt 观测</strong>。</li>
+      <li><strong>不设独立超时</strong>：fork 是<strong>同步内联</strong>的一次内循环（最多 <code>maxReActRounds</code> 轮），不建 <code>Plan</code>、不并发，所以不复刻 <code>subagentExecutionTimeoutMillis</code> 那套 deadline；它靠<strong>父令牌</strong>（父终止即级联）与轮次上限兜住，要“停”就按 8.9.4.1 取消父会话。</li>
     </ol>
     <h4>落盘与播报链（顺序不可颠倒）</h4>
     <pre class="mermaid">
@@ -763,7 +764,7 @@ sequenceDiagram
     <table>
       <thead><tr><th>并发点</th><th>机制</th><th>约束</th></tr></thead>
       <tbody>
-        <tr><td>用例执行</td><td>外壳（TUI）单线程调用；同一 <code>sessionId</code> 同时只有一个 <code>RunSession</code></td><td>应用层用 <code>sessionId</code> 做内存互斥，不依赖文件锁</td></tr>
+        <tr><td>用例执行</td><td>外壳（TUI）单线程调用；同一 <code>sessionId</code> 同时只有一个 <code>RunSession</code></td><td>应用层用 <code>sessionId</code> 做内存互斥，不依赖文件锁；<strong>抢不到运行权 ⇒ 返回 <code>S_RUN_IN_PROGRESS</code>，不排队、不并发</strong>（否则两个 run 会同时读到“没有运行中的计划”，把单计划守卫绕过去）</td></tr>
         <tr><td>内循环与工具</td><td><strong>工具严格串行</strong>（多个工具调用逐个执行、各自成败）</td><td>无并发工具调用</td></tr>
         <tr><td>子代理</td><td><code>SubagentLauncher</code> 内部并行；各自独立超时；join-all</td><td>子代理不得再开子代理</td></tr>
         <tr><td><strong>终止的作用域</strong></td><td>每会话一个令牌 + 两张进程内表（会话→令牌、父→子集合）；传输层句柄<strong>按调用</strong>持有</td><td>禁止跨会话共享传输层句柄；父终止级联子令牌；创建子会话与登记令牌必须在同一临界区（登记前先看父状态）</td></tr>
