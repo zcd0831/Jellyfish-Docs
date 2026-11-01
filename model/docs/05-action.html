@@ -231,8 +231,9 @@
         }
         class BudgetService {
             &lt;&lt;ApplicationService&gt;&gt;
-            +recordUsage(SessionId rootId, long tokens)
-            +settleFromSubSession(SessionId subId, long tokens)
+            +recordUsage(Session session, ModelUsage usage)
+            +recordTurnUsage(Session session, ModelUsage usage)
+            +settleFromSubSession(SessionId subId)
         }
         class ToolExecOutcome {
             &lt;&lt;ValueObject&gt;&gt;
@@ -487,7 +488,7 @@ flowchart LR
       <li>单位 <strong>token</strong>，不换算金额。</li>
       <li><strong>只预警、不中断</strong>：达到 <code>budgetWarnRatio</code> → 外循环经 <code>ask_user</code> 询问是否继续；同一会话族只报一次。用户<strong>拒绝继续</strong>等价于按一次 Esc（终止本轮，见<a href="08-application.html">第 8 章</a> 8.9.4.1）；<code>warned</code> 已置真，后续不再二次确认。<br/>
           <code>budgetLimitTokens</code> 是会话族的<strong>总额度</strong>（token，用户可调），<code>budgetWarnRatio</code> 是它的百分比——两者缺一不可，否则"越过 80%"没有分母。</li>
-      <li>并发（<code>spawn_subagents</code>）：子会话<strong>本地累计</strong>，结束后 <code>settleFromSubSession</code> 一次性归集到根。</li>
+      <li>并发（<code>spawn_subagents</code>）：子会话<strong>本地累计</strong>（不碰族台账），结束后由<strong>发起线程</strong>调 <code>settleFromSubSession(subId)</code> 一次性归集到根——它读的就是这份本地累计，归集后清空。</li>
       <li><strong>顺带记一次观测</strong>：<code>lastPromptTokens</code> / <code>lastPromptEstimated</code> / <code>lastPromptSessionId</code> 是“最近一次模型请求的输入用量”，由 <code>BudgetService.recordTurnUsage</code> 写下（厂商给的 <code>prompt_tokens</code>；厂商没给时是本地估算，<code>lastPromptEstimated = true</code>）。<strong>辅助调用</strong>（生成标题、检索经验、反思、重划、摘要、验证）走 <code>recordUsage</code>，只记账不写观测——它们的小请求会把真实窗口的数字盖掉。它只喂界面展示（一轮结束时汇总行里的 <code>上下文 18.2k / 50k</code>），<strong>不参与</strong>折叠判定——判定在请求前做，那时还没有厂商值。折叠发生后清空这三项：旧数值已经不再描述当前窗口，界面回到 <code>— / 50k</code>。</li>
     </ul>
 
@@ -743,7 +744,7 @@ sequenceDiagram
     and
         C2-->>TE: 结论，或超时则先终止该子代理再报“已终止（超时）”
     end
-    TE->>BS: settleFromSubSession(每个子会话, 本地累计 tokens)
+    TE->>BS: settleFromSubSession(每个子会话)
     TE-->>TE: join-all 完成，返回 List&lt;SubagentResult&gt;
     </pre>
     <p><strong>要点</strong>：各子代理<strong>独立成败</strong>，不整体失败；本轮被终止时已完成的保留、未完成的按终止处理。子代理的超时<strong>只终止该子代理</strong>（主会话继续）；终止的生效边界与用户按 Esc 相同——令牌穿到模型调用与工具执行（见<a href="08-application.html">第 8 章</a> 8.9.4.1），不靠线程中断。</p>
@@ -809,7 +810,7 @@ sequenceDiagram
         BS-->>CALLER: 预警（由内循环经 ask_user 询问用户）
     end
     </pre>
-    <p><strong>要点</strong>：子会话并发时先各自累计，结束后 <code>settleFromSubSession</code> 一次性归集到根，避免并发写同一 <code>Budget</code> 聚合。</p>
+    <p><strong>要点</strong>：子会话并发时先各自累计，结束后由发起线程 <code>settleFromSubSession</code> 一次性归集到根——子线程<span>从不</span>写族台账，族台账因此<strong>同一时刻只有一个写者</strong>，不会出现两个读-改-写相互覆盖的丢更新。</p>
     <p><strong>两个入口</strong>：<code>recordTurnUsage</code>（主循环：记账 + 观测 + 立刻刷新界面标签）与 <code>recordUsage</code>（辅助调用：只记账）。</p>
     <p><strong>用量展示口径</strong>：<code>recordTurnUsage</code> 顺手写下的 <code>lastPrompt*</code> 是界面汇总行显示 <code>上下文 18.2k / 50k</code> 的唯一来源——厂商给了 <code>usage</code> 就是精确值，厂商没给（流式或端点不带）则是本地估算、界面加 <code>≈</code> 前缀。没有该会话的观测（新会话、刚折叠、换了模型）时显示 <code>— / 50k</code>。<strong>不要</strong>用估算值冒充精确值，也<strong>不要</strong>用它判断折叠（折叠只看请求前的估算）。</p>
 

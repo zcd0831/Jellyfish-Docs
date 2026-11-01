@@ -382,8 +382,8 @@ classDiagram
         }
         class BudgetService {
             &lt;&lt;DomainService&gt;&gt;
-            +recordUsage(SessionId, long)
-            +settleFromSubSession(SessionId, long)
+            +recordUsage(Session, ModelUsage)
+            +settleFromSubSession(SessionId)
         }
     }
 
