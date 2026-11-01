@@ -106,7 +106,7 @@
       <tbody>
         <tr><td><strong>运行策略</strong></td><td><code>RuntimePolicy</code></td><td>所有"用户可以调"的全局参数：重试几次、什么时候反思、折叠后留多少条、经验库多大……</td></tr>
         <tr><td><strong>安全余量</strong></td><td><code>inputSafetyMargin</code></td><td>算上下文上限时预留的 token（默认 10000），防止估算偏差；<strong>主请求与摘要请求共用这份余量</strong>（摘要指令、快照边角都靠它）。<strong>不是给输出预留的。</strong></td></tr>
-        <tr><td><strong>最大 ReAct 轮次</strong></td><td><code>maxReActRounds</code></td><td>唯一一道硬闸：自上次用户输入以来最多让模型连多少轮工具。超了就停手、提示一句并挂起，等你再说一句才继续（不判失败、不消耗重试）。</td></tr>
+        <tr><td><strong>最大 ReAct 轮次</strong></td><td><code>maxReActRounds</code></td><td>唯一一道硬闸：<strong>一次内循环</strong>（一次 <code>runIteration</code>）里最多让模型连多少轮工具，与 step 的重试次数、重划代次无关。超了就停手、提示一句并挂起，等你再说一句才继续（不判失败、不消耗重试）。</td></tr>
       </tbody>
     </table>
 

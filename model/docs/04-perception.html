@@ -447,7 +447,7 @@ flowchart LR
       <li><strong>全局唯一</strong>，只有用户能调整；任何 Agent 都不能覆盖。</li>
       <li><strong>立即生效、不进会话快照</strong>：与"工具/技能定义、系统提示词在会话开启时冻结"形成对照。</li>
       <li><strong>反思阈值与最大重试独立配置</strong>：<code>reflectionThreshold &gt; maxRetries</code> ⇒ <strong>永不反思</strong>。</li>
-      <li><strong>唯一硬闸</strong> <code>maxReActRounds</code>：按"自上次用户输入以来的连续轮数"计，<strong>用户介入即重置</strong>；撞上限不判失败、不消耗重试，由外循环提示并<strong>挂起</strong>（同一 <code>Attempt</code> 下次续跑，轮次从 0 重新计）。</li>
+      <li><strong>唯一硬闸</strong> <code>maxReActRounds</code>：<strong>一次内循环（一次 <code>runIteration</code>）</strong>里最多让模型连多少轮工具，<strong>与 step 的重试次数、重划代次都无关</strong>；撞上限不判失败、不消耗重试，由外循环提示并<strong>挂起</strong>，下次续跑重新进入内循环、轮次从 0 计。</li>
       <li><strong>信任清单</strong>：工具级粒度，语义 = 免审批，<strong>可覆盖不可逆工具</strong>；未命中且工具非只读 ⇒ 执行前放行审批。</li>
       <li><strong>预算参数</strong>：单位 token、只预警不中断、同一会话族只报一次。</li>
       <li><strong>变更即通知</strong>：<code>adjust()</code> 成功后 raise <code>PolicyAdjusted</code>，避免其它模块各自缓存常量快照。</li>
