@@ -447,7 +447,7 @@ flowchart LR
       <thead><tr><th>内置工具</th><th>入参</th><th>出参</th><th>领域后果</th><th>处理器归属</th></tr></thead>
       <tbody>
         <tr><td><code>generate_plan</code></td><td>计划草案（steps + 每步声明的验证类型）</td><td>"计划已创建"或失败原因</td><td><code>PlanFactory</code> 创建 <code>Plan</code>，raise <code>PlanCreated</code></td><td>规划</td></tr>
-        <tr><td><code>replan_plan</code></td><td>剩余步骤草案（<code>steps</code>，形状同 <code>generate_plan</code>）</td><td>"计划已重划（第 N 代）"或失败原因</td><td><code>Plan.applyReplan()</code> 替换未执行尾部、代次 +1；外循环随后重分配经验并发进度事件 <code>PLAN_REPLAN</code></td><td>规划</td></tr>
+        <tr><td><code>replan_plan</code></td><td>剩余步骤草案（<code>steps</code>，形状同 <code>generate_plan</code>）</td><td>"计划已重划（第 N 代）"或失败原因</td><td><code>Plan.applyReplan()</code> 替换未执行尾部、代次 +1；外循环随后重分配经验并发进度事件 <code>PLAN_REPLAN</code>。<strong>模型可在任何一次内循环里主动调用</strong>（不只失败后）</td><td>规划</td></tr>
         <tr><td><code>submit_step</code></td><td><code>summary</code>（必填）、<code>artifacts?</code></td><td>"已登记"</td><td>内循环据此置 <code>submitted</code>，交外循环验收</td><td>规划（由内循环识别）</td></tr>
         <tr><td><code>ask_user</code></td><td>问题文本</td><td>用户回答</td><td>阻塞同一 ReAct 循环；记 <code>TOOL_REQUEST</code> + <code>TOOL_RESULT</code></td><td>行动</td></tr>
         <tr><td><code>spawn_subagents</code></td><td><code>List&lt;SubagentRequest{agentId, modelId, task}&gt;</code></td><td><code>List&lt;SubagentResult{sessionId, conclusion}&gt;</code></td><td>并行创建子会话、join-all、各子独立超时；<strong>超时即终止该子代理</strong>，主会话继续</td><td>应用（<code>SubagentLauncher</code>，内部调 <code>StartSessionUseCase</code>）</td></tr>
@@ -572,7 +572,7 @@ flowchart LR
     </table>
     <h4>规则（9 条）</h4>
     <ol>
-      <li><strong>白名单授权的工具不受“代理绑定”限制</strong>：<code>SessionToolScope</code> 是外循环的显式授权，优先于 <code>AgentDefinition.toolIds</code>；否则 <code>replan_plan</code> 这类内部工具只能进代理清单，日常对话里也会被模型看见。</li>
+      <li><strong>白名单授权的工具不受“代理绑定”限制</strong>：<code>SessionToolScope</code> 是外循环的显式授权，优先于 <code>AgentDefinition.toolIds</code>。<strong>但白名单只影响“能不能执行”，不影响“模型能不能看见”</strong>：发给模型的工具清单取自会话开启时冻结的快照（<code>AgentDefinition.toolIds</code>），所以“希望模型从头到尾都能用”的工具（如随时可调用的 <code>replan_plan</code>）必须<strong>绑进代理清单</strong>，不能靠临时授权“变出来”。</li>
       <li>工具<strong>严格串行执行</strong>，不存在并发工具调用。</li>
       <li>一次模型响应里出现多个工具调用时，<strong>逐个执行、各自独立成败</strong>（可部分成功）。</li>
       <li><strong>工具失败不是领域状态</strong>：超时 / 异常 / 无返回都作为"一种工具结果"回灌模型，ReAct 继续。唯一例外是本轮被<strong>终止</strong>：此时不再回灌，未闭合的调用由内循环补一条中止 <code>TOOL_RESULT</code>（见<a href="08-application.html">第 8 章</a> 8.9.4.1）。</li>

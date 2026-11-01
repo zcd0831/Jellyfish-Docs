@@ -489,7 +489,6 @@ classDiagram
             &lt;&lt;Enumeration&gt;&gt;
             CONVERGED
             SUSPENDED
-            ROUNDS_EXHAUSTED
         }
         class RunContext {
             &lt;&lt;ValueObject&gt;&gt;
@@ -986,7 +985,7 @@ flowchart LR
         <tr><td><strong>步骤提交验收</strong></td><td>submit_step → 触发验证 / 或免验证直接完成</td><td>VerificationReport、Plan</td></tr>
         <tr><td><strong>步骤固化 / 判败</strong></td><td>步骤的两种结束：<code>SUCCEEDED</code> / <code>FAILED</code>（“没做完”不结束步骤，续跑接着做）</td><td>Plan、Attempt</td></tr>
         <tr><td><strong>步骤重试</strong></td><td>失败后新建尝试；达阈值则产生反思</td><td>Attempt、Reflection</td></tr>
-        <tr><td><strong>计划重划</strong></td><td>代次 +1，未执行的步骤置为 SUPERSEDED 并重分配经验；以“无 step 内循环 + <code>replan_plan</code>”发起，成功后发进度事件 <code>PLAN_REPLAN</code></td><td>Plan、Experience</td></tr>
+        <tr><td><strong>计划重划</strong></td><td>代次 +1，未执行的步骤置为 SUPERSEDED 并重分配经验；由模型在内循环里调 <code>replan_plan</code> 发起（可主动，也可在纠偏 attempt 内），成功后发进度事件 <code>PLAN_REPLAN</code></td><td>Plan、Experience</td></tr>
         <tr><td><strong>计划完结</strong></td><td>成功或失败，触发经验沉淀；成功且本次未用技能时另判技能沉淀</td><td>Plan、Experience、SkillDefinition</td></tr>
         <tr><td><strong>上下文折叠</strong></td><td>估算用量（含摘要指令）超有效上限 → 以“影子主请求”生成摘要（记覆盖边界）→ 窗口收回到配置条数</td><td>Session</td></tr>
         <tr><td><strong>模型降级</strong></td><td>故障命中备用模型链</td><td>Session</td></tr>

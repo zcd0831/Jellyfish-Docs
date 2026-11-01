@@ -342,7 +342,7 @@ flowchart LR
         <tr>
           <td><code>ContextWindowService</code></td>
           <td>应用</td>
-          <td>上下文计量与折叠：<code>ensureWithinLimit(Session)</code> 经端口取模型档案 → 算有效上限 → 量测窗口 → 超限则触发<strong>影子主请求摘要</strong>并把窗口收回到配置条数；另有 <code>forceCollapse(Session)</code> 承接「请求超限」后的<strong>强制折叠一次</strong>。由<strong>内循环在每次模型请求前</strong>调用</td>
+          <td>上下文计量与折叠：<code>ensureWithinLimit(Session)</code> 经端口取模型档案 → 算有效上限 → 量测窗口 → 超限则触发<strong>影子主请求摘要</strong>并把窗口收回到配置条数；另有 <code>forceCollapse(Session)</code> 承接「请求超限」后的<strong>强制折叠一次</strong>。由<strong>内循环在每次模型请求前</strong>调 <code>ensureWithinLimit</code>；<code>forceCollapse</code> 则由内循环在<strong>发起请求处 catch 到「请求超限」后</strong>调用（同一轮只折一次）</td>
           <td><code>ModelInvocationPort</code>、<code>TokenCounter</code>、<code>RuntimePolicy</code></td>
         </tr>
       </tbody>
@@ -447,7 +447,7 @@ flowchart LR
       <li><strong>全局唯一</strong>，只有用户能调整；任何 Agent 都不能覆盖。</li>
       <li><strong>立即生效、不进会话快照</strong>：与"工具/技能定义、系统提示词在会话开启时冻结"形成对照。</li>
       <li><strong>反思阈值与最大重试独立配置</strong>：<code>reflectionThreshold &gt; maxRetries</code> ⇒ <strong>永不反思</strong>。</li>
-      <li><strong>唯一硬闸</strong> <code>maxReActRounds</code>：按"自上次用户输入以来的连续轮数"计，用户介入即重置。</li>
+      <li><strong>唯一硬闸</strong> <code>maxReActRounds</code>：按"自上次用户输入以来的连续轮数"计，<strong>用户介入即重置</strong>；撞上限不判失败、不消耗重试，由外循环提示并<strong>挂起</strong>（同一 <code>Attempt</code> 下次续跑，轮次从 0 重新计）。</li>
       <li><strong>信任清单</strong>：工具级粒度，语义 = 免审批，<strong>可覆盖不可逆工具</strong>；未命中且工具非只读 ⇒ 执行前放行审批。</li>
       <li><strong>预算参数</strong>：单位 token、只预警不中断、同一会话族只报一次。</li>
       <li><strong>变更即通知</strong>：<code>adjust()</code> 成功后 raise <code>PolicyAdjusted</code>，避免其它模块各自缓存常量快照。</li>
@@ -507,7 +507,7 @@ sequenceDiagram
       <li><strong>失败分两种</strong>：① <strong>因输入超限失败</strong> ⇒ 从待摘要区间<strong>最旧一整轮</strong>开始丢素材后重试，被丢区间必须在摘要正文里声明（不得触及保留区）；② <strong>因模型不可用/终止</strong> ⇒ 返回、不推进状态、不落半截 <code>SUMMARY</code>、不丢记录。</li>
       <li><strong>有效上限</strong> = <code>min(summarizationTokenThreshold, maxInputTokens − inputSafetyMargin)</code>（<code>inputSafetyMargin</code> 默认 <strong>10000</strong>）。它的语义是“<strong>主请求与摘要请求共用的安全余量</strong>”（抵御估算偏差、摘要指令与快照边角），<strong>不是输出预留</strong>——输入与输出是两个独立上限。</li>
       <li><strong>计量口径唯一</strong>：本服务不自己实现 tokenizer，一律经 <code>ModelInvocationPort</code> 计量；摘由<strong>当前会话模型</strong>生成，token 记到<strong>会话族根</strong>。摘要请求里模型若返回 <code>tool_calls</code> ⇒ 不执行，按失败处理。</li>
-      <li><strong>承接“请求超限”的补充折叠</strong>：行动 <code>ModelInvoker</code> 抛「请求超限」时，外循环调本服务<strong>强制折叠一次</strong>再重试；<strong>不消耗重试名额</strong>；仍超限则同“模型不可用”返回并提示。这条与前置判定要去重，同一轮不得折两次。</li>
+      <li><strong>承接“请求超限”的补充折叠</strong>：行动 <code>ModelInvoker</code> 抛「请求超限」时，<strong>内循环在发起请求处</strong>调本服务<strong>强制折叠一次</strong>再重试这次请求（不重开外循环轮次）；<strong>不消耗重试名额</strong>；仍超限则同“模型不可用”返回并提示。这条与前置判定要去重，同一轮不得折两次。</li>
       <li><strong>摘要必须进请求</strong>：最新 <code>SUMMARY</code> 由窗口推导带出，<code>ReActLoop</code> 把它作为一条 <code>user</code> 消息放到 <code>messages</code> 最前（固定前缀）；只记账不发送等于折叠后丢失全部历史。</li>
       <li><strong>折叠不写 reasoning</strong>：被折叠的旧工具轮不再进窗口，它们 <code>reasoning</code> 也不需要回放；摘要文本里不得包含 <code>reasoning</code>（只汇总可见内容与工具结果）。</li>
     </ol>

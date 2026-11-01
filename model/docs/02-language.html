@@ -106,7 +106,7 @@
       <tbody>
         <tr><td><strong>运行策略</strong></td><td><code>RuntimePolicy</code></td><td>所有"用户可以调"的全局参数：重试几次、什么时候反思、折叠后留多少条、经验库多大……</td></tr>
         <tr><td><strong>安全余量</strong></td><td><code>inputSafetyMargin</code></td><td>算上下文上限时预留的 token（默认 10000），防止估算偏差；<strong>主请求与摘要请求共用这份余量</strong>（摘要指令、快照边角都靠它）。<strong>不是给输出预留的。</strong></td></tr>
-        <tr><td><strong>最大 ReAct 轮次</strong></td><td><code>maxReActRounds</code></td><td>唯一一道硬闸：一次尝试里最多让模型连多少轮工具。超了就判失败。</td></tr>
+        <tr><td><strong>最大 ReAct 轮次</strong></td><td><code>maxReActRounds</code></td><td>唯一一道硬闸：自上次用户输入以来最多让模型连多少轮工具。超了就停手、提示一句并挂起，等你再说一句才继续（不判失败、不消耗重试）。</td></tr>
       </tbody>
     </table>
 
@@ -169,7 +169,7 @@
       <tbody>
         <tr><td>工具报错、超时</td><td><strong>正常业务的一部分</strong></td><td>当成一种"工具结果"喂回模型，它自己想办法</td></tr>
         <tr><td>模型连不上</td><td><strong>环境故障</strong></td><td>什么都不改、不消耗步骤的重试次数，会尝试自动重连模型，重连次数达到上限后降级备用模型</td></tr>
-        <tr><td>请求超过模型上下文上限</td><td><strong>预算问题</strong></td><td>停止行动、给用户错误提示、不消耗步骤的重试次数，不会自动重试/重连</td></tr>
+        <tr><td>请求超过模型上下文上限</td><td><strong>预算问题</strong></td><td>内循环在请求处先强制折叠一次再重试这次请求，不消耗步骤的重试次数；仍然超限则停下提示用户，不自动重试/重连</td></tr>
       </tbody>
     </table>
 
@@ -179,7 +179,7 @@
       <tbody>
         <tr><td>改什么</td><td>同一步换个做法</td><td>不改动作，只改"下次怎么想"</td><td>改计划本身</td></tr>
         <tr><td>消耗重试名额</td><td>是</td><td>否（反思是一次额外调用）</td><td>否（消耗重划代次）</td></tr>
-        <tr><td>谁触发</td><td>验证不通过</td><td>失败次数达阈值</td><td>重试用尽 / 用户要求</td></tr>
+        <tr><td>谁触发</td><td>验证不通过</td><td>失败次数达阈值</td><td>重试用尽（自动纠偏）/ 用户要求 / 模型主动</td></tr>
       </tbody>
     </table>
 

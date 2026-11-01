@@ -157,7 +157,6 @@
             &lt;&lt;Enumeration&gt;&gt;
             CONVERGED
             SUSPENDED
-            ROUNDS_EXHAUSTED
         }
         class RunContext {
             &lt;&lt;ValueObject&gt;&gt;
@@ -342,7 +341,7 @@ flowchart LR
       <thead><tr><th>服务</th><th>层</th><th>简介</th><th>跨模块依赖</th></tr></thead>
       <tbody>
         <tr><td><code>SessionRunner</code></td><td>扩展点</td><td>交付一轮运行的统一入口；<strong>默认实现是 <code>ExecutionLoop</code></strong>，插件可实现自己的循环（L3，<code>experimental</code>）</td><td><code>RunContext</code>（把端口与上下文交给实现方）</td></tr>
-        <tr><td><code>ExecutionLoop</code></td><td>应用</td><td><code>SessionRunner</code> 的默认实现：会话执行的总驱动（do-while）：每轮算上下文 → 取 step → 跑一次内循环 → 验证 → 按三条出口推进</td><td><code>ContextWindowService</code>、<code>ReActLoop</code>、<code>VerificationRunner</code>、经验三件套、<code>CancellationRegistry</code></td></tr>
+        <tr><td><code>ExecutionLoop</code></td><td>应用</td><td><code>SessionRunner</code> 的默认实现：会话执行的总驱动（do-while）：每轮算上下文 → 取 step → 跑一次内循环 → 验证 → 按三条出口推进；重试耗尽时<strong>注入纠偏指令 + 一次纠偏 attempt</strong>，计划完结后补一轮<strong>结论交付</strong>，它们是循环退出条件的组成部分</td><td><code>ContextWindowService</code>、<code>ReActLoop</code>、<code>VerificationRunner</code>、经验三件套、<code>CancellationRegistry</code></td></tr>
         <tr><td><code>ReActLoop</code></td><td>应用</td><td>单次 ReAct 迭代：组装上下文 → 让模型调工具 → 落记录 → 判定收敛与提交</td><td><code>ToolExecutor</code>、<code>BudgetService</code>、<code>HumanInteractionPort</code>、<code>SubagentLauncher</code></td></tr>
         <tr><td><code>VerificationRunner</code></td><td>应用</td><td>执行 <code>VerificationChain</code> 给出的有序层，产出 <code>VerificationReport</code></td><td><code>VerificationChain</code>（领域）、<code>ModelInvocationPort</code>、<code>HumanInteractionPort</code></td></tr>
         <tr><td><code>VerificationChain</code></td><td>领域</td><td>纯规则：<code>requiredVerifications</code> → 有序层列表；短路与三态合并</td><td>无</td></tr>
@@ -361,7 +360,7 @@ flowchart LR
         <tr><td><code>AttemptOutcome</code></td><td>Enum</td><td>SUCCEEDED / FAILED（只有这两个是 attempt 的边界；“没做完”不结束 attempt）</td></tr>
         <tr><td><code>VerificationOutcome</code></td><td>Enum</td><td>PASSED / FAILED / UNDETERMINED（<code>UNDETERMINED</code> → 转人工）</td></tr>
         <tr><td><code>VerificationType</code></td><td>Enum</td><td>DETERMINISTIC / ENV_FEEDBACK / LLM_JUDGE / HUMAN_APPROVAL，固定顺序即链序</td></tr>
-        <tr><td><code>RunOutcome</code></td><td>Enum</td><td>一轮运行的出口：<code>CONVERGED / SUSPENDED / ROUNDS_EXHAUSTED</code>（原本嵌在 <code>ExecutionLoop</code> 里，现已独立）</td></tr>
+        <tr><td><code>RunOutcome</code></td><td>Enum</td><td>一轮运行的出口：<code>CONVERGED / SUSPENDED</code>（撞 <code>maxReActRounds</code> 也是 <code>SUSPENDED</code>，不是第三种出口；原本嵌在 <code>ExecutionLoop</code> 里，现已独立）</td></tr>
         <tr><td><code>RunContext</code></td><td>VO</td><td>交给 <code>SessionRunner</code> 的运行上下文：<code>Session</code>、<code>ChunkSink</code>、<code>CancellationToken</code> + 6 个端口/服务（模型、工具、人机、进度、计划仓储、上下文窗口）；<strong>令牌是扩展实现的唯一取用通道</strong>：默认实现（<code>ExecutionLoop</code>）不接收令牌形参，轮次边界改判 <code>CancellationRegistry.forSession(sessionId)</code></td></tr>
         <tr><td><code>IterationResult</code></td><td>VO</td><td>内循环一次迭代的输出：是否收敛、是否提交、提交摘要、<strong>内循环轮次 <code>round</code></strong>（<strong>不是 attempt 序号</strong>——attempt 由外循环自己跟踪）、<strong>本次 load 过的技能</strong>（内循环拿不到 <code>Plan</code>，靠它把技能使用交回外循环）</td></tr>
       </tbody>
@@ -420,9 +419,9 @@ flowchart LR
       <li><strong>验证声明</strong>：<code>requiredVerifications</code> 由模型在生成计划时声明，<strong>不强制</strong>；为空 ⇒ 该 step <strong>不验证、不产生验证报告</strong>，<code>submit_step</code> 提交即完成。</li>
       <li><strong>固化</strong>：<code>SUCCEEDED</code> 后 <code>finalOutput / finalVerificationReportId / attempts</code> 不再变更。</li>
       <li><strong>重划</strong>：<code>applyReplan()</code> 只能替换<strong>未执行</strong>的尾部 step；被替换者置 <code>SUPERSEDED</code> 并<strong>保留</strong>（可审计），<code>replanGeneration + 1</code>。聚合只保证「尾部替换 + 代次递增」这次迁移合法；<strong>「还能不能再重划、用尽后判失败」由外循环保证</strong>。</li>
-      <li><strong>重划怎么发起：外循环授权一次“无 step 的自由内循环”</strong>。外循环判定需要重划后，<strong>以 <code>step = null</code> 跑一次内循环</strong>（复用主请求：同一快照、同一窗口、同一工具快照，天然带着执行历史），这次内循环只挂 <code>replan_plan</code> 一个工具；工具成功 ⇒ <code>applyReplan()</code> + 重新分配经验 + 进度事件 <code>PLAN_REPLAN</code>。
-        <strong>失败即终结</strong>：没调工具 / <code>PlanFactory</code> 校验不过 ⇒ 直接 <code>terminate()</code>，<strong>不再重划</strong>（否则重划失败又触发重划，无限递归）；<strong>模型不可用 / 终止属于环境故障</strong>⇒ 上抛、不推进任何状态（与规则 9 同一口径）。
-        权力归属不变：<strong>唯一有权推进计划状态机的是外循环</strong>——它判定并授权，工具只执行被授权的迁移。这次调用的记录进流水（可审计），但<strong>不属于任何 step 的执行轨迹</strong>。它也不是 <code>Plan</code> 里的一个 step：插 meta step 会污染“步骤分解”的语义与“第 x/N 步”计数。</li>
+      <li><strong>重划怎么发起：模型在内循环里调 <code>replan_plan</code></strong>。<code>replan_plan</code> 是<strong>绑进代理工具清单的普通内置工具</strong>（可见性由绑定提供），模型在<strong>任何一次内循环</strong>里都可以调用它——执行中发现方向不对就当场修正，不必等验证失败；工具成功 ⇒ <code>applyReplan()</code> + 外循环重新分配经验 + 进度事件 <code>PLAN_REPLAN</code>（<strong>单一发射点：外循环</strong>，按“代次是否变化”判定）。
+        <strong>兜底（自动纠偏）</strong>：某一步的有效重试用尽（<code>failedAttempts == maxRetries</code>）时，外循环<strong>不另开一轮内循环</strong>，而是注入一条 <code>role = SYSTEM</code> 的纠偏指令（首行带 <code>[重划纠偏 step=…]</code> 标记，去重靠流水、不落库）并给一次<strong>纠偏 attempt</strong>——<strong>不占 <code>maxRetries</code></strong>，由 <code>maxReplanGeneration</code> 约束。该 attempt 里模型可以调 <code>replan_plan</code> 改计划，也可以换一种做法直接重做这一步；<strong>每个 step 最多一次纠偏</strong>，这次 attempt 既没重划也没成功 ⇒ 直接 <code>terminate()</code>（防递归）。
+        权力归属不变：<strong>唯一有权推进计划状态机的是外循环</strong>——工具只执行被授权的迁移（<code>applyReplan</code> 的聚合不变量兜底：只替换未执行的尾部），判定“还要不要重划、代次是否用尽”仍在应用层。纠偏尝试的记录进流水（可审计），但<strong>不属于任何 step 的执行轨迹</strong>，<strong>也不是 <code>Plan</code> 里的一个 step</strong>：插 meta step 会污染“步骤分解”的语义与“第 x/N 步”计数。</li>
       <li><strong>结局</strong>：COMPLETED / FAILED 都是终态；两者都会触发经验沉淀。FAILED 后不再执行计划，但<strong>仍要跑一轮“结论交付”自由内循环</strong>（见 6.9 关键分支）。</li>
       <li><strong>单写者</strong>：执行严格串行 + 单一调度者，聚合不设乐观锁版本号。</li>
       <li><strong>经验分配</strong>：计划诞生时与每次重划后，由 <code>ExperienceRetriever</code> 为（新产生的）step 分配 <code>assignedExperienceIds</code>。</li>
@@ -434,11 +433,11 @@ flowchart LR
     <table>
       <thead><tr><th>约束</th><th>由谁保证</th><th>实现方式</th></tr></thead>
       <tbody>
-        <tr><td>有效重试次数不超过 <code>maxRetries</code></td><td><code>ExecutionLoop</code></td><td>超限时不再新建 <code>Attempt</code>，改走「重划或 <code>terminate()</code>」</td></tr>
+        <tr><td>有效重试次数不超过 <code>maxRetries</code></td><td><code>ExecutionLoop</code></td><td>超限时不再新建重试 <code>Attempt</code>，改走「一次纠偏 attempt（<strong>不占 <code>maxRetries</code></strong>）⇒ 仍无重划/成功则 <code>terminate()</code>」</td></tr>
         <tr><td>是否开启反思</td><td><code>ExecutionLoop</code></td><td>读 <code>reflectionThreshold</code>（<code>&gt; maxRetries</code> 即永不反思），决定回注原始失败原因还是反思结论</td></tr>
-        <tr><td>重划次数不超过 <code>maxReplanGeneration</code></td><td><code>ExecutionLoop</code></td><td>超限时调用 <code>Plan.terminate(reason)</code>（聚合只执行终止，不判断该不该终止）</td></tr>
-        <tr><td>重划失败不得再重划</td><td><code>ExecutionLoop</code></td><td>“无 step 内循环 + <code>replan_plan</code>”失败（未调用 / 校验不过 / 模型不可用）⇒ 直接 <code>terminate()</code></td></tr>
-        <tr><td>单次迭代 ReAct 轮数不超过 <code>maxReActRounds</code></td><td><code>ReActLoop</code></td><td>超限时把本次 attempt 判为失败并返回外循环</td></tr>
+        <tr><td>重划次数不超过 <code>maxReplanGeneration</code></td><td><code>ExecutionLoop</code> + <code>replan_plan</code> 工具</td><td>工具读策略，超限直接返回<strong>工具失败结果</strong>（不抛异常）；外循环在代次用尽时调用 <code>Plan.terminate(reason)</code>（聚合只执行终止，不判断该不该终止）</td></tr>
+        <tr><td>纠偏 attempt 用尽仍无重划</td><td><code>ExecutionLoop</code></td><td>纠偏 attempt 既不成功也没让 <code>replanGeneration</code> 增加 ⇒ 直接 <code>terminate()</code>（否则纠偏失败又触发纠偏，无限递归）；<strong>模型不可用 / 终止属于环境故障</strong> ⇒ 上抛、不推进任何状态</td></tr>
+        <tr><td>单次迭代 ReAct 轮数不超过 <code>maxReActRounds</code></td><td><code>ReActLoop</code> + <code>ExecutionLoop</code></td><td><code>ReActLoop</code> 只返回「未收敛」；外循环<strong>不判失败、不消耗重试</strong>，提示「已达轮次上限」并<strong>挂起</strong>（同一 <code>Attempt</code> 等下次输入续跑）</td></tr>
         <tr><td>验证链各层是否启用、信任清单是否放行</td><td><code>VerificationRunner</code></td><td>读 <code>requiredVerifications</code> 与 <code>trustedToolIds</code></td></tr>
       </tbody>
     </table>
@@ -497,7 +496,7 @@ sequenceDiagram
     participant VS as VerificationRunner
     participant RP as RuntimePolicy（感知）
 
-    loop 每轮跑一次内循环；出口：无计划收敛 / 未提交挂起 / 撞轮次上限后继续
+    loop 每轮跑一次内循环；出口：无计划收敛 / 未提交挂起 / 撞轮次上限挂起
         alt session.hasExecutablePlan()
             OL->>P: getCurrentStep()
         else 无计划
@@ -527,11 +526,14 @@ sequenceDiagram
             end
         else 未提交（收敛但无 submit_step）
             Note over OL: attempt 不结束、step 保持 RUNNING、不消耗重试；等用户下一次输入续跑
+        else 未收敛（撞 maxReActRounds）
+            Note over OL: 提示「已达轮次上限」后挂起；attempt 不结束、不判失败、不消耗重试
         end
     end
     </pre>
     <p>经验检索与沉淀由 <code>ExecutionLoop</code> 在<strong>计划诞生 / 计划完结</strong>时<strong>显式调用</strong>（不经领域事件），详见 <a href="08-application.html">第 8 章</a> 8.8。</p>
     <p><strong>计划完结后的两个动作</strong>：先 <code>curate()</code>（fork 窗口 → Draft → 落盘 → 写告知记录），再跑一轮<strong>自由内循环</strong>（“结论交付”）。<strong>终局失败同构</strong>：<code>terminate()</code> → 沉淀 → 结论交付轮；但<strong>终止 / 模型不可用 / 挂起不补这一轮</strong>。</p>
+    <p>这两个动作也是 do-while 退出条件的组成部分：<strong>“没有可执行计划”且“没有待交付的结论”</strong>时循环才结束。交付轮里模型仍可 <code>generate_plan</code> 开下一个计划，此时循环继续（见下方关键分支）。</p>
 
 <h4>关键分支</h4>
     <table>
@@ -540,18 +542,19 @@ sequenceDiagram
         <tr><td>无 Plan 且内循环收敛</td><td>本次交互结束，会话停在原处（会话没有状态，见《模块-感知》§7.1 规则 7）</td></tr>
         <tr><td>内循环里 <code>generate_plan</code> 成功</td><td>本轮收敛后，下一次迭代 <code>hasExecutablePlan()</code> 为真，转入计划执行</td></tr>
         <tr><td>计划 <code>COMPLETED</code></td><td>再跑一轮自由内循环，由模型产出<strong>最终答复</strong>（这就是"结论交付"）；完结时由 <code>PlanCompletionCurator</code> <strong>一次判定</strong>产出「经验? / 技能?」（用过技能 ⇒ 判改进；没用过 ⇒ 判沉淀）。<strong>该轮里可以再次 <code>generate_plan</code></strong> 产出下一个计划：下一轮迭代会重新播报 <code>PLAN_CREATED</code>、重新分配经验；两个计划<strong>串行</strong>不重叠，与"同一时刻只有一个可执行计划"不冲突</td></tr>
-        <tr><td>计划 <code>FAILED</code>（外循环判定重划用尽 → <code>terminate()</code>）</td><td><code>terminate()</code> → 沉淀并写“已沉淀”告知记录 → <strong>补一轮“结论交付”自由内循环</strong>，由模型把失败原因与已沉淀内容告诉用户 → 收敛退出。<strong>终止 / 模型不可用 / 挂起不补这一轮</strong>（终止不该再发请求，模型不可用发不出去）</td></tr>
+        <tr><td>某步有效<strong>重试用尽</strong>（未达 <code>maxReplanGeneration</code>）</td><td>注入 <code>[重划纠偏 step=…]</code> 的 SYSTEM 指令 + 一次<strong>纠偏 attempt</strong>（<strong>不占 <code>maxRetries</code></strong>）：模型可在该 attempt 内调 <code>replan_plan</code>，也可换做法重做该步；每个 step 最多一次，既没重划也没成功 ⇒ <code>terminate()</code></td></tr>
+        <tr><td>计划 <code>FAILED</code>（纠偏 attempt 仍未成功 / 重划用尽 → <code>terminate()</code>）</td><td><code>terminate()</code> → 沉淀并写“已沉淀”告知记录 → <strong>补一轮“结论交付”自由内循环</strong>，由模型把失败原因与已沉淀内容告诉用户 → 收敛退出。<strong>终止 / 模型不可用 / 挂起不补这一轮</strong>（终止不该再发请求，模型不可用发不出去）</td></tr>
         <tr><td><strong>“结论交付”轮</strong>（计划完结后 / 终局失败后）</td><td>该轮<strong>禁用工具调用</strong>：不能改 <code>tools</code> 快照（会破坏缓存前缀），改用<strong>会话作用域工具白名单置空</strong>，任何工具调用返回失败 <code>TOOL_RESULT</code>；<code>submit_step</code> 不可用（已无当前 step）；该轮失败<strong>静默收敛</strong>，<code>RunOutcome</code> 不变，且不得触发新的反思/沉淀</td></tr>
         <tr><td><strong>模型不可用</strong>（<code>ModelInvoker</code> 抛出）</td><td><code>run()</code> <strong>立即返回</strong>，不推进任何聚合状态、不消耗重试、不触发反思/重划；step 保持 RUNNING、<code>Attempt</code> 不结束；<strong>已发出的工具调用补一条中止 <code>TOOL_RESULT</code></strong>（闭合工具轮）；仅提示用户（不自动重试）</td></tr>
         <tr><td><strong>用户显式切换模型</strong></td><td>只允许在工具轮闭合后（由应用层 <code>SwitchModelUseCase</code> 校验）；<code>Session.switchModel</code> raise <code>ModelSwitched</code>；旧模型的 reasoning 不再回放</td></tr>
         <tr><td>收敛但<strong>未提交</strong></td><td>本轮 <code>run()</code> 直接返回；<code>Attempt</code> <strong>挂起</strong>（不落终态）、不消耗重试；plan 仍 EXECUTING、step 仍 RUNNING；用户下次输入后取<strong>同一步、同一 Attempt</strong> 继续</td></tr>
-        <tr><td>撞 <code>maxReActRounds</code>（未收敛）</td><td>该 <code>Attempt</code> 判失败 → 重试 / 反思 / 重划 → <strong>自动继续下一轮</strong>，不需要用户介入</td></tr>
-        <tr><td><strong>请求超限</strong>（<code>ModelInvoker</code> 抛出）</td><td>外循环调 <code>ContextWindowService</code> <strong>强制折叠一次</strong>后重试；<strong>不消耗重试名额、不改聚合状态</strong>；仍超限则同「模型不可用」返回并提示</td></tr>
+        <tr><td>撞 <code>maxReActRounds</code>（未收敛）</td><td><strong>不判失败、不消耗重试</strong>：提示「已达轮次上限」后<strong>挂起</strong>；<code>Attempt</code> 不落终态、step 保持 RUNNING，用户下次输入后取<strong>同一步、同一 Attempt</strong> 续跑，轮次预算从 0 重新计</td></tr>
+        <tr><td><strong>请求超限</strong>（<code>ModelInvoker</code> 抛出）</td><td><strong>内循环在发起请求处</strong>调 <code>ContextWindowService</code> <strong>强制折叠一次</strong>后重试这次请求（不重开外循环轮次）；<strong>不消耗重试名额、不改聚合状态</strong>；仍超限则同「模型不可用」返回并提示</td></tr>
       </tbody>
     </table>
 
     <h3>6.9.2 <code>ReActLoop.runIteration(Session, PlanStep)</code>（应用层）</h3>
-    <p>跑一次 ReAct 迭代；<strong>唯一出口是"模型不再调用工具"</strong>。它不判断 step 是否完成，只识别模型是否调用了 <code>submit_step</code>。</p>
+    <p>跑一次 ReAct 迭代；<strong>收敛的出口只有一个：模型不再调用工具</strong>（另有两个非收敛出口：识别到 <code>submit_step</code> 立即返回、撞 <code>maxReActRounds</code> 返回未收敛）。它不判断 step 是否完成，只识别模型是否调用了 <code>submit_step</code>。</p>
     <pre class="mermaid">
 sequenceDiagram
     autonumber
@@ -583,7 +586,7 @@ sequenceDiagram
         end
     end
     alt 达到 maxReActRounds
-        Note over IL: attempt 判失败（交回外循环）
+        Note over IL: 返回 isConverged = false；判失败还是挂起由外循环决定
     else 模型不可用 / 用户终止（异常路径）
         IL-&gt;&gt;S: 为本轮未闭合的 TOOL_REQUEST 补记 TOOL_RESULT（中止）
         IL--&gt;&gt;OL: 异常上抛（外循环不改状态、不耗重试）
