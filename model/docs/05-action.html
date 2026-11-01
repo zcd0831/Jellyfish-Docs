@@ -448,7 +448,7 @@ flowchart LR
       <thead><tr><th>内置工具</th><th>入参</th><th>出参</th><th>领域后果</th><th>处理器归属</th></tr></thead>
       <tbody>
         <tr><td><code>generate_plan</code></td><td>计划草案（steps + 每步声明的验证类型）</td><td>"计划已创建"或失败原因</td><td><code>PlanFactory</code> 创建 <code>Plan</code>，raise <code>PlanCreated</code></td><td>规划</td></tr>
-        <tr><td><code>replan_plan</code></td><td>剩余步骤草案（<code>steps</code>，形状同 <code>generate_plan</code>）</td><td>"计划已重划（第 N 代）"或失败原因</td><td><code>Plan.applyReplan()</code> 替换未执行尾部、代次 +1；外循环随后重分配经验并发进度事件 <code>PLAN_REPLAN</code>。<strong>模型可在任何一次内循环里主动调用</strong>（不只失败后）</td><td>规划</td></tr>
+        <tr><td><code>replan_plan</code></td><td>剩余步骤草案（<code>steps</code>，形状同 <code>generate_plan</code>）</td><td>"计划已重划（第 N 代）"或失败原因</td><td><code>Plan.applyReplan()</code> 替换未执行尾部、代次 +1，<strong>并在工具内重新分配经验</strong>（新尾部不留到外循环）；外循环随后发进度事件 <code>PLAN_REPLAN</code>。<strong>模型可在任何一次内循环里主动调用</strong>（不只失败后）</td><td>规划</td></tr>
         <tr><td><code>submit_step</code></td><td><code>summary</code>（必填）、<code>artifacts?</code></td><td>"已登记"</td><td>内循环据此置 <code>submitted</code>，交外循环验收</td><td>规划（由内循环识别）</td></tr>
         <tr><td><code>ask_user</code></td><td>问题文本</td><td>用户回答</td><td>阻塞同一 ReAct 循环；记 <code>TOOL_REQUEST</code> + <code>TOOL_RESULT</code></td><td>行动</td></tr>
         <tr><td><code>spawn_subagents</code></td><td><code>List&lt;SubagentRequest{agentId, modelId, task}&gt;</code></td><td><code>List&lt;SubagentResult{sessionId, conclusion}&gt;</code></td><td>并行创建子会话、join-all、各子独立超时；<strong>超时即终止该子代理</strong>，主会话继续</td><td>应用（<code>SubagentLauncher</code>，内部调 <code>StartSessionUseCase</code>）</td></tr>
@@ -489,6 +489,7 @@ flowchart LR
       <li><strong>只预警、不中断</strong>：达到 <code>budgetWarnRatio</code> → 外循环经 <code>ask_user</code> 询问是否继续；同一会话族只报一次。用户<strong>拒绝继续</strong>等价于按一次 Esc（终止本轮，见<a href="08-application.html">第 8 章</a> 8.9.4.1）；<code>warned</code> 已置真，后续不再二次确认。<br/>
           <code>budgetLimitTokens</code> 是会话族的<strong>总额度</strong>（token，用户可调），<code>budgetWarnRatio</code> 是它的百分比——两者缺一不可，否则"越过 80%"没有分母。</li>
       <li>并发（<code>spawn_subagents</code>）：子会话<strong>本地累计</strong>（不碰族台账），结束后由<strong>发起线程</strong>调 <code>settleFromSubSession(subId)</code> 一次性归集到根——它读的就是这份本地累计，归集后清空。</li>
+      <li><strong>归集造成的越阈值不弹确认</strong>：<code>ask_user</code> 确认只挂在<strong>主请求路径</strong>（<code>recordTurnUsage</code> → 内循环）；归集发生在工具执行中，只<strong>记账 + 发 <code>BudgetWarning</code> 事件</strong>（界面与审计可见），不打断工具轮闭合。因为 <code>warned</code> 置真后不再二次确认，这条路径上的越阈值<strong>就会静默过去</strong>——这是有意取舍，不是遗漏。</li>
       <li><strong>顺带记一次观测</strong>：<code>lastPromptTokens</code> / <code>lastPromptEstimated</code> / <code>lastPromptSessionId</code> 是“最近一次模型请求的输入用量”，由 <code>BudgetService.recordTurnUsage</code> 写下（厂商给的 <code>prompt_tokens</code>；厂商没给时是本地估算，<code>lastPromptEstimated = true</code>）。<strong>辅助调用</strong>（生成标题、检索经验、反思、重划、摘要、验证）走 <code>recordUsage</code>，只记账不写观测——它们的小请求会把真实窗口的数字盖掉。它只喂界面展示（一轮结束时汇总行里的 <code>上下文 18.2k / 50k</code>），<strong>不参与</strong>折叠判定——判定在请求前做，那时还没有厂商值。折叠发生后清空这三项：旧数值已经不再描述当前窗口，界面回到 <code>— / 50k</code>。</li>
     </ul>
 
