@@ -197,6 +197,7 @@
             +boolean isConverged
             +boolean submitted
             +String submittedSummary
+            +List~String~ submittedArtifacts
             +int round
             +List~SkillId~ usedSkillIds
         }
@@ -362,7 +363,7 @@ flowchart LR
         <tr><td><code>VerificationType</code></td><td>Enum</td><td>DETERMINISTIC / ENV_FEEDBACK / LLM_JUDGE / HUMAN_APPROVAL，固定顺序即链序</td></tr>
         <tr><td><code>RunOutcome</code></td><td>Enum</td><td>一轮运行的出口：<code>CONVERGED / SUSPENDED</code>（撞 <code>maxReActRounds</code> 也是 <code>SUSPENDED</code>，不是第三种出口；原本嵌在 <code>ExecutionLoop</code> 里，现已独立）</td></tr>
         <tr><td><code>RunContext</code></td><td>VO</td><td>交给 <code>SessionRunner</code> 的运行上下文：<code>Session</code>、<code>ChunkSink</code>、<code>CancellationToken</code> + 6 个端口/服务（模型、工具、人机、进度、计划仓储、上下文窗口）；<strong>令牌是扩展实现的唯一取用通道</strong>：默认实现（<code>ExecutionLoop</code>）不接收令牌形参，轮次边界改判 <code>CancellationRegistry.forSession(sessionId)</code></td></tr>
-        <tr><td><code>IterationResult</code></td><td>VO</td><td>内循环一次迭代的输出：是否收敛、是否提交、提交摘要、<strong>内循环轮次 <code>round</code></strong>（<strong>不是 attempt 序号</strong>——attempt 由外循环自己跟踪）、<strong>本次 load 过的技能</strong>（内循环拿不到 <code>Plan</code>，靠它把技能使用交回外循环）</td></tr>
+        <tr><td><code>IterationResult</code></td><td>VO</td><td>内循环一次迭代的输出：是否收敛、是否提交、提交摘要、<strong>提交声明的产物清单</strong>（<code>submit_step.artifacts</code>；它是裁判<strong>唯一可读的范围</strong>）、<strong>内循环轮次 <code>round</code></strong>（<strong>不是 attempt 序号</strong>——attempt 由外循环自己跟踪）、<strong>本次 load 过的技能</strong>（内循环拿不到 <code>Plan</code>，靠它把技能使用交回外循环）</td></tr>
       </tbody>
     </table>
 
@@ -462,11 +463,11 @@ flowchart LR
       <tbody>
         <tr><td><code>DETERMINISTIC</code></td><td>非空、数据结构、边界与阈值</td><td>纯代码：提交摘要非空；摘要形似 JSON 时必须能解析；声明的 artifact 结构/数量按 step 声明的边界检查</td></tr>
         <tr><td><code>ENV_FEEDBACK</code></td><td>外部系统的实际返回</td><td><strong>预留钩子</strong>：step 若声明"调用某系统 API 推送/变更"，调用后校验其返回；本期无此类 step，钩子未配置时返回 <code>UNDETERMINED</code>（不假装通过）</td></tr>
-        <tr><td><code>LLM_JUDGE</code></td><td>自然语言类产出（报告、文章）或无法写死规则的结果</td><td>内置裁判代理，输入<strong>三要素</strong>：<code>goal</code>（原定目标）、<code>expectedOutcome</code>（结果期望）、<code>verificationCriteria</code>（验证标准）+ 执行结果摘要。<strong>不得</strong>把执行者的推理过程交给裁判（父子包庇：谁执行谁判 = 自证）</td></tr>
+        <tr><td><code>LLM_JUDGE</code></td><td>自然语言类产出（报告、文章）或无法写死规则的结果</td><td>在<strong>无历史子会话</strong>里跑 ReAct 的内置裁判代理：输入<strong>三要素</strong>（<code>goal</code> / <code>expectedOutcome</code> / <code>verificationCriteria</code>）+ 执行结果摘要 + <code>submit_step.artifacts</code>；可用 <code>read_artifact</code> <strong>只读取声明过的产物</strong>，多轮核对后给出裁决。<strong>不得</strong>把执行者的推理过程交给裁判（父子包庇：谁执行谁判 = 自证）</td></tr>
         <tr><td><code>HUMAN_APPROVAL</code></td><td>高危操作（转账、删库、发正式邮件）或模型无法判定的节点</td><td><strong>预留钩子</strong>：<code>ask_user</code>，同意 ⇒ <code>PASSED</code>；不同意 + 必填原因 ⇒ <code>FAILED</code></td></tr>
       </tbody>
     </table>
-    <blockquote><p><strong>父子包庇</strong>：裁判只拿到"目标 / 期望 / 标准 / 结果"，拿不到子步骤自述的推理链；且裁判用<strong>独立代理</strong>（<code>builtin.judge</code>）的提示词，不复用执行代理的身份。</p></blockquote>
+    <blockquote><p><strong>父子包庇</strong>：裁判只拿到"目标 / 期望 / 标准 / 结果 + 声明的产物"，拿不到子步骤自述的推理链；且裁判用<strong>独立代理</strong>（<code>builtin.judge</code>）的提示词与<strong>独立快照</strong>（只绑 <code>read_artifact</code>），不复用执行代理的身份与工具清单。<strong>读产物不是读自述</strong>：文件内容是执行结果本身，而推理链是执行者的辩解。</p></blockquote>
 
     <h4>规则清单（7 条）</h4>
     <ol>
