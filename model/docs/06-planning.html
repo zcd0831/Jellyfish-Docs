@@ -475,7 +475,7 @@ flowchart LR
       <li><strong>链序</strong>：固定 <code>DETERMINISTIC → ENV_FEEDBACK → LLM_JUDGE → HUMAN_APPROVAL</code>，按 step 声明<strong>过滤</strong>后串行执行、短路。</li>
       <li><strong>三态</strong>：PASSED / FAILED / UNDETERMINED；<code>UNDETERMINED</code> ⇒ <strong>转人工</strong>（升级到人工层 / <code>ask_user</code>）。</li>
       <li><strong>内容</strong>：只保留失败层（<code>failedType</code>）与失败原因（<code>failureReason</code>）；不做逐层留痕、不保留期望 vs 实际。</li>
-      <li><strong>人工层</strong>：返回"同意 / 不同意 + 必填原因"；不同意 ⇒ 该 step 带着该原因<strong>重试</strong>；结果并入同一份报告。</li>
+      <li><strong>人工层</strong>：<strong>以选项「同意 / 不同意」呈现</strong>，返回"同意 / 不同意 + 原因"；选"不同意"<strong>必须</strong>补原因（未给则重新提示），选"同意"不需要原因；选「其他」时按自由文本兜底判定，<strong>不默认同意</strong>；不同意 ⇒ 该 step 带着该原因<strong>重试</strong>；结果并入同一份报告。</li>
       <li><strong>边界</strong>：工具<strong>自身</strong>失败（超时 / 异常 / 半截）<strong>不是</strong>验证失败，它只是"一种工具结果"，回灌给模型继续 ReAct。</li>
       <li><strong>不可变</strong>：生成后任何角色不得修改。</li>
     </ol>

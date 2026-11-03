@@ -272,6 +272,7 @@
     <div class="callout">
       <div class="ct">没有 <code>AnswerUserUseCase</code></div>
       <p>人机交互是<strong>阻塞端口</strong>（<code>HumanInteractionPort.ask</code>），答案在调用栈里直接返回，不构成一个用例。</p>
+      <p><strong>端口契约</strong>：<code>Question{source, prompt, options?}</code> → <code>Answer{ANSWERED, text, reason?}</code> 或 <code>CANCELLED</code>。带 <code>options</code> 时外壳以<strong>编号列表</strong>呈现，用户选一项即回答，<code>Answer.text</code> 取<strong>所选选项文本</strong>；不带时按自由文本回答。<strong>无效输入不算回答</strong>（空行、编号越界、不在选项内）—— 重新提示，不默认任何一项。审批与预算确认<strong>必须</strong>带选项；自由文本只作非交互客户端的兜底。<strong>有选项时外壳自动追加最后一项「其他（自己输入）」</strong>—— 选中后转自由文本回答，绝不让用户因"选项都不对"而卡住；该自由文本对审批而言仍按兜底判定，<strong>不默认同意</strong>。</p>
     </div>
 
     <h2><span class="sec">8.6</span>应用内组件清单</h2>
