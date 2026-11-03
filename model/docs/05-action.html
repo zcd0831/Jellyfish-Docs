@@ -461,7 +461,7 @@ flowchart LR
         <tr><td><code>edit_file</code></td><td><code>path</code>、<code>oldText</code>、<code>newText</code></td><td>改动的行数</td><td>改工作区内文件</td><td>基础设施（本地能力）</td></tr>
         <tr><td><code>write_file</code></td><td><code>path</code>、<code>content</code>、<code>overwrite?</code></td><td>写入字节数</td><td>写工作区内文件</td><td>基础设施（本地能力）</td></tr>
         <tr><td><code>delete_file</code></td><td><code>path</code>、<code>recursive?</code></td><td>删除的项数</td><td>删工作区内文件/目录（<strong>不可逆</strong>）</td><td>基础设施（本地能力）</td></tr>
-        <tr><td><code>run_command</code></td><td><code>command</code>、<code>cwd?</code>、<code>timeoutMs?</code></td><td>尾部输出 + 退出码</td><td>任意副作用（<strong>不可逆</strong>）</td><td>基础设施（本地能力）</td></tr>
+        <tr><td><code>run_command</code></td><td><code>command</code>、<code>cwd?</code>、<code>timeoutMs?</code></td><td>尾部输出 + 退出码</td><td>任意副作用（<strong>不可逆</strong>）；子进程<strong>不继承宿主环境</strong>——只带 <code>PATH</code> / <code>HOME</code> / <code>LANG</code> / <code>TZ</code> / <code>TMPDIR</code> / <code>SHELL</code> / <code>TERM</code> / <code>USER</code> 等运行必需项，<strong>凭据类变量一律不传</strong></td><td>基础设施（本地能力）</td></tr>
       </tbody>
     </table>
     <div class="callout">
