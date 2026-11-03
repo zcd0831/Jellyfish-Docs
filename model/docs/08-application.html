@@ -406,7 +406,7 @@
     <pre><code>① 不可变事实（reports / reflections / experience 新文件）
 ② 追加流水（records-NNNN.jsonl 追加一行）
 ③ 替换聚合（meta.json / plans/*.json / budget.json / settings.json）</code></pre>
-    <p>这样任何崩溃点都只落在「<strong>事实已存在、状态未推进</strong>」，永远不会出现「状态推进了、事实不存在」。恢复方向因此是单向补齐。</p>
+    <p>这样任何崩溃点都只落在「<strong>事实已存在、状态未推进</strong>」，永远不会出现「状态推进了、事实不存在」。恢复方向因此是单向补齐。该性质的可达性由 09 §9.6 的分阶段 fsync 保证——只在最后统一 fsync 目录不足以维持顺序。</p>
 
     <h3>8.8.2 一次 <code>RunSession</code> 里的事务清单</h3>
     <table>

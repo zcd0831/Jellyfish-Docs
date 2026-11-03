@@ -284,10 +284,13 @@ status: active
     fsync(path)                 # 单写者保证不交错</code></pre>
     <p>同一路径的写入按目标路径串行化：子代理并行改同一个 <code>budget.json</code>、或在同一 <code>sub/</code> 下建目录时，不会互相覆盖临时文件或撞"目录已存在"。</p>
     <p><code>FileCommitScope.commit()</code> 的固定顺序：</p>
-    <pre><code>① 所有 stageFact   → 原子写（只新建，若已存在则跳过，幂等）
-② 所有 stageAppend → 追加 + fsync
+    <pre><code>① 所有 stageFact    → 原子写（只新建，若已存在则跳过，幂等）
+② 所有 stageAppend  → 追加；全部写完后 fsync 记录文件
 ③ 所有 stageReplace → 原子替换
-④ fsync 涉及的目录</code></pre>
+④ 每阶段末尾 fsync 所在目录</code></pre>
+    <p><strong>fsync 必须落在每个阶段的边界上</strong>，不能只在最后统一做。操作系统的 writeback 顺序不可依赖：若状态文件的目录项先于事实文件落盘，就出现「状态推进了、事实不存在」——正是 08 §8.8.1 明令永不出现的情形。阶段内可批量（② 的所有追加只需一次文件 fsync），阶段间不可合并。</p>
+    <p><strong>流水按段滚动</strong>：<code>records-NNNN.jsonl</code> 单段达到 <strong>32 MiB</strong>（33,554,432 字节）后开新段；新段创建后<strong>立即</strong> <code>fsync</code> 其所在目录（否则崩在“文件已建、目录项未落”会丢掉整段）；读取时按<strong>段名序</strong>拼接。</p>
+    <p><strong>目录 fsync 的平台差异</strong>：部分平台（如 Windows）无法对目录取 <code>FileChannel</code>。此时记录一条启动告警、<strong>不阻断启动</strong>；该平台的持久性降级为「文件内容保证、目录项不保证」，由 08 §8.8.1 的对账在下次启动时修补。</p>
     <p><strong>全局资产写段</strong>（<code>globalWrite</code>）：<code>skills/</code>、<code>experience/</code>、<code>plugins/</code> 不属于任何会话目录，会被<strong>并行子会话</strong>同时写入（每个会话都能沉淀）。因此这条路径在进程内串行执行，且"容量读—判—写"必须在同一段内完成，否则并行的两次 <code>CREATE</code> 会一起越过 <code>skillCapacity</code>。</p>
 
     <h2><span class="sec">9.7</span>启动技术清理</h2>
@@ -296,7 +299,7 @@ status: active
       <thead><tr><th>残留</th><th>处理</th></tr></thead>
       <tbody>
         <tr><td><code>*.tmp</code></td><td>直接删除（rename 未完成 ⇒ 旧文件仍有效）</td></tr>
-        <tr><td><code>records-NNNN.jsonl</code> 末尾半行（无换行）</td><td>截断到最后一条完整行</td></tr>
+        <tr><td><code>records-NNNN.jsonl</code> 末尾半行（无换行）</td><td>启动时截断到最后一条完整行；<strong>读取时</strong>遇到末尾半行一律跳过，不视为错误</td></tr>
         <tr><td><code>locks/jellyfish.lock</code> 存在但无人持锁</td><td>由 <code>FileChannel.tryLock</code> 判定（进程退出由 OS 释放），可直接重新获取</td></tr>
         <tr><td><code>sub/</code> 下出现第二层 <code>sub/</code></td><td>违反"子代理不得再开子代理"，告警并忽略该目录</td></tr>
         <tr><td><code>archive/&lt;id&gt;.zip</code> 存在但 <code>sessions/&lt;id&gt;/</code> 仍存在</td><td>删除 <code>sessions/&lt;id&gt;/</code>（归档已完成，含其 <code>sub/</code>）</td></tr>
