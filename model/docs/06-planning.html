@@ -461,7 +461,7 @@ flowchart LR
     <table>
       <thead><tr><th>层</th><th>验什么</th><th>判定方式</th></tr></thead>
       <tbody>
-        <tr><td><code>DETERMINISTIC</code></td><td>非空、数据结构、边界与阈值</td><td>纯代码：提交摘要非空；摘要形似 JSON 时必须能解析；声明的 artifact 结构/数量按 step 声明的边界检查</td></tr>
+        <tr><td><code>DETERMINISTIC</code></td><td>非空、数据结构、边界与阈值</td><td>纯代码：提交摘要非空；摘要形似 JSON 时必须能解析。<strong>artifact 清单的作用是限定裁判可读范围，不是验收规格</strong>——产物结构与数量属于语义判断，交给 <code>LLM_JUDGE</code>，本层不校验（step 也不声明 artifact 规格）</td></tr>
         <tr><td><code>ENV_FEEDBACK</code></td><td>外部系统的实际返回</td><td><strong>预留钩子</strong>：step 若声明"调用某系统 API 推送/变更"，调用后校验其返回；本期无此类 step，钩子未配置时返回 <code>UNDETERMINED</code>（不假装通过）</td></tr>
         <tr><td><code>LLM_JUDGE</code></td><td>自然语言类产出（报告、文章）或无法写死规则的结果</td><td>在<strong>无历史子会话</strong>里跑 ReAct 的内置裁判代理：输入<strong>三要素</strong>（<code>goal</code> / <code>expectedOutcome</code> / <code>verificationCriteria</code>）+ 执行结果摘要 + <code>submit_step.artifacts</code>；可用 <code>read_artifact</code> <strong>只读取声明过的产物</strong>，多轮核对后给出裁决。<strong>不得</strong>把执行者的推理过程交给裁判（父子包庇：谁执行谁判 = 自证）</td></tr>
         <tr><td><code>HUMAN_APPROVAL</code></td><td>高危操作（转账、删库、发正式邮件）或模型无法判定的节点</td><td><strong>预留钩子</strong>：<code>ask_user</code>，同意 ⇒ <code>PASSED</code>；不同意 + 必填原因 ⇒ <code>FAILED</code></td></tr>
