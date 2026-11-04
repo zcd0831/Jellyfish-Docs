@@ -408,6 +408,7 @@
 ② 追加流水（records-NNNN.jsonl 追加一行）
 ③ 替换聚合（meta.json / plans/*.json / budget.json / settings.json）</code></pre>
     <p>这样任何崩溃点都只落在「<strong>事实已存在、状态未推进</strong>」，永远不会出现「状态推进了、事实不存在」。恢复方向因此是单向补齐。该性质的可达性由 09 §9.6 的分阶段 fsync 保证——只在最后统一 fsync 目录不足以维持顺序。</p>
+    <p><strong>「事实」的边界</strong>：这里的<strong>事实</strong>指<strong>不可变的外部结果</strong>（验证报告、反思、经验、流水行）——它们一旦产生就不能被重做出来，所以必须先落、并由启动对账补齐。只写聚合本身的更新（T8 经验分配、T9 计划重划、T12 <code>meta.json</code> 的归档 / 换模型）<strong>没有事实</strong>：要么整体提交、要么整体没发生，后者的语义是「<strong>本次更新未发生，可以重做</strong>」，不产生「状态与事实互相矛盾」的现场，因此<strong>不需要、也不应有对账规则</strong>。</p>
 
     <h3>8.8.2 一次 <code>RunSession</code> 里的事务清单</h3>
     <table>
@@ -750,6 +751,7 @@ sequenceDiagram
     </table>
 
     <h3><code>StartupReconciler</code> 的 5 条规则</h3>
+    <p>这 5 条只覆盖「<strong>事实已落、状态未推进</strong>」的现场。T8 经验分配 / T9 计划重划 / T12 <code>meta.json</code> 的归档与换模型<strong>只写聚合、没有事实</strong>，崩了就是「本次未发生」，可重做，<strong>不在对账范围内</strong>（归档中间态已由规则 4 覆盖）。</p>
     <table>
       <thead><tr><th>#</th><th>现场</th><th>补齐动作</th></tr></thead>
       <tbody>
