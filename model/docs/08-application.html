@@ -755,7 +755,7 @@ sequenceDiagram
     <table>
       <thead><tr><th>#</th><th>现场</th><th>补齐动作</th></tr></thead>
       <tbody>
-        <tr><td>1</td><td>有 <code>PASSED</code> 报告，但 step 仍 <code>RUNNING</code> / <code>VERIFYING</code></td><td>按报告里的 <code>attemptNo</code> 补 <code>markStepSucceeded</code></td></tr>
+        <tr><td>1</td><td>有 <code>PASSED</code> 报告，但 step 仍 <code>RUNNING</code></td><td>按报告里的 <code>attemptNo</code> 补 <code>markStepSucceeded</code></td></tr>
         <tr><td>2</td><td>有 <code>FAILED</code> 报告，但 step 仍 <code>RUNNING</code></td><td>补 <code>markStepFailed</code></td></tr>
         <tr><td>3</td><td>流水末尾有 <code>TOOL_REQUEST</code> 无 <code>TOOL_RESULT</code></td><td><strong>补一条中止 <code>TOOL_RESULT</code></strong>（同 <code>ReActLoop</code> 的中止口径），<strong>attempt 保持开区间、不耗重试</strong>，会话可直接续跑；<strong>环境故障/终止已在 <code>ReActLoop</code> 内补记中止结果，不会落到这条</strong>，这里只接崩溃/强杀残留</td></tr>
         <tr><td>4</td><td>归档中间态（<code>.zip.tmp</code> 残留 / 包已完整但原目录还在）</td><td>丢弃半截包；包完整则补删原目录（幂等，见《模块-感知》§7.1 规则 7）</td></tr>
