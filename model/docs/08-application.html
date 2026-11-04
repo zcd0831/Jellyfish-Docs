@@ -763,6 +763,7 @@ sequenceDiagram
         <tr><td>6</td><td>有 <code>Reflection</code> 事实，但对应 attempt 的 <code>reflectionId</code> 为空（崩在「反思落盘」与「挂回 attempt」之间）</td><td>按 <code>Reflection.identify(planId, stepId, attemptNo)</code> 取回该事实并补挂；<strong>反思 id 由坐标决定，因此不需要额外索引</strong>，取不到就跳过</td></tr>
       </tbody>
     </table>
+    <p><strong>补齐之后必须收敛</strong>：规则 1/2 把最后一批步骤判定完，可能让计划停在「<code>EXECUTING</code> 却没有任何当前步」——补判后若 <code>getCurrentStep()</code> 为空，对账负责把它收敛为 <code>FAILED</code>（终止原因「对账后所有步骤已终结」），否则该会话再也无法 <code>generate_plan</code>。规则出处：《模块-计划》§6.8.1「无当前步即终结」。</p>
     <p>技术残留（<code>*.tmp</code>、写了一半的行、未释放的锁）由基础设施层的启动清理处理，不在这里重复。</p>
     <p>错误码、<code>Result</code> 与用户文案的组织方式见《模块-应用层》§9：应用层返回 <code>Result&lt;T, UseCaseError&gt;</code>，<code>Cancel</code> 是独立分支，文案由外壳按 <code>code</code> 查表。</p>
 
