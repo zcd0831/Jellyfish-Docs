@@ -690,6 +690,8 @@ sequenceDiagram
       <li><strong>信任只发生在安装</strong>：<code>trusted</code> 一旦为真不再变（要收回就卸载重装），这是"安装时一次同意"的落点。</li>
       <li><strong>冲突在授权时判</strong>，不在安装时判：两个插件可以都声明 <code>Clock</code>，但只有一个能被授权。</li>
       <li><strong>真实生效靠 <code>PluginAssembler</code></strong>：用例只改"意图"，装载/卸载与路由表切换在装配层完成——所以插件<strong>崩溃或加载失败不会污染授权意图</strong>。</li>
+      <li><strong>启动时重建装配</strong>：会话可运行之前（拿到单实例锁、迁移完 schema 之后）按已授权清单装配一次，只 <code>start</code> <strong>已授权</strong>的插件（<code>grantedCapabilities</code> 非空）；未授权的插件只保留声明、<strong>不装载 jar</strong>。不装配就等于重启后插件工具与端口路由全空——模型看得见工具却永远调不到。</li>
+      <li><strong>实现口径是"整体重算"</strong>：先摘掉旧的处理器与路由项再按清单重建，因此 <code>grant</code> 一个插件会重算全部已授权插件。这比增量装配更不容易留残留，语义上等价于本节的 <code>assemble(pluginId)</code>。</li>
     </ol>
 
     <h3>8.9.7 fork 型子会话（反思 / 沉淀）与落盘播报</h3>
