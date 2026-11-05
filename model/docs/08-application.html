@@ -420,7 +420,7 @@
         <tr><td>T4</td><td>记录工具结果</td><td>追加 <code>TOOL_RESULT</code></td><td>工具执行（含超时）</td></tr>
         <tr><td>T5</td><td>token 记账</td><td><code>budget.json</code> 累加</td><td>—</td></tr>
         <tr><td>T6</td><td>步骤结案</td><td><code>VerificationReport</code> + <code>plan.json</code></td><td>跑验证链（模型 / 人工）</td></tr>
-        <tr><td>T7</td><td>尝试判败</td><td><code>plan.json</code></td><td>—</td></tr>
+        <tr><td>T7</td><td>尝试判败（含随后的重试 / 纠偏 / 终止）</td><td><code>plan.json</code>——<strong>判败与那一步必须同一次提交</strong>，不许拆成两次：拆开时中间窗口里盘上是「<code>EXECUTING</code> 但没有当前步」，续跑只能当自由轮收敛，而 <code>generate_plan</code> 又因「已有执行中的计划」拒绝，该会话从此再也规划不了</td><td>—</td></tr>
         <tr><td>T8</td><td>经验分配</td><td><code>plan.json</code>（<code>assignedExperienceIds</code>）</td><td>内置检索代理（<code>ModelInvocationPort</code>）；素材超限时按置信度升序整条裁剪，仍超则本次不分配</td></tr>
         <tr><td>T9</td><td>计划重划</td><td><code>plan.json</code>（代次+1、<code>SUPERSEDED</code>）</td><td>模型在内循环里调 <code>replan_plan</code> 生成新草案（可主动，也可在纠偏 attempt 内）；<strong>成功后由工具自己重新分配经验</strong>（新尾部不留给外循环，避免取消路径留下没经验的新尾部）</td></tr>
         <tr><td>T10</td><td>经验反馈</td><td><code>experience/*.json</code></td><td>—</td></tr>
