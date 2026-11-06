@@ -746,7 +746,7 @@ sequenceDiagram
         <tr><td><strong>沉淀 Draft 不可解析 / 互斥冲突</strong></td><td>本次不产出</td><td>不落盘、不写告知记录、不播报；会话继续</td><td>无</td></tr>
         <tr><td><strong>终止</strong>（Esc / 预算拒绝 / 子代理超时）</td><td>用户主动或超时</td><td>按 8.9.4.1 发令牌：在途模型调用取消、在途工具终止、子会话级联；返回本轮 <code>CANCELLED</code></td><td><strong>不推进</strong>（不写 meta、<code>Attempt</code> 不落终态、step 保持 RUNNING）；不耗重试、不补结论交付轮</td></tr>
         <tr><td><strong>切换模型被拒</strong>（工具轮未闭合）</td><td>用户操作与回合边界冲突</td><td>返回 <code>S_TOOL_ROUND_OPEN</code>，不改任何状态；提示等本轮收尾后再切</td><td>无</td></tr>
-        <tr><td>崩溃残留</td><td>进程非正常退出</td><td><code>StartupReconciler</code> 按下列 5 条补齐</td><td>视规则而定</td></tr>
+        <tr><td>崩溃残留</td><td>进程非正常退出</td><td><code>StartupReconciler</code> 按下列 6 条补齐</td><td>视规则而定</td></tr>
       </tbody>
     </table>
 

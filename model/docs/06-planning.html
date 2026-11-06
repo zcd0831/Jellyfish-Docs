@@ -88,7 +88,6 @@
         class PlanStatus {
             &lt;&lt;Enumeration&gt;&gt;
             EXECUTING
-            REPLANNING
             COMPLETED
             FAILED
         }
@@ -355,7 +354,7 @@ flowchart LR
       <tbody>
         <tr><td><code>PlanStep</code></td><td>Entity（<code>Plan</code> 内）</td><td>计划中的一步：描述、声明的验证类型集合、状态、尝试链、分配到的经验</td></tr>
         <tr><td><code>Attempt</code></td><td>Entity（<code>PlanStep</code> 内）</td><td><strong>一个 step 的一次完整执行周期</strong>（可跨多段 ReAct，被多次用户输入切分，但不切分 attempt）；期间开的子会话、<strong>本次用到的技能</strong>、报告与反思引用、结局。<strong>不记录对话区间</strong>：可追溯性到 step / attempt 粒度为止，要看原始对话按 <code>sessionId</code> 回放</td></tr>
-        <tr><td><code>PlanStatus</code></td><td>Enum</td><td>EXECUTING / REPLANNING / COMPLETED / FAILED</td></tr>
+        <tr><td><code>PlanStatus</code></td><td>Enum</td><td>EXECUTING / COMPLETED / FAILED</td></tr>
         <tr><td><code>StepStatus</code></td><td>Enum</td><td>PENDING / RUNNING / SUCCEEDED / FAILED / SUPERSEDED</td></tr>
         <tr><td><code>AttemptOutcome</code></td><td>Enum</td><td>SUCCEEDED / FAILED（只有这两个是 attempt 的边界；“没做完”不结束 attempt）</td></tr>
         <tr><td><code>VerificationOutcome</code></td><td>Enum</td><td>PASSED / FAILED / UNDETERMINED（<code>UNDETERMINED</code> → 转人工）</td></tr>
@@ -417,7 +416,7 @@ flowchart LR
       <li><strong>诞生</strong>：<code>Plan</code> 只能由 <code>generate_plan</code> 工具触发创建，不由用户直接构造。校验项：可解析、<code>steps</code> 非空、引用的工具/技能都在 <code>AgentDefinition</code> 绑定内、步骤依赖无环、规模与预算不荒谬。校验失败 ⇒ 作为<strong>工具失败结果</strong>回灌模型，<strong>不消耗 step 重试</strong>。<strong>已存在 <code>EXECUTING</code> 计划时同样拒绝</strong>（同一会话至多一个可执行计划）：要改动现有计划就用 <code>replan_plan</code>，不要另起一个。</li>
       <li><strong>串行</strong>：同一时刻至多一个 <code>RUNNING</code> step，<code>getCurrentStep()</code> 返回唯一当前步。</li>
       <li><strong>验证声明</strong>：<code>requiredVerifications</code> 由模型在生成计划时声明，<strong>不强制</strong>；为空 ⇒ 该 step <strong>不验证、不产生验证报告</strong>，<code>submit_step</code> 提交即完成。</li>
-      <li><strong>固化</strong>：<code>SUCCEEDED</code> 后 <code>finalOutput / finalVerificationReportId / attempts</code> 不再变更。</li>
+      <li><strong>固化</strong>：<code>SUCCEEDED</code> 后 <code>finalOutput / finalVerificationReportId / attempts</code> 不再变更。同一条纪律覆盖全部写方法：<code>recordReflection</code> / <code>recordSkillUsage</code> 和状态迁移一样<strong>只接受 <code>EXECUTING</code> 的计划</strong>，终态上再写按不变量违反处理——否则"计划已判失败"之后还能挂上新反思/新技能痕迹，沉淀出来的事实与终态对不上。</li>
       <li><strong>重划</strong>：<code>applyReplan()</code> 只能替换<strong>未执行</strong>的尾部 step；被替换者置 <code>SUPERSEDED</code> 并<strong>保留</strong>（可审计），<code>replanGeneration + 1</code>。聚合只保证「尾部替换 + 代次递增」这次迁移合法；<strong>「还能不能再重划、用尽后判失败」由外循环保证</strong>。</li>
       <li><strong>重划怎么发起：模型在内循环里调 <code>replan_plan</code></strong>。<code>replan_plan</code> 是<strong>绑进代理工具清单的普通内置工具</strong>（可见性由绑定提供），模型在<strong>任何一次内循环</strong>里都可以调用它——执行中发现方向不对就当场修正，不必等验证失败；工具成功 ⇒ <code>applyReplan()</code> + <strong>工具内重新分配经验</strong>（新尾部不留给外循环，否则取消/异常会让它永远拿不到经验；<code>ExperienceRetriever</code> 只返回分配结果，工具仍是执行迁移的一方）+ 外循环发进度事件 <code>PLAN_REPLAN</code>（<strong>唯一的发射点在外循环</strong>，按“代次是否变化”判定）。
         <strong>兜底（自动纠偏）</strong>：某一步的有效重试用尽（<code>failedAttempts == maxRetries</code>）时，外循环<strong>不另开一轮内循环</strong>，而是注入一条 <code>role = SYSTEM</code> 的纠偏指令（首行带 <code>[重划纠偏 step=…]</code> 标记，去重靠流水、不落库）并给一次<strong>纠偏 attempt</strong>——<strong>不占 <code>maxRetries</code></strong>，由 <code>maxReplanGeneration</code> 约束。该 attempt 里模型可以调 <code>replan_plan</code> 改计划，也可以换一种做法直接重做这一步；<strong>每个 step 最多一次纠偏</strong>，这次 attempt 既没重划也没成功 ⇒ 直接 <code>terminate()</code>（防递归）。
