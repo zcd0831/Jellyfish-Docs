@@ -151,10 +151,10 @@
     TG --&gt;|recordUsage| BS
 
     U2 --&gt;|run| EL
-    EL --&gt;|ensureWithinLimit| CW
+    RL --&gt;|ensureWithinLimit| CW
     EL --&gt;|runIteration| RL
     EL --&gt;|verify| VR
-    EL --&gt;|"retrieveAndAssign"| EX
+    TE --&gt;|"generate_plan / replan_plan 内部分配"| EX
     EL --&gt;|"curate（一次子代理）"| PC
     PC --&gt;|经验产物| DS
     PC --&gt;|技能产物| SDS
@@ -280,7 +280,7 @@
     <table>
       <thead><tr><th>组件</th><th>职责</th><th>关键协作</th></tr></thead>
       <tbody>
-        <tr><td><code>ExecutionLoop</code></td><td>外循环 do-while：算上下文 → 取 step → 跑一次内循环 → 三条出口（继续 / 结束 / 挂起）。<strong>唯一有权推进计划状态机的地方</strong>。重划是<strong>模型在内循环里调 <code>replan_plan</code></strong>（可主动）；重试耗尽时<strong>注入纠偏指令 + 一次纠偏 attempt</strong>；计划完结与终局失败都补一轮<strong>结论交付</strong>，“无待交付”也是循环退出条件的一部分</td><td><code>ReActLoop</code>、<code>VerificationRunner</code>、经验三件套、<code>CommitScope</code>、<code>CancellationRegistry</code></td></tr>
+        <tr><td><code>ExecutionLoop</code></td><td>外循环 do-while：算上下文 → 取 step → 跑一次内循环 → 三条出口（继续 / 结束 / 挂起）。<strong>唯一有权推进计划状态机的地方</strong>。重划是<strong>模型在内循环里调 <code>replan_plan</code></strong>（可主动）；重试耗尽时<strong>注入纠偏指令 + 一次纠偏 attempt</strong>；计划完结与终局失败都补一轮<strong>结论交付</strong>，“无待交付”也是循环退出条件的一部分</td><td><code>ReActLoop</code>、<code>VerificationRunner</code>、<code>ExperienceFeedbackService</code>、<code>PlanCompletionCurator</code>、<code>CommitScope</code>、<code>CancellationRegistry</code></td></tr>
         <tr><td><code>ReActLoop</code></td><td>内循环：<strong>每次模型请求前</strong>折叠判定 → <strong>按最新窗口重建 messages</strong> → 调模型（可流式，chunk 交给外壳）→ 执行工具 → 落流水 → 判定收敛与提交</td><td><code>ContextWindowService</code>、<code>ToolExecutor</code>、<code>BudgetService</code>、<code>HumanInteractionPort</code></td></tr>
         <tr><td><code>ContextWindowService</code></td><td>计量 → 算有效上限 → 超限则折叠（<strong>影子主请求</strong>生成摘要）→ 追加 <code>SUMMARY</code>；折叠后窗口回落到配置条数</td><td><code>ModelInvocationPort</code>、<code>RecordStore</code>、<code>TokenCounter</code></td></tr>
         <tr><td><code>ToolExecutor</code></td><td>工具执行唯一入口：合法性校验（含<strong>会话作用域工具白名单</strong>）→ 放行审批 → 按来源分发 → 截断归档</td><td><code>ExternalToolPort</code>、<code>SkillSopProvider</code>、<code>HumanInteractionPort</code>、<code>ArtifactStore</code>、<code>SessionToolScope</code></td></tr>
@@ -304,8 +304,8 @@
     <table>
       <thead><tr><th>组件</th><th>职责</th><th>关键协作</th></tr></thead>
       <tbody>
-        <tr><td><code>GeneratePlanHandler</code></td><td><code>generate_plan</code> 的处理器：草案校验通过才建计划，失败转工具错误结果</td><td><code>PlanFactory</code>、<code>PlanRepository</code>、<code>CommitScope</code></td></tr>
-        <tr><td><code>ReplanPlanHandler</code></td><td><code>replan_plan</code> 的处理器：草案校验通过才替换未执行尾部（<code>applyReplan</code>），失败转工具错误结果</td><td><code>PlanFactory</code>、<code>PlanRepository</code>、<code>CommitScope</code></td></tr>
+        <tr><td><code>GeneratePlanHandler</code></td><td><code>generate_plan</code> 的处理器：草案校验通过才建计划，失败转工具错误结果</td><td><code>PlanFactory</code>、<code>PlanRepository</code>、<code>CommitScope</code>、<code>ExperienceRetriever</code></td></tr>
+        <tr><td><code>ReplanPlanHandler</code></td><td><code>replan_plan</code> 的处理器：草案校验通过才替换未执行尾部（<code>applyReplan</code>），失败转工具错误结果</td><td><code>PlanFactory</code>、<code>PlanRepository</code>、<code>CommitScope</code>、<code>ExperienceRetriever</code></td></tr>
         <tr><td><code>SpawnSubagentsHandler</code></td><td><code>spawn_subagents</code> 的处理器：<strong>拒绝子会话再开子代理</strong>，解析请求后交给启动器</td><td><code>SubagentLauncher</code></td></tr>
         <tr><td><code>LoadSkillHandler</code></td><td><code>load_skill</code> 的处理器：取 SOP 文本；注入为 <code>SYSTEM</code> 记录是内循环的职责</td><td><code>SkillSopProvider</code></td></tr>
         <tr><td><code>EnvironmentFeedbackVerifier</code></td><td>验证第二层（<code>ENV_FEEDBACK</code>）的钩子：校验外部系统返回；未配置时返回 <code>UNDETERMINED</code></td><td><code>VerificationRunner</code></td></tr>
