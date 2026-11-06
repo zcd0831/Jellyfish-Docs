@@ -268,7 +268,6 @@ flowchart LR
         CW[(ContextWindowService · 感知)]
     end
 
-    OL -->|run| CW
     OL -->|getCurrentStep| P
     OL -->|runIteration| IL
     OL -->|verify| VS
@@ -277,6 +276,7 @@ flowchart LR
     OL -->|PlanCompleted / PlanFailed 时 distill| DS
 
     IL -->|buildContextForLlm / appendRecord| S
+    IL -->|ensureWithinLimit / recordTurnUsage| CW
     IL -->|execute| TE
     IL -->|产出| IR[IterationResult]
 
@@ -341,8 +341,8 @@ flowchart LR
       <thead><tr><th>服务</th><th>层</th><th>简介</th><th>跨模块依赖</th></tr></thead>
       <tbody>
         <tr><td><code>SessionRunner</code></td><td>扩展点</td><td>交付一轮运行的统一入口；<strong>默认实现是 <code>ExecutionLoop</code></strong>，插件可实现自己的循环（L3，<code>experimental</code>）</td><td><code>RunContext</code>（把端口与上下文交给实现方）</td></tr>
-        <tr><td><code>ExecutionLoop</code></td><td>应用</td><td><code>SessionRunner</code> 的默认实现：会话执行的总驱动（do-while）：每轮算上下文 → 取 step → 跑一次内循环 → 验证 → 按三条出口推进；重试耗尽时<strong>注入纠偏指令 + 一次纠偏 attempt</strong>，计划完结后补一轮<strong>结论交付</strong>，它们是循环退出条件的组成部分</td><td><code>ContextWindowService</code>、<code>ReActLoop</code>、<code>VerificationRunner</code>、经验三件套、<code>CancellationRegistry</code></td></tr>
-        <tr><td><code>ReActLoop</code></td><td>应用</td><td>单次 ReAct 迭代：组装上下文 → 让模型调工具 → 落记录 → 判定收敛与提交</td><td><code>ToolExecutor</code>、<code>BudgetService</code>、<code>HumanInteractionPort</code>、<code>SubagentLauncher</code></td></tr>
+        <tr><td><code>ExecutionLoop</code></td><td>应用</td><td><code>SessionRunner</code> 的默认实现：会话执行的总驱动（do-while）：每轮算上下文 → 取 step → 跑一次内循环 → 验证 → 按三条出口推进；重试耗尽时<strong>注入纠偏指令 + 一次纠偏 attempt</strong>，计划完结后补一轮<strong>结论交付</strong>，它们是循环退出条件的组成部分</td><td><code>ReActLoop</code>、<code>VerificationRunner</code>、经验三件套、<code>CancellationRegistry</code></td></tr>
+        <tr><td><code>ReActLoop</code></td><td>应用</td><td>单次 ReAct 迭代：组装上下文 → 让模型调工具 → 落记录 → 判定收敛与提交</td><td><code>ContextWindowService</code>、<code>ToolExecutor</code>、<code>BudgetService</code>、<code>HumanInteractionPort</code></td></tr>
         <tr><td><code>VerificationRunner</code></td><td>应用</td><td>执行 <code>VerificationChain</code> 给出的有序层，产出 <code>VerificationReport</code></td><td><code>VerificationChain</code>（领域）、<code>ModelInvocationPort</code>、<code>HumanInteractionPort</code></td></tr>
         <tr><td><code>VerificationChain</code></td><td>领域</td><td>纯规则：<code>requiredVerifications</code> → 有序层列表；短路与三态合并</td><td>无</td></tr>
         <tr><td><code>PlanFactory</code></td><td>领域</td><td>校验 <code>generate_plan</code> 入参并创建 <code>Plan</code> 聚合</td><td>无（阈值由应用层传入）</td></tr>
