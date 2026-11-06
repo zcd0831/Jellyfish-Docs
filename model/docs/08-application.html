@@ -307,7 +307,7 @@
         <tr><td><code>GeneratePlanHandler</code></td><td><code>generate_plan</code> 的处理器：草案校验通过才建计划，失败转工具错误结果</td><td><code>PlanFactory</code>、<code>PlanRepository</code>、<code>CommitScope</code>、<code>ExperienceRetriever</code></td></tr>
         <tr><td><code>ReplanPlanHandler</code></td><td><code>replan_plan</code> 的处理器：草案校验通过才替换未执行尾部（<code>applyReplan</code>），失败转工具错误结果</td><td><code>PlanFactory</code>、<code>PlanRepository</code>、<code>CommitScope</code>、<code>ExperienceRetriever</code></td></tr>
         <tr><td><code>SpawnSubagentsHandler</code></td><td><code>spawn_subagents</code> 的处理器：<strong>拒绝子会话再开子代理</strong>，解析请求后交给启动器</td><td><code>SubagentLauncher</code></td></tr>
-        <tr><td><code>LoadSkillHandler</code></td><td><code>load_skill</code> 的处理器：取 SOP 文本；注入为 <code>SYSTEM</code> 记录是内循环的职责</td><td><code>SkillSopProvider</code></td></tr>
+        <tr><td><code>LoadSkillHandler</code></td><td><code>load_skill</code> 的处理器：取 SOP 文本，取不到回落成失败结果；注入为 <code>SYSTEM</code> 记录是内循环的职责</td><td><code>SkillSopProvider</code></td></tr>
         <tr><td><code>EnvironmentFeedbackVerifier</code></td><td>验证第二层（<code>ENV_FEEDBACK</code>）的钩子：校验外部系统返回；未配置时返回 <code>UNDETERMINED</code></td><td><code>VerificationRunner</code></td></tr>
         <tr><td><code>InternalToolHandlers</code></td><td>内置工具处理器注册表（按工具 id 索引），由 <code>ToolExecutor</code> 分发</td><td><code>InternalToolHandler</code></td></tr>
       </tbody>
@@ -371,7 +371,7 @@
         <tr><td><strong><code>PluginRuntimePort</code></strong></td><td>插件的发现与装载（PF4J）</td><td><code>discover</code> / <code>toolsOf</code> / <code>start</code> / <code>stop</code> / <code>unload</code> / <code>extension</code> / <strong><code>conflictsOf</code>（重复打包的宿主依赖）</strong></td><td>基础设施</td></tr>
         <tr><td><code>ModelInvocationPort</code></td><td>选模型、降级、调用、计量（流式与非流式双方法）</td><td><code>invoke</code> / <code>invokeStreaming(request, ChunkSink)</code> / <code>describe</code></td><td>基础设施</td></tr>
         <tr><td><code>ExternalToolPort</code></td><td>REST / MCP 出站调用（<strong><code>NATIVE</code> 不在其中</strong>：本地能力是处理器，不是出站调用）</td><td><code>invoke(tool, args)</code></td><td>基础设施</td></tr>
-        <tr><td><code>SkillSopProvider</code></td><td>按 id 读并渲染 SOP</td><td><code>sop(skillId)</code></td><td>基础设施</td></tr>
+        <tr><td><code>SkillSopProvider</code></td><td>按 id 读并渲染 SOP；取不到返回空</td><td><code>sop(skillId)</code></td><td>基础设施</td></tr>
         <tr><td><code>HumanInteractionPort</code></td><td><strong>阻塞式</strong>提问（单队列、标来源、可被终止唤醒）</td><td><code>ask(question) → answer</code></td><td>外壳（TUI）；CLI / Server 各自实现</td></tr>
         <tr><td><code>ProgressPort</code></td><td>非领域进度：压缩、子代理并行、计划与步骤推进、工具调用开始/结束、模型降级、用量</td><td><code>emit(event)</code></td><td>外壳（TUI）</td></tr>
         <tr><td><strong><code>CancellationRegistry</code></strong></td><td>按会话取终止信号：模型调用、工具执行与<strong>默认外循环（<code>ExecutionLoop</code>）的轮次边界</strong>据此判断本轮是否已被终止</td><td><code>forSession(sessionId)</code></td><td><strong>应用层</strong>（<code>SessionCancellations</code>：登记表就在本层，见 8.9.4.1）</td></tr>

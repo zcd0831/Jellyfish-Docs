@@ -146,7 +146,7 @@
         }
         class SkillSopProvider {
             &lt;&lt;Port&gt;&gt;
-            +sop(String skillId) String
+            +sop(String skillId) Optional~String~
         }
         class RetrievalInput {
             &lt;&lt;ValueObject&gt;&gt;
@@ -313,7 +313,7 @@
         <tr><td><code>ExperienceDistillationService</code></td><td>应用</td><td>接收经验产物：与库内经验去重（合并 + 提置信度）或新建</td><td><code>Experience</code>、<code>Reflection</code>、<code>ExperienceRepository</code></td></tr>
         <tr><td><code>SkillDistillationService</code></td><td>应用</td><td>接收技能产物：校验四件套 → 按 <code>CREATE / MERGE</code> 分支（含 <code>mutable</code>、<code>ACTIVE</code>、容量判定）→ <code>create</code> / <code>revise</code> → 写 <code>SKILL.md</code></td><td><code>SkillDefinition</code>、<code>CatalogRepository</code>、<code>RuntimePolicy</code></td></tr>
         <tr><td><code>ExperienceFeedbackService</code></td><td>应用</td><td>step 结束时回写经验统计：成功 ⇒ 对该 step <strong>本次分配的经验</strong> <code>reinforce</code>；失败 ⇒ 对<strong>同一份集合</strong> <code>penalize</code>（<strong>规则在 <code>Experience</code> 聚合内</strong>）</td><td><code>Experience</code></td></tr>
-        <tr><td><code>SkillSopProvider</code></td><td>端口（基础设施实现）</td><td>按 id 现读 <code>skills/&lt;id&gt;/SKILL.md</code> 并返回正文（<strong>原样，不渲染</strong>）；供 <code>load_skill</code> 使用</td><td><code>SkillDefinition</code></td></tr>
+        <tr><td><code>SkillSopProvider</code></td><td>端口（基础设施实现）</td><td>按 id 现读 <code>skills/&lt;id&gt;/SKILL.md</code> 并返回正文（<strong>原样，不渲染</strong>）；不存在或非 <code>ACTIVE</code> 时返回<strong>空</strong>；供 <code>load_skill</code> 使用</td><td><code>SkillDefinition</code></td></tr>
       </tbody>
     </table>
 
@@ -333,7 +333,7 @@
         <tr><td><code>DistillationInput</code></td><td>VO</td><td>沉淀入参：<code>planId</code>、<code>sessionId</code>、<code>goal</code>、计划结局、每步的 <code>StepTrace</code></td></tr>
         <tr><td><code>StepTrace</code></td><td>VO</td><td>一个 step 的执行事实摘要（描述 / 结局 / 本次用到的技能 / 失败原因 / 反思结论）；<strong>不带对话区间</strong>——素材由编排者 fork 当前生效窗口带入（8.9.7）</td></tr>
         <tr><td><code>FeedbackInput</code></td><td>VO</td><td>反馈入参：<code>stepId</code> + 本次分配（= 注入）的经验集合 <code>experienceIds</code>。<strong>只有一个集合</strong>：分配与注入同源，没有独立的"建议"（规则 ⑦）</td></tr>
-        <tr><td><code>SkillSopProvider</code></td><td>Port</td><td>按 id 读 <code>SKILL.md</code> 并渲染 SOP；由基础设施实现（本模块只是它的消费方之一）</td></tr>
+        <tr><td><code>SkillSopProvider</code></td><td>Port</td><td>按 id 读并渲染 SOP，取不到时返回空；由基础设施实现（本模块只是它的消费方之一）</td></tr>
       </tbody>
     </table>
 
@@ -536,15 +536,17 @@
     TE-&gt;&gt;L: handle({skillName})
     L-&gt;&gt;SK: 按 name 查 ACTIVE 技能
     alt 未找到或非 ACTIVE
-        L--&gt;&gt;TE: 返回“技能不可用”结果
+        L--&gt;&gt;TE: 返回空
+        TE--&gt;&gt;IL: 工具结果“技能不可用：&lt;id&gt;”
     else 找到
         L-&gt;&gt;SK: 读 SKILL.md 正文（原样，不渲染）
         SK--&gt;&gt;L: SOP 全文
         L--&gt;&gt;TE: SOP 文本
         TE--&gt;&gt;IL: 工具结果
         IL-&gt;&gt;IL: 追加一条 role = SYSTEM 的 Record（不滑出）
+        IL-&gt;&gt;IL: 记入“本次用到的技能”（改进判定的证据）
     end</pre>
-    <p><strong>要点</strong>：<code>SkillSopProvider</code> 只负责"读文件"；<strong>把它注入成 <code>SYSTEM</code> Record 是内循环的职责</strong>（记忆模块不写别人的会话）。因为正文是<strong>现读</strong>的，同一会话前后两次 <code>load_skill</code> 可能拿到不同正文——这是 S3 明确接受的漂移（快照冻结的是清单与三件套）。</p>
+    <p><strong>要点</strong>：<code>SkillSopProvider</code> 只负责"读文件"，<strong>取不到就返回空、不编造正文</strong>；<strong>把它注入成 <code>SYSTEM</code> Record 是内循环的职责</strong>（记忆模块不写别人的会话）。只有真的注入了 SOP，内循环才把该技能记进"本次用到的技能"——判"用过"的证据是拿到流程正文，不是模型调过这个工具。因为正文是<strong>现读</strong>的，同一会话前后两次 <code>load_skill</code> 可能拿到不同正文——这是 S3 明确接受的漂移（快照冻结的是清单与三件套）。</p>
 
     <h3>7.9.5 <code>SkillDistillationService.apply(SkillDraft, sessionId)</code>（应用层）</h3>
     <p><strong>职责</strong>：把内置代理产出的技能草案落成聚合变更，并原子重写 <code>SKILL.md</code>。</p>

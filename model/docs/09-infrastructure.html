@@ -155,7 +155,7 @@ flowchart LR
         <tr><td><code>ArtifactStore</code></td><td><code>FileArtifactStore</code></td><td><code>sessions/&lt;id&gt;/artifacts/</code></td><td>只新建；随会话目录删除</td></tr>
         <tr><td><code>ModelInvocationPort</code></td><td><code>ModelInvoker</code></td><td>—（网络）</td><td>选模型 → 硬校验 → 调用 → <strong>降级链</strong>；<strong>只返回 usage，不记账</strong>。调用方是 <code>ReActLoop</code>、<code>ContextWindowService</code>、<code>SessionTitleGenerator</code> 与裁判</td></tr>
         <tr><td><code>ExternalToolPort</code></td><td><code>HttpToolAdapter</code> / <code>McpToolAdapter</code></td><td>—（网络）</td><td>工具自带超时；结果原样返回给应用层截断</td></tr>
-        <tr><td><code>SkillSopProvider</code></td><td><code>FileSkillSopProvider</code></td><td><code>skills/&lt;id&gt;/SKILL.md</code></td><td>解析 front-matter + 正文，<strong>原样返回正文、不渲染</strong>；缺失或非 active 返回"不可用"。每次调用都现读（正文不冻结，S3）</td></tr>
+        <tr><td><code>SkillSopProvider</code></td><td><code>FileSkillSopProvider</code></td><td><code>skills/&lt;id&gt;/SKILL.md</code></td><td>解析 front-matter + 正文，<strong>原样返回正文、不渲染</strong>；缺失或非 active 返回<strong>空</strong>（由 <code>load_skill</code> 回落成失败结果）。每次调用都现读（正文不冻结，S3）</td></tr>
         <tr><td><code>PluginRepository</code></td><td><code>FilePluginRepository</code></td><td><code>plugins/&lt;pluginId&gt;/plugin.json</code></td><td>只存用户意图（信任 / 勾选的能力）；"已加载"不落盘</td></tr>
         <tr><td><code>PluginRuntimePort</code></td><td><code>Pf4jPluginRuntime</code></td><td><code>plugins/&lt;pluginId&gt;/*.jar</code></td><td>PF4J 3.16.0：扫描、装载、取扩展、启停、卸载；读 jar 内 <code>META-INF/jellyfish/tools/*.json</code></td></tr>
         
